@@ -25,14 +25,14 @@ public class Item {
     }
     String name = "";
     //int id = iUID++;
-    Character maker;
-    Character vendor;
+    String maker;
+    int makerID;
+    int vendorID;
     ItemType itemType;
     WeaponType weaponType;
     PillType pillType;
     int quantity = 1;
     int lvl = -1;
-    int durability;
     boolean stackable = false;
 
     // Constructor for Herbs and Metals
@@ -55,8 +55,8 @@ public class Item {
         this.itemType = ItemType.Weapon;
         this.weaponType = weaponType;
         this.lvl = lvl;
-        this.maker = maker;
-        durability = (int)Math.pow(lvl, 2) * 5;
+        this.maker = maker.name + " " + maker.lastName;
+        this.makerID = maker.id;
         stackable = false;
         name = ("" + maker + "'s " + getWeaponType());
 
@@ -65,8 +65,8 @@ public class Item {
     //Constructor for creating Arrays and Clothing
     public Item(Character maker, int lvl, ItemType itemType) {
         this.lvl = lvl;
-        this.maker = maker;
-        durability = (int)Math.pow(lvl, 2) * 5;
+        this.maker = maker.name + " " + maker.lastName;
+        this.makerID = maker.id;
         stackable = false;
         if (itemType == ItemType.Array) {
             this.itemType = ItemType.Array;
@@ -155,6 +155,18 @@ public class Item {
             default:
                 return "Error in getWeaponType of Item";
         }
+    }
+
+    public void deconstructor() {
+        name = null;
+        //id = iUID++;
+        maker = null;
+        makerID = 0;
+        vendorID = 0;
+        itemType = null;
+        weaponType = null;
+        pillType = null;
+        lvl = 0;
     }
     public String toString() {
         if (stackable) {

@@ -12,7 +12,7 @@ Ghost Trait (Just an idea, but if they die they become a ghost and must consume 
 *Friendly (Makes someone more likely to interact with others)
 *Runner (Makes you run with 100% chance if the person is only 10 levels above you or less)
 *Cheater (Makes someone stronger by 5 combat level/ 1 in a million)
-*Lucky Trait (Makes someone more lucky by giving them more random events)
+*Lucky Trait (Makes someone more lucky by giving them more random events) (Increases Ability to Win and Flee by 3 level)
 
 9:   100  2500kmph 51200
 8: 97-99  2025kmph 34300
@@ -98,12 +98,12 @@ Next Session Notes
 ------------------
 Structure and City Creation
 1. Cities will pay taxes to the founder (if still alive) (10% tax on everything sold by vendors in the city)
-2. (Merchants can buy everything for a third of the price. Selling at normal price)
-2. (Event Idea, when the leader dies, a tournament is held exclusively for leaders to make a new person the owner)
-3. (Tournament to decide the leader of originis)
-4. Each merchant can have a shop in one city (Random Event/Job Event to set up) Buy Job Event for Merchants Buy Event for Normies
-5. Each city will just have a pool of items marked with the seller for people to buy what they need.
-6. Check to see if pills, gear, or materials are needed.
+2. (Merchants can buy everything for a hundredth of the price. Selling at normal price)
+3. (Event Idea, when the leader dies, a tournament is held exclusively for leaders to make a new person the owner)
+4. (Tournament to decide the leader of originis)
+5. Each merchant can have a shop in one city (Random Event/Job Event to set up) Buy Job Event for Merchants Buy Event for Normies
+6. Each city will just have a pool of items marked with the seller for people to buy what they need.
+7. Check to see if pills, gear, or materials are needed.
 
 Pre Req Check method for selling
 Only sell potential pills if potential is 100
@@ -148,3 +148,101 @@ Add options to auto player movement.
 Walks in a direction for a certain amount of turns
 Prioritizing Quests and Maybe even events
 When you implement sparring fights, make sure to make the sparring variable true
+
+
+Ghost Trait Details
+Certain amount of time before your soul dissipates
+You can consume other players to cultivate
+You can possess dead bodies (your new potential will be and average of your potentials and your new level will be the level of the deceased)
+You can only possess dead bodies at a lower level than your level
+Don't forget to change trait and player variables to ghosts and ghost boolean
+
+ || (Math.pow(potential, 2) > rand.nextInt((Math.pow(lvl, 3) / 3)))
+x: 100, y: 1600
+Luca Moran Zachary Jenkins
+
+
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+Cultivation 2.5
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+
+Fighting System - Universal
+Production (Resources + Items + Techniques)
+NPC Fighting (Monsters)
+Cultivation
+Relationships
+
+Town Creation
+Sect Creation
+Questing
+
+
+
+Change Area Generation
+Create "Hotspots"
+Moveable Enemies That Become Wanted
+Difficulty gets stronger further from Originis
+
+Remove Forbidden System
+
+
+Change Durability System (Figure out if you want to average the lvl of the clothing/weapon with the lvl or not.
+Instead of Reducing Durability of Weapons, Give Them a Chance to Break
+
+
+
+Redo Item Transfer and Item Creation for Bugs
+Test equip function
+Test deconstructor functions
+
+
+Rebirth Killed Original NPCs to start new family lines
+
+
+
+Movement
+Martial
+Weapon
+Armor
+Cultivation Lvl
+
+winCheck?
+fleeCheck???
+
+60 - 61
+
+Make it so that armor and weapons and pills can only be 5 cultivation levels above the crafter
+
+Redo relationship. Don't make people hate people on death, just give the quest
+Evil vs Good dilemma for killing
+Good never kills (Unless you're evil)
+Neutral only kills if hates you or incentivized to
+
+
+Create a make MC option
+Instead of a siblings list, just check for same mother or father
+Maybe allow family clans? Matriarch/Patriarch type beat. Depending on who's stronger
+
+50% - 50
+34% - 35/65
+16% - 20/80
+
+Test Caution System (Initialization + Battle)
+Test Battle System (winCheck, fleeCheck,
+
+
+
+Personalities (Nice, Bully,
+
+Ideas
+Media/Journalism/World Messages
+Faction Types (Farmers, Miners whatevers based on the majority of profession)
+
+

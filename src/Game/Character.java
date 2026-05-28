@@ -1,9 +1,13 @@
 package Game;
+
 import java.util.ArrayList;
 import java.util.Hashtable;
+import java.util.Iterator;
 import java.util.PriorityQueue;
 
 import static Game.GameDriver.*;
+import static Game.Dictionary.*;
+import static Game.Map.*;
 
 public class Character {
     enum Traits {
@@ -33,13 +37,14 @@ public class Character {
     boolean dead = false;
     boolean player = false;
     boolean sparring = false;
-    boolean forbidden = false;
     char movement; // 'x' = stand still  'm' = move randomly
     int skipping = 0; // How many turns a person chooses to skip
     int time = 0;
     int age = 0;
     int maxAge = 100;
+    int totalAgeGained = 100;
     int potential = 0; // 101 -(Math.sqrt(rand.nextInt(10000) + 1)
+    int caution = 50;
     double cultivation = 0;
     int inhibitor = 1;
     int majorLvl = 0 ; // Numbers 0-10: 10 = True Immortal, 9 = Pseudo Immortal, 8 = Half-Immortal, 7 = Ascension, 6 = Nihility, 5 = Ensoulment, 4 = Nascent Soul, 3 = Soul Wandering, 2 = Core Formation, 1 = Foundation Stage, 0 = Qi Cultivation, -1 = Crippled
@@ -52,15 +57,15 @@ public class Character {
     double professionExp = 0;
     double professionExpMax = Math.pow(10, professionLvl / 10);
     long ss = 0; // Spirit Stones
-    int travellingSpeed = 1;
     String affiliation = ""; // Evil, Good, Neutral
     Integer affiliationNum;
     Organization sect;
     Traits trait;
-    PriorityQueue<Quest> quests;
+    PriorityQueue<Quest> spotQuests = null;
+    PriorityQueue<Quest> targetQuests = null;
+    Quest currentQuest = null;
     // Relationship variables
-    Hashtable<Character, Integer> relationships;
-    ArrayList<Character> relationshipsList;
+    RelationshipList relationshipList;
     Character spouse = null;
     Character father = null;
     Character mother = null;
@@ -85,9 +90,10 @@ public class Character {
     // Game Initialization Constructor + TownNPC Birth Constructor
     public Character(Area area) {
         //Pre-Initialization Stuff
-        quests = new PriorityQueue<Quest>();
-        relationships = new Hashtable();
-        relationshipsList = new ArrayList<>();
+        spotQuests = new PriorityQueue<Quest>(20);
+        targetQuests = new PriorityQueue<Quest>(20);
+
+        relationshipList = new RelationshipList();
         siblings = new ArrayList<>();
         children = new ArrayList<>();
         knownLocations = new ArrayList<>();
@@ -102,85 +108,102 @@ public class Character {
         location = area;
         location.characters.add(this);
         knownLocations.add(location);
-        id = ++UID;
-        if (rand.nextInt(2) == 0) {
-            name = GameDriver.maleNames[rand.nextInt(GameDriver.maleNames.length)];
+        id = UID++;
+
+        // Gender and Name Picker
+        {
+            if (rand.nextInt(2) == 0) {
+            name = Dictionary.maleNames[rand.nextInt(Dictionary.maleNames.length)];
             gender = "Male";
         }
         else {
-            name = GameDriver.femaleNames[rand.nextInt(GameDriver.femaleNames.length)];
+            name = Dictionary.femaleNames[rand.nextInt(Dictionary.femaleNames.length)];
             gender = "Female";
         }
-        lastName = GameDriver.lastNames[rand.nextInt(GameDriver.lastNames.length)];
+        lastName = Dictionary.lastNames[rand.nextInt(Dictionary.lastNames.length)];}
 
         potential = (int)(101 - Math.sqrt(rand.nextInt(10000) + 1));
         cultivation = (Math.pow(potential,2)  * Math.sqrt(lvl) / (52. * Math.sqrt(potential)));
 
-        switch (rand.nextInt(3)) /*Affiliation Choosing */{
-            case 0:
-                affiliation = "Good";
-                affiliationNum = 1;
-                break;
-            case 1:
-                affiliation = "Evil";
-                affiliationNum = -1;
-                break;
-            case 2:
-                affiliation = "Neutral";
-                affiliationNum = 0;
-                break;
+        //Caution Setter
+        {
+            caution = rand.nextInt(100) + 1;
+            if (caution <= 8) {
+                caution = 20;
+            } else if (caution <= 25) {
+                caution = 35;
+            } else if (caution <= 75) {
+                caution = 50;
+            } else if (caution <= 92) {
+                caution = 65;
+            } else {
+                caution = 80;
+            }
         }
-        int traitNum = rand.nextInt(1000000);
-        if (traitNum == 0) {
-            trait = Traits.Cheater;
+
+        // Affiliation Choosing
+        {
+            switch (rand.nextInt(3)) {
+                case 0:
+                    affiliation = "Good";
+                    affiliationNum = 1;
+                    break;
+                case 1:
+                    affiliation = "Evil";
+                    affiliationNum = -1;
+                    break;
+                case 2:
+                    affiliation = "Neutral";
+                    affiliationNum = 0;
+                    break;
+            }
         }
-        else if (traitNum < 10000) {
-            trait = Traits.Lucky;
+
+        // Trait Picker
+        {
+            int traitNum = rand.nextInt(1000000);
+            if (traitNum == 0) {
+                trait = Traits.Cheater;
+            } else if (traitNum < 10000) {
+                trait = Traits.Lucky;
+            } else if (traitNum < 40000) {
+                trait = Traits.Ghost;
+            } else if (traitNum < 70000) {
+                trait = Traits.Leader;
+            } else if (traitNum < 100000) {
+                trait = Traits.Innovative;
+            } else if (traitNum < 200000) {
+                trait = Traits.Blacksmith;
+            } else if (traitNum < 300000) {
+                trait = Traits.Alchemist;
+            } else if (traitNum < 400000) {
+                trait = Traits.Scribe;
+            } else if (traitNum < 500000) {
+                trait = Traits.Merchant;
+            } else if (traitNum < 600000) {
+                trait = Traits.Gatherer;
+            } else if (traitNum < 700000) {
+                trait = Traits.Miner;
+            } else if (traitNum < 800000) {
+                trait = Traits.Friendly;
+            } else if (traitNum < 900000) {
+                trait = Traits.Tailor;
+            } else {
+                trait = Traits.Runner;
+            }
         }
-        else if (traitNum < 40000) {
-            trait = Traits.Ghost;
-        }
-        else if (traitNum < 70000) {
-            trait = Traits.Leader;
-        }
-        else if (traitNum < 100000) {
-            trait = Traits.Innovative;
-        }
-        else if (traitNum < 200000) {
-            trait = Traits.Blacksmith;
-        }
-        else if (traitNum < 300000) {
-            trait = Traits.Alchemist;
-        }
-        else if (traitNum < 400000) {
-            trait = Traits.Scribe;
-        }
-        else if (traitNum < 500000) {
-            trait = Traits.Merchant;
-        }
-        else if (traitNum < 600000) {
-            trait = Traits.Gatherer;
-        }
-        else if (traitNum < 700000) {
-            trait = Traits.Miner;
-        }
-        else if (traitNum < 800000) {
-            trait = Traits.Friendly;
-        }
-        else if (traitNum < 900000) {
-            trait = Traits.Tailor;
-        }
-        else {
-            trait = Traits.Runner;
-        }
+
+        // Quest Initialization
+        questInitializer();
     }
+
     // Birth Constructor / Enemy Generator
-    // Make sure to add technique inheritance later
     public Character(Character mother) {
         //Pre-Initialization Stuff
-        quests = new PriorityQueue<Quest>();
-        relationships = new Hashtable();
-        relationshipsList = new ArrayList<>();
+        spotQuests = new PriorityQueue<Quest>(20);
+        targetQuests = new PriorityQueue<Quest>(20);
+
+        relationshipList = new RelationshipList();
         siblings = new ArrayList<>();
         children = new ArrayList<>();
         knownLocations = new ArrayList<>();
@@ -195,130 +218,156 @@ public class Character {
         this.mother = mother;
         this.father = mother.spouse;
         siblings.addAll(mother.children);
-        siblings.addAll(father.children);
+        for (Character child : father.children) {
+            if (!siblings.contains(child)) {
+                siblings.add(child);
+            }
+        }
         for (Character sibling : siblings) {
             sibling.siblings.add(this);
-            changeRelationship(sibling, 20);
+            changeRelationship(sibling, 0);
         }
         mother.children.add(this);
         father.children.add(this);
-        changeRelationship(father, 50);
-        changeRelationship(mother, 50);
+        changeRelationship(father, 3);
+        changeRelationship(mother, 3);
 
         location = mother.location;
         location.characters.add(this);
         knownLocations.add(location);
-        id = ++UID;
+        id = UID++;
         time = -40;
         mother.pregnant = true;
         born = false;
         Character temp = null;
-        if (rand.nextInt(2) == 0) {
-            name = GameDriver.maleNames[rand.nextInt(GameDriver.maleNames.length)];
-            gender = "Male";
-            temp = father;
-            if (father.sect != null) {
-                father.sect.join(this);
+
+        // Gender and Name Picker
+        {
+            if (rand.nextInt(2) == 0) {
+                name = Dictionary.maleNames[rand.nextInt(Dictionary.maleNames.length)];
+                gender = "Male";
+                temp = father;
+                if (father.sect != null) {
+                    father.sect.join(this);
+                }
+            } else {
+                name = Dictionary.femaleNames[rand.nextInt(Dictionary.femaleNames.length)];
+                gender = "Female";
+                temp = mother;
+                if (mother.sect != null) {
+                    mother.sect.join(this);
+                }
             }
+            lastName = father.lastName;
         }
-        else {
-            name = GameDriver.femaleNames[rand.nextInt(GameDriver.femaleNames.length)];
-            gender = "Female";
-            temp = mother;
-            if (mother.sect != null) {
-                mother.sect.join(this);
-            }
-        }
-        lastName = father.lastName;
 
         // Technique Inheritance
-        if (temp.movementTechnique2 != null) {
-            movementTechnique = new Technique(temp.movementTechnique2);
-        }
-        else {
-            movementTechnique = new Technique(temp.movementTechnique);
-        }
-        if (temp.martialTechnique2 != null) {
-            martialTechnique = new Technique(temp.martialTechnique2);
-        }
-        else {
-            martialTechnique = new Technique(temp.martialTechnique);
+        {
+            if (temp.movementTechnique2 != null) {
+                movementTechnique = new Technique(temp.movementTechnique2);
+            } else {
+                movementTechnique = new Technique(temp.movementTechnique);
+            }
+            if (temp.martialTechnique2 != null) {
+                martialTechnique = new Technique(temp.martialTechnique2);
+            } else {
+                martialTechnique = new Technique(temp.martialTechnique);
+            }
         }
 
-        int limiter = (mother.potential + father.potential) / 2;
-        potential = (int)(101 - Math.sqrt(rand.nextInt(10000) + 1));
-        if (potential < limiter) {
-            potential = limiter;
+        // Limiter Inheritance
+        {
+            int limiter = (mother.potential + father.potential) / 2;
+            potential = (int) (101 - Math.sqrt(rand.nextInt(10000) + 1));
+            if (potential < limiter) {
+                potential = limiter;
+            }
+            cultivation = (Math.pow(potential, 2) * Math.sqrt(lvl) / (52. * Math.sqrt(potential)));
         }
-        cultivation = (Math.pow(potential,2)  * Math.sqrt(lvl) / (52. * Math.sqrt(potential)));
 
-        affiliationNum = mother.affiliationNum + father.affiliationNum;
-        switch (affiliationNum) /*Affiliation Choosing */{
-            case -2:
-                affiliation = "Evil";
-                affiliationNum = -1;
-                break;
-            case -1:
-                affiliation = "Evil";
-                affiliationNum = -1;
-                break;
-            case 0:
-                affiliation = "Neutral";
-                affiliationNum = 0;
-                break;
-            case 1:
-                affiliation = "Good";
-                affiliationNum = 1;
-                break;
-            case 2:
-                affiliation = "Good";
-                affiliationNum = 1;
-                break;
+        //Caution Setter
+        {
+            caution = rand.nextInt(100) + 1;
+            if (caution <= 8) {
+                caution = 20;
+            } else if (caution <= 25) {
+                caution = 35;
+            } else if (caution <= 75) {
+                caution = 50;
+            } else if (caution <= 92) {
+                caution = 65;
+            } else {
+                caution = 80;
+            }
         }
-        int traitNum = rand.nextInt(1000000);
-        if (traitNum == 0) {
-            trait = Traits.Cheater;
+
+        // Affiliation Choosing
+        {
+            affiliationNum = mother.affiliationNum + father.affiliationNum;
+            switch (affiliationNum) /*Affiliation Choosing */ {
+                case -2:
+                    affiliation = "Evil";
+                    affiliationNum = -1;
+                    break;
+                case -1:
+                    affiliation = "Evil";
+                    affiliationNum = -1;
+                    break;
+                case 0:
+                    affiliation = "Neutral";
+                    affiliationNum = 0;
+                    break;
+                case 1:
+                    affiliation = "Good";
+                    affiliationNum = 1;
+                    break;
+                case 2:
+                    affiliation = "Good";
+                    affiliationNum = 1;
+                    break;
+            }
         }
-        else if (traitNum < 10000) {
-            trait = Traits.Lucky;
+
+        // Trait Choosing
+        {
+            int traitNum = rand.nextInt(1000000);
+            if (traitNum == 0) {
+                trait = Traits.Cheater;
+            } else if (traitNum < 10000) {
+                trait = Traits.Lucky;
+            } else if (traitNum < 40000) {
+                trait = Traits.Ghost;
+            } else if (traitNum < 70000) {
+                trait = Traits.Leader;
+            } else if (traitNum < 100000) {
+                trait = Traits.Innovative;
+            } else if (traitNum < 200000) {
+                trait = Traits.Blacksmith;
+            } else if (traitNum < 300000) {
+                trait = Traits.Alchemist;
+            } else if (traitNum < 400000) {
+                trait = Traits.Scribe;
+            } else if (traitNum < 500000) {
+                trait = Traits.Merchant;
+            } else if (traitNum < 600000) {
+                trait = Traits.Gatherer;
+            } else if (traitNum < 700000) {
+                trait = Traits.Miner;
+            } else if (traitNum < 800000) {
+                trait = Traits.Friendly;
+            } else if (traitNum < 900000) {
+                trait = Traits.Tailor;
+            } else {
+                trait = Traits.Runner;
+            }
         }
-        else if (traitNum < 40000) {
-            trait = Traits.Ghost;
-        }
-        else if (traitNum < 70000) {
-            trait = Traits.Leader;
-        }
-        else if (traitNum < 100000) {
-            trait = Traits.Innovative;
-        }
-        else if (traitNum < 200000) {
-            trait = Traits.Blacksmith;
-        }
-        else if (traitNum < 300000) {
-            trait = Traits.Alchemist;
-        }
-        else if (traitNum < 400000) {
-            trait = Traits.Scribe;
-        }
-        else if (traitNum < 500000) {
-            trait = Traits.Merchant;
-        }
-        else if (traitNum < 600000) {
-            trait = Traits.Gatherer;
-        }
-        else if (traitNum < 700000) {
-            trait = Traits.Miner;
-        }
-        else if (traitNum < 800000) {
-            trait = Traits.Friendly;
-        }
-        else if (traitNum < 900000) {
-            trait = Traits.Tailor;
-        }
-        else {
-            trait = Traits.Runner;
-        }
+
+        // Quest Initialization
+        questInitializer();
+
     }
+
+    // Beast Constructor
     public Character (Area area, Character cultivator) {
         location = area;
         if (rand.nextInt(2) == 0) {
@@ -360,134 +409,102 @@ public class Character {
         ss = (long)Math.pow(100, (lvl+potential)/20.);
     }
 
+    public void questInitializer () {
+        Quest random     = new Quest("Random", false, 35, 2, 90);
+        Quest profession = new Quest("Profession", false, 30, 3, 70);
+        Quest hunt       = new Quest("Hunt", false, 30, 5, 50);
+        Quest test = new Quest("Test", false, 45, 5, 10);
+
+
+        spotQuests.add(random);
+        spotQuests.add(profession);
+        spotQuests.add(hunt);
+        spotQuests.add(test);
+    }
+
     public void movement() { // 0 = west, 1 = east, 2 = north, 3 = south
-        location.characters.remove(this); // Removes This Character From The Character List of the "Old" Location
-        int temp = GameDriver.rand.nextInt(5);
+        int temp = rand.nextInt(5);
+        char move = 'x';
         switch (temp) /* Creates New Area and/or Moves This Character*/ {
             case 0:
-                if (location.x >= GameDriver.range - 100) {
-                    if (GameDriver.tiles[0][location.y/100] == null) {
-                        GameDriver.tiles[0][location.y/100] = new Area(location, 'e');
-                    }
-                    location = GameDriver.tiles[0][location.y/100];
-                    break;
-                }
-                if (GameDriver.tiles[(location.x/100) + 1][location.y/100] == null) {
-                    GameDriver.tiles[(location.x/100) + 1][location.y/100] = new Area(location, 'e');
-                }
-                location = GameDriver.tiles[(location.x/100) + 1][location.y/100];
+                move = 'a';
                 break;
             case 1:
-                if (location.x <= 0) {
-                    if (GameDriver.tiles[(GameDriver.range-100)/100][location.y/100] == null) {
-                        GameDriver.tiles[(GameDriver.range-100)/100][location.y/100] = new Area(location, 'w');
-                    }
-                    location = GameDriver.tiles[(GameDriver.range-100)/100][location.y/100];
-                    break;
-                }
-                if (GameDriver.tiles[(location.x/100) - 1][location.y/100] == null) {
-                    GameDriver.tiles[(location.x/100) - 1][location.y/100] = new Area(location, 'w');
-                }
-                location = GameDriver.tiles[(location.x/100) - 1][location.y/100];
+                move = 'd';
                 break;
             case 2:
-                if (location.y >= GameDriver.range - 100) {
-                    if (GameDriver.tiles[(location.x/100)][0] == null) {
-                        GameDriver.tiles[(location.x/100)][0] = new Area(location, 'n');
-                    }
-                    location = GameDriver.tiles[(location.x/100)][0];
-                    break;
-                }
-                if (GameDriver.tiles[(location.x/100)][(location.y/100) + 1] == null) {
-                    GameDriver.tiles[(location.x/100)][(location.y/100) + 1] = new Area(location, 'n');
-                }
-                location = GameDriver.tiles[(location.x/100)][(location.y/100) + 1];
+                move = 'w';
                 break;
             case 3:
-                if (location.y <= 0) {
-                    if (GameDriver.tiles[(location.x/100)][(GameDriver.range-100)/100] == null) {
-                        GameDriver.tiles[(location.x/100)][(GameDriver.range-100)/100] = new Area(location, 's');
-                    }
-                    location = GameDriver.tiles[(location.x/100)][(GameDriver.range-100)/100];
-                    break;
-                }
-                if (GameDriver.tiles[(location.x/100)][(location.y/100) - 1] == null) {
-                    GameDriver.tiles[(location.x/100)][(location.y/100) - 1] = new Area(location, 's');
-                }
-                location = GameDriver.tiles[(location.x/100)][(location.y/100) - 1];
+                move = 's';
                 break;
             case 4:
+                break;
+        }
+        movement(move);
+    }
+    public void movement(char temp) { // a = west, d = east, w = north, s = south
+        location.characters.remove(this); // Removes This Character From The Character List of the "Old" Location
+        switch (temp) /* Creates New Area and/or Moves This Character*/ {
+            case 'd':
+                if (location.x >= range - 1) {
+                    if (tiles[0][location.y] == null) {
+                        tiles[0][location.y] = new Area(location, 'e');
+                    }
+                    location = tiles[0][location.y];
+                    break;
+                }
+                if (tiles[(location.x) + 1][location.y] == null) {
+                    tiles[(location.x) + 1][location.y] = new Area(location, 'e');
+                }
+                location = tiles[(location.x) + 1][location.y];
+                break;
+            case 'a':
+                if (location.x <= 0) {
+                    if (tiles[(range-1)][location.y] == null) {
+                        tiles[(range-1)][location.y] = new Area(location, 'w');
+                    }
+                    location = tiles[(range-1)][location.y];
+                    break;
+                }
+                if (tiles[(location.x) - 1][location.y] == null) {
+                    tiles[(location.x) - 1][location.y] = new Area(location, 'w');
+                }
+                location = tiles[(location.x) - 1][location.y];
+                break;
+            case 'w':
+                if (location.y >= range - 1) {
+                    if (tiles[(location.x)][0] == null) {
+                        tiles[(location.x)][0] = new Area(location, 'n');
+                    }
+                    location = tiles[(location.x)][0];
+                    break;
+                }
+                if (tiles[(location.x)][(location.y) + 1] == null) {
+                    tiles[(location.x)][(location.y) + 1] = new Area(location, 'n');
+                }
+                location = tiles[(location.x)][(location.y) + 1];
+                break;
+            case 's':
+                if (location.y <= 0) {
+                    if (tiles[(location.x)][(range-1)] == null) {
+                        tiles[(location.x)][(range-1)] = new Area(location, 's');
+                    }
+                    location = tiles[(location.x)][(range-1)];
+                    break;
+                }
+                if (tiles[(location.x)][(location.y) - 1] == null) {
+                    tiles[(location.x)][(location.y) - 1] = new Area(location, 's');
+                }
+                location = tiles[(location.x)][(location.y) - 1];
+                break;
+            default:
                 break;
         }
         if (trait != Traits.Beast && !location.characters.contains(this)) {
             location.characters.add(this); // Adds This Character to the Character List of the New Location
         }
         if (trait != Traits.Beast && !knownLocations.contains(location)) {
-            knownLocations.add(location); // Adds New Location to knownLocations
-        }
-    }
-    public void movement(char temp) { // a = west, d = east, w = north, s = south
-        location.characters.remove(this); // Removes This Character From The Character List of the "Old" Location
-        switch (temp) /* Creates New Area and/or Moves This Character*/ {
-            case 'd':
-                if (location.x >= GameDriver.range - 100) {
-                    if (GameDriver.tiles[0][location.y/100] == null) {
-                        GameDriver.tiles[0][location.y/100] = new Area(location, 'e');
-                    }
-                    location = GameDriver.tiles[0][location.y/100];
-                    break;
-                }
-                if (GameDriver.tiles[(location.x/100) + 1][location.y/100] == null) {
-                    GameDriver.tiles[(location.x/100) + 1][location.y/100] = new Area(location, 'e');
-                }
-                location = GameDriver.tiles[(location.x/100) + 1][location.y/100];
-                break;
-            case 'a':
-                if (location.x <= 0) {
-                    if (GameDriver.tiles[(GameDriver.range-100)/100][location.y/100] == null) {
-                        GameDriver.tiles[(GameDriver.range-100)/100][location.y/100] = new Area(location, 'w');
-                    }
-                    location = GameDriver.tiles[(GameDriver.range-100)/100][location.y/100];
-                    break;
-                }
-                if (GameDriver.tiles[(location.x/100) - 1][location.y/100] == null) {
-                    GameDriver.tiles[(location.x/100) - 1][location.y/100] = new Area(location, 'w');
-                }
-                location = GameDriver.tiles[(location.x/100) - 1][location.y/100];
-                break;
-            case 'w':
-                if (location.y >= GameDriver.range - 100) {
-                    if (GameDriver.tiles[(location.x/100)][0] == null) {
-                        GameDriver.tiles[(location.x/100)][0] = new Area(location, 'n');
-                    }
-                    location = GameDriver.tiles[(location.x/100)][0];
-                    break;
-                }
-                if (GameDriver.tiles[(location.x/100)][(location.y/100) + 1] == null) {
-                    GameDriver.tiles[(location.x/100)][(location.y/100) + 1] = new Area(location, 'n');
-                }
-                location = GameDriver.tiles[(location.x/100)][(location.y/100) + 1];
-                break;
-            case 's':
-                if (location.y <= 0) {
-                    if (GameDriver.tiles[(location.x/100)][(GameDriver.range-100)/100] == null) {
-                        GameDriver.tiles[(location.x/100)][(GameDriver.range-100)/100] = new Area(location, 's');
-                    }
-                    location = GameDriver.tiles[(location.x/100)][(GameDriver.range-100)/100];
-                    break;
-                }
-                if (GameDriver.tiles[(location.x/100)][(location.y/100) - 1] == null) {
-                    GameDriver.tiles[(location.x/100)][(location.y/100) - 1] = new Area(location, 's');
-                }
-                location = GameDriver.tiles[(location.x/100)][(location.y/100) - 1];
-                break;
-            default:
-                break;
-        }
-        if (!location.characters.contains(this)) {
-            location.characters.add(this); // Adds This Character to the Character List of the New Location
-        }
-        if (!knownLocations.contains(location)) {
             knownLocations.add(location); // Adds New Location to knownLocations
         }
     }
@@ -500,7 +517,7 @@ public class Character {
             minorLvl++;
             cultivationBaseMax = Math.pow(lvl, 3) * (((70.+1./3.) + ((11./6.) * lvl)) / 25.);
             cultivation = ((Math.pow(potential,2) * Math.sqrt(lvl) * 10.) / (52. * Math.sqrt(potential) * Math.pow(2,inhibitor)));
-            if (minorLvl >= 11 && majorLvl < 10) {
+            if ((minorLvl >= 11 && majorLvl < 10)) {
                 majorLvl++;
                 minorLvl = 1;
 
@@ -515,8 +532,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 7;
                         maxAge += 100;
+                        totalAgeGained += 100;
                         if (printBreakthroughs) {
                             System.out.println(this + " has broken through to the Foundation Stage");
                         }
@@ -531,8 +548,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 8;
                         maxAge += 200;
+                        totalAgeGained += 200;
                         if (printBreakthroughs) {
                             System.out.println(this + " has broken through to the Core Formation Stage");
                         }
@@ -547,8 +564,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 8;
                         maxAge += 400;
+                        totalAgeGained += 400;
                         System.out.println(this + " has broken through to Soul Wandering");
                         break;
                     case 4:
@@ -561,8 +578,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 8;
                         maxAge += 1900;
+                        totalAgeGained += 1900;
                         System.out.println(this + " has broken through to Nascent Soul");
                         break;
                     case 5:
@@ -575,8 +592,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 8;
                         maxAge += 3700;
+                        totalAgeGained += 3700;
                         System.out.println(this + " has broken through to Ensoulment");
                         break;
                     case 6:
@@ -589,8 +606,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 8;
                         maxAge += 6100;
+                        totalAgeGained += 6100;
                         System.out.println(this + " has broken through to Nihility");
                         break;
                     case 7:
@@ -603,8 +620,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 8;
                         maxAge += 9100;
+                        totalAgeGained += 9100;
                         System.out.println(this + " has broken through to Ascension");
                         break;
                     case 8:
@@ -617,8 +634,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 8;
                         maxAge += 13700;
+                        totalAgeGained += 13700;
                         System.out.println(this + " has broken through to Half-Immortal");
                         break;
                     case 9:
@@ -631,8 +648,8 @@ public class Character {
                                 break;
                             }
                         }
-                        travellingSpeed += 8;
                         maxAge += 16900;
+                        totalAgeGained += 16900;
                         System.out.println(this + " has broken through to Pseudo Immortal");
                         break;
                     case 10:
@@ -643,8 +660,8 @@ public class Character {
                             inhibitor++;
                             break;
                         }
-                        travellingSpeed += 8;
                         maxAge += 2140000000;
+                        totalAgeGained += 2140000000;
                         System.out.println(this + " has broken through to True Immortal");
                         break;
                 }
@@ -668,6 +685,7 @@ public class Character {
             dead();
         }
     }
+
     public void dead() {
         dead = true;
         if (spouse != null) {
@@ -701,6 +719,9 @@ public class Character {
     }
     public void dead(Character killer) {
         dead = true;
+        if (changeMc && player) {
+            killer.player = true;
+        }
 
         if (trait != Traits.Beast) {
             if (spouse != null) {
@@ -750,11 +771,12 @@ public class Character {
         }
 
         if (trait != Traits.Beast && killer.trait != Traits.Beast) {
-            for (Character friend : relationshipsList) {
-                Integer value = friend.relationships.get(this);
-                if (!friend.dead && value > 50) {
-                    value /= -2;
-                    friend.changeRelationship(killer, value);
+            for (Relationship relationship : relationshipList.relationships) {
+                Character friend = characters.get(relationship.friendID);
+                Integer value = relationship.value;
+                if (!friend.dead && value >= 2) {
+                    value -= 1;
+                    friend.changeRelationship(killer, -value);
                 }
             }
 
@@ -776,80 +798,308 @@ public class Character {
             }
         }
     }
+    public void quest () {
+        consume(); // Consume pills IMPORTANT!!!
+        Quest tempQuest = this.spotQuests.peek();
+        int questCode = -2;
 
-    public void event() {
-        consume();
+        // If currentQuest exists, make sure it's viable. If not, make it null
+        if (currentQuest != null) {
+            if (questViable(currentQuest) == 0) {
+                currentQuest.questDeconstructor();
+                currentQuest = null;
+            }
+        }
+        // If currentQuest is null, go through queue until find viable quest or
+        if (currentQuest == null) {
+            while (questCode != -3 && questCode != 1) {
+                if (targetQuests.peek() != null) {
+                    currentQuest = targetQuests.poll();
+                    if (questViable(currentQuest) == 1) {
+                        questCode = 1;
+                    }
+                }
+                else {
+                    questCode = -3;
+                    // Testing
+                    System.out.println("Priority Queue is Null\n" + targetQuests);
+                }
+            }
+        }
+
+        // If currentQuest exists and is viable, do pathfinding
+        if (questCode != -3) {
+            questCode = pathfinder(currentQuest.targetArea);
+            if (questCode == 1) {
+                // Do Target Actions
+                questCode = targetQuests(currentQuest);
+            }
+        }
+
+        // If currentQuest wasn't activated, do Spot
+        if (questCode != 1) {
+            // Do Spot
+            if (tempQuest != null) {
+                tempQuest = spotQuests.poll();
+                questCode = spotQuests(tempQuest);
+            }
+            else {
+                System.out.println("We got a problem with the spotQuests queue... It's empty");
+            }
+        }
+
+        if (questCode == 1 && currentQuest.oneTime) {
+            //Testing
+            currentQuest.questDeconstructor();
+            currentQuest = null;
+            // Increase target quests if target quest completed
+            targetQuests.forEach(q -> q.priority += q.priorityDiff);
+            System.out.println("One Time Target Quest finished");
+        }
+        else if (questCode == 1 || questCode == -1) {
+            //Testing
+            // Increase target quests if target quest completed
+            targetQuests.forEach(q -> q.priority += q.priorityDiff);
+            currentQuest.priority = 0;
+            targetQuests.add(currentQuest);
+        }
+        else if (questCode == 2 && tempQuest.oneTime) {
+            //Testing
+            tempQuest.questDeconstructor();
+            tempQuest = null;
+            System.out.println("One Time Spot Quest finished!?");
+        }
+        else if (questCode == 2 || questCode == -2) {
+            tempQuest.priority = 0;
+            spotQuests.add(tempQuest);
+        }
+
+        // Increase priority of all spotQuests
+        spotQuests.forEach(q -> q.priority += q.priorityDiff);
+    }
+
+
+
+    public int questViable(Quest quest) {
+        switch (quest.category) {
+            case Spot:
+                System.out.println("Error in questViable Spot");
+                return 0;
+            case Character:
+                Character character = characters.get(quest.targetCharacter);
+                if (character == null){
+                    return 0;
+                }
+                else if (character.dead == true) {
+                    return 0;
+                }
+                else {
+                    return 1;
+                }
+            case Area:
+                // Come back and fill this in later for merchants and sects
+                return 1; // Make sure this makes sense later
+
+        }
+        return 0;
+    }
+
+    public int spotQuests (Quest quest) {
+        int questSuccess = -2;
+        switch (quest.name) {
+            //Write Spot Case Here
+            case "Random":
+                questSuccess = event();
+                //Testing
+                //System.out.println("Random completed");
+                break;
+            case "Profession":
+                questSuccess = professionPicker();
+                break;
+            case "Hunt":
+                beastBattleCheck();
+                questSuccess = 2;
+                break;
+            case "Interact":
+                Character target = location.characters.get(rand.nextInt(location.characters.size()));
+                if (target != null) {
+                    questSuccess = 2; // Don't forget to change this
+                    interact(target);
+                }
+                else {
+
+                }
+                break;
+
+            case "Test":
+                //System.out.println("Test completed");
+                questSuccess = 2;
+                //Quest onetime = new Quest("One Time", true, 80, 5, 90);
+                //spotQuests.add(onetime);
+                break;
+
+        }
+
+
+        return 0;
+    }
+
+    public int targetQuests (Quest quest) {
+        switch (quest.name) {
+            case "Find Person":
+                Character person = characters.get(quest.targetCharacter);
+                // Testing
+                System.out.println(this + " has found " + person);
+                if (relationshipList.contains(person.id) != null) {
+                    if (relationshipList.contains(person.id).value > 0) {
+                        interact(person);
+                        // Make a gifting function when possible / sparring
+                    } else if (relationshipList.contains(person.id).value < 0) {
+                        battleCheck(person);
+                    } else {
+                        interact(person);
+                    }
+                    return 1;
+                }
+                else {
+                    System.out.println("Weird Case?");
+                    return -1;
+                }
+
+        }
+        return -1;
+    }
+
+    public int pathfinder (Area destination) {
+
+        int xDiff = location.x - destination.x;
+        int yDiff = location.y - destination.y;
+        int divider = range / 2;
+
+        if (xDiff == 0) {
+            // Don't move left or right
+        }
+        else if (xDiff < -divider || (xDiff >= 1 && xDiff <= divider)) {
+            // Move Left
+            this.movement('a');
+        }
+        else {
+            // Move right
+            this.movement('d');
+        }
+
+        if (yDiff == 0) {
+            // Don't move left or right
+        }
+        else if (yDiff < -divider || (yDiff >= 1 && yDiff <= divider)) {
+            // Move Left
+            this.movement('s');
+        }
+        else {
+            // Move right
+            this.movement('w');
+        }
+
+        if (location == destination) {
+            System.out.println(this + " has reached their target: " + destination);
+            return 1;
+        }
+        else {
+            return 0;
+        }
+
+    }
+
+    public int event() {
         Character target = location.characters.get(rand.nextInt(location.characters.size()));
+        int result = -2;
         switch (eventChoosing()) {
             //Battle A Player
             case 0:
-                battleCheck(target);
+                //battleCheck(target); // Remove this
                 break;
             // Battle a Random Beast
             case 1:
                 beastBattleCheck();
-            //Interact With A Player
+                result = 2;
+                //Interact With A Player
             case 2:
                 interact(target);
+                result = 2;
                 break;
             //Forage
             case 3:
-                forage();
+                //forage(); // Remove this
                 break;
             // Mine
             case 4:
-                mine();
+                //mine(); // Remove this
                 break;
             // Professions
             case 5:
-                switch (trait) {
-                    case Alchemist:
-                        alchemy();
-                        break;
-                    case Blacksmith:
-                        smithing();
-                        break;
-                    case Gatherer:
-                        forage();
-                        break;
-                    case Miner:
-                        mine();
-                        break;
-                    case Friendly:
-                        interact(target);
-                    case Tailor:
-                        tailoring();
-                    case Scribe:
-                        array();
-                        break;
-                    case Leader:
-                        if (professionLvl == 1) {
-                            cityLeadership();
-                        }
-                        if (professionLvl == 50) {
-                            sectLeadership();
-                        }
-                        break;
-                    case Innovative:
-                        if (rand.nextInt(100) == 0) {
-                            technique();
-                        }
-                        break;
-                    case Merchant:
-                        break;
-                    case Lucky:
-                        event2();
-                        break;
-                    default:
-                        break;
-                }
+                professionPicker();
+                result = 2;
                 break;
+            // Loot Dead
             case 6:
-                event2();
+                eventLootDead();
+                result = 2;
                 break;
         }
+        return result;
     }
-    public void event2() {
+
+    public int professionPicker () {
+        int success = -2;
+        switch (trait) {
+            case Alchemist:
+                success = alchemy();
+                if (success == -2) {
+                    forage();
+                }
+                return success;
+            case Blacksmith:
+                smithing();
+                break;
+            case Friendly:
+                Character target = location.characters.get(rand.nextInt(location.characters.size()));
+                if (target != null) {
+                    interact(target);
+                    success = 2;
+                }
+                else {
+                    success = -2;
+                }
+            case Tailor:
+                tailoring();
+            case Scribe:
+                array();
+                break;
+            case Leader:
+                if (professionLvl == 1) {
+                    cityLeadership();
+                }
+                if (professionLvl == 50) {
+                    sectLeadership();
+                }
+                break;
+            case Innovative:
+                if (rand.nextInt(100) == 0) {
+                    technique();
+                }
+                break;
+            case Merchant:
+
+                break;
+            case Lucky:
+                eventLootDead();
+                break;
+            default:
+                break;
+        }
+        return -2;
+    }
+    public void eventLootDead() {
         // Prototype code
         if (!location.deadCharacters.isEmpty()) {
             Character temp = null;
@@ -969,7 +1219,8 @@ public class Character {
             }
         }
     }
-    public void alchemy() {
+    public int alchemy() {
+        int success = -2;
         for (int i = 0; i <= professionLvl/10; i++) {
             boolean hasBlood = false;
             boolean hasItem = false;
@@ -979,16 +1230,19 @@ public class Character {
                 if (item.itemType == Item.ItemType.Blood && item.quantity >= 1000) {
                     hasBlood = true;
                     material = item;
+                    success = 2;
                     break;
                 }
                 else if (item.itemType == Item.ItemType.Herb && item.quantity >= 50) {
                     if (material == null) {
                         if (item.lvl <= professionLvl/10 + 2) {
                             material = item;
+                            success = 2;
                         }
                     }
                     else if (material.lvl < item.lvl && item.lvl <= professionLvl/10 + 2) {
                         material = item;
+                        success = 2;
                     }
                 }
             }
@@ -1017,8 +1271,8 @@ public class Character {
             else if (material == null) {
                 if (rand.nextInt(10) == 0) {
                     pill = new Item(Item.ItemType.Pill, Item.PillType.Cultivation, 1, 1);
+                    i += professionLvl/10 + 1;
                 }
-                i += professionLvl/10 + 1;
             }
 
 
@@ -1047,6 +1301,7 @@ public class Character {
         if (player && skipping <= 0 && age >= 8) {
             System.out.println("Created a few pills");
         }
+        return success;
     }
     public void consume(){
         for (Item item : pillBag) {
@@ -1070,52 +1325,136 @@ public class Character {
 
     public void interact(Character player) {
         if (this != player && !player.dead && player.time >= 0) {
-            Integer increase = rand.nextInt(10000);
-            if (increase > 1000) {
-                increase = 5;
-            } else if (increase > 100) {
-                increase = 10;
-            } else if (increase > 10) {
-                increase = 20;
-            } else {
-                increase = 50;
-            }
 
             //Checks to see if Affiliation is the same or Good vs Evil
-            if (this.affiliation.equals(player.affiliation)) {
-                increase *= 2;
-            } else if ((this.affiliation.equals("Good") && player.affiliation.equals("Evil")) || (this.affiliation.equals("Evil") && player.affiliation.equals("Good"))) {
-                increase /= 2;
+            if (this.affiliation.equals("Evil")) {
+                if (rand.nextInt(100) == 0) {
+                    battleCheck(player);
+                }
+            }
+            else if ((this.affiliation.equals("Good") && player.affiliation.equals("Evil")) ) {
                 if (rand.nextInt(100) == 0) {
                     battleCheck(player);
                 }
             }
             // Changes the Relationship Value of this Character and the targeted Player
 
-            changeRelationship(player, increase);
+            changeRelationship(player, 0);
             checkBirth(player);
 
-            if (this.player && skipping <= 0 && age >= 8) {
+            if ((this.player || player.player ) && skipping <= 0 && age >= 8) {
                 System.out.println(this + " talked to " + player);
             }
         }
     }
-    public void changeRelationship (Character player, Integer change) {
+    public void changeRelationship (Character player, int change) {
         // Checks to see if the relationship doesn't exist. If it doesn't, it creates the relationship
-        if (!relationships.containsKey(player)) {
-            relationships.put(player, 0);
-            player.relationships.put(this, 0);
-            relationshipsList.add(player);
-            player.relationshipsList.add(this);
+        if (relationshipList.contains(player.id) == null) {
+            relationshipList.add(new Relationship(player.id, 0));
+            this.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, player));
+            System.out.println("Target Quests: " + targetQuests);
         }
+        if (player.relationshipList.contains(this.id) == null) {
+            player.relationshipList.add(new Relationship(this.id, 0));
+            player.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, this));
+            System.out.println("Target Quests: " + targetQuests);
+        }
+
+        // Always ensure both sides have the quest if needed
+        boolean hasQuest1 = this.targetQuests.stream()
+                .anyMatch(q -> q.targetCharacter == player.id && "Find Person".equals(q.name));
+        hasQuest1 = this.currentQuest.targetCharacter == player.id && "Find Person".equals(this.currentQuest.name);
+        boolean hasQuest2 = player.targetQuests.stream()
+                .anyMatch(q -> q.targetCharacter == this.id && "Find Person".equals(q.name));
+        hasQuest2 = player.currentQuest.targetCharacter == this.id && "Find Person".equals(player.currentQuest.name);
+
+        if (!hasQuest1) {
+            System.out.println("Quest not existing!!!");
+            this.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, player));
+        }
+        if (!hasQuest2) {
+            System.out.println("Quest not existing!!!2");
+            player.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, this));
+        }
+
         // Changes the value of the relationship in the hash table
-        Integer value = relationships.get(player);
-        relationships.replace(player, value + change);
-        player.relationships.replace(this, value + change);
+        Relationship temp = relationshipList.contains(player.id);
+        Relationship temp2 = player.relationshipList.contains(this.id);
+        int value = temp.value;
+        if (change == 0) {
+            change = changeRelationshipUtil(player);
+        }
+        if (value + change > 3) {
+            change = 3;
+        }
+        else if (value + change < -3) {
+            change = -3;
+        }
+        else {
+            change += value;
+        }
+        temp.changeValue(change);
+        temp2.changeValue(change);
+        System.out.println(this + "'s relationship with " + player + " is " + change);
+
         checkRelationship(player);
+
+        if (change == 0){
+            relationshipList.remove(temp);
+            player.relationshipList.remove(temp2);
+            temp = null;
+            temp2 =null;
+        }
+
+        System.out.println("RelationshipList: " + relationshipList);
+        System.out.println("RelationshipList: " + player.relationshipList);
     }
+    public int changeRelationshipUtil(Character player) {
+        int random = rand.nextInt(1000000) + 1;
+        int positive = 0;
+        int negative = 0;
+
+        // Same Affiliation
+        if (this.affiliationNum == player.affiliationNum) {
+            positive = 250000;
+            negative = 50000;
+        }
+        // Good vs Evil
+        else if (Math.abs(this.affiliationNum) == Math.abs(player.affiliationNum)) {
+            positive = 50000;
+            negative = 250000;
+        }
+        // Neutral Good / Neutral Evil
+        else {
+            positive = 100000;
+            negative = 100000;
+        }
+
+        if (this.mother == player.mother || this.father == player.father) {
+            positive *= 2;
+            negative /= 2;
+        }
+
+        int gap = (this.lvl - player.lvl) / 10;
+        int relationshipScore = this.relationshipList.contains(player.id).value;
+        positive /= Math.pow(2, gap + relationshipScore);
+        negative /= Math.pow(2, gap + relationshipScore);
+
+        if (random <= positive) {
+            return 1;
+        }
+        else if (random < (1000000 - negative)) {
+            return 0;
+        }
+        else {
+            return -1;
+        }
+    }
+
     public void checkRelationship(Character player) {
-        if (this.age >= 18 && player.age >= 18 && spouse == null && player.spouse == null && relationships.get(player) >= 100 && this.gender != player.gender && this.mother != player && player.mother != this && this.father != player && player.father != this && !siblings.contains(player) && !this.dead && !player.dead) {
+        int relationship = relationshipList.contains(player.id).value;
+
+        if (this.age >= 18 && player.age >= 18 && spouse == null && player.spouse == null && relationship >= 3 && this.gender != player.gender && this.mother != player && player.mother != this && this.father != player && player.father != this && !siblings.contains(player) && !this.dead && !player.dead) {
             spouse = player;
             player.spouse = this;
             System.out.println(this + " and " + player + " are now married! Congratulations!");
@@ -1125,8 +1464,66 @@ public class Character {
             else {
                 player.lastName = this.lastName;
             }
-
         }
+        int value = Math.abs(relationship);
+        System.out.println("Value: " + value);
+
+        if (value == 0) {
+            System.out.println("Creating Find Person quest with no change in relationship");
+            System.out.println("Quests before: " + targetQuests);
+            System.out.println("Quests before: " + player.targetQuests);
+
+            // Remove 0 Relation Quests
+            targetQuests.removeIf(q -> q.targetCharacter == player.id && q.name == "Find Person");
+            player.targetQuests.removeIf(q -> q.targetCharacter == this.id && q.name == "Find Person");
+
+            System.out.println("Quests after: " + targetQuests);
+            System.out.println("Quests after: " + player.targetQuests);
+        }
+        else {
+            System.out.println("Creating Find Person quest because change in relationship");
+            System.out.println("Quests before: " + targetQuests);
+            System.out.println("Quests before: " + player.targetQuests);
+
+            // Always ensure both sides have the quest if needed
+            boolean hasQuest1 = this.targetQuests.stream()
+                    .anyMatch(q -> q.targetCharacter == player.id && "Find Person".equals(q.name));
+            hasQuest1 = this.currentQuest.targetCharacter == player.id && "Find Person".equals(this.currentQuest.name);
+            boolean hasQuest2 = player.targetQuests.stream()
+                    .anyMatch(q -> q.targetCharacter == this.id && "Find Person".equals(q.name));
+            hasQuest2 = player.currentQuest.targetCharacter == this.id && "Find Person".equals(player.currentQuest.name);
+
+            if (!hasQuest1) {
+                System.out.println("Quest not existing!!!");
+                this.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, player));
+            }
+            if (!hasQuest2) {
+                System.out.println("Quest not existing!!!2");
+                player.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, this));
+            }
+
+            targetQuests.forEach(q -> {
+                if (q.targetCharacter == player.id && "Find Person".equals(q.name)) {
+                    q.priorityDiff = value;
+                    q.priority = value;
+                    q.maxPriority = 20 * value;
+                }
+            });
+
+            player.targetQuests.forEach(q -> {
+                if (q.targetCharacter == this.id && "Find Person".equals(q.name)) {
+                    q.priorityDiff = value;
+                    q.priority = value;
+                    q.maxPriority = 20 * value;
+                }
+            });
+
+            System.out.println("Quests after: " + targetQuests);
+            System.out.println("Quests after: " + player.targetQuests);
+        }
+
+
+
     }
     public void checkBirth(Character player) {
         if (spouse == player) {
@@ -1537,37 +1934,18 @@ public class Character {
                 return;
             }
         }
-
-        if (affiliationNum == 1 && opponent.affiliationNum != -1 && !sparring) {
+        if (age < 8 && !sparring) {
             return;
         }
-        if (age < 18 && !sparring) {
-            return;
-        }
-        if (relationships.containsKey(opponent)) {
-            if (!sparring && relationships.get(opponent) >= 50) {
+        if (relationshipList.contains(opponent.id) != null) {
+            if (!sparring && relationshipList.contains(opponent.id).value >= 1) {
                 return;
             }
         }
 
         // Decreases Relationship
-        if (!sparring) {
-            Integer increase = rand.nextInt(10000);
-            if (increase > 1000) {
-                increase = 5;
-            } else if (increase > 100) {
-                increase = 10;
-            } else if (increase > 10) {
-                increase = 20;
-            } else {
-                increase = 50;
-            }
-            changeRelationship(opponent, -1 * increase);
-        }
+        changeRelationship(opponent, 0);
 
-        if (!sparring && location.city) {
-            return;
-        }
         if (this != opponent && !opponent.dead && opponent.time >= 0) {
             if (opponent.age < 8 && opponent.mother != null && !opponent.mother.dead) {
                 battle(opponent.mother);
@@ -1576,190 +1954,170 @@ public class Character {
             }
         }
     }
-    public void beastBattleCheck() {
-        if (age < 13 || location.monsters <= 0 || lvl < (location.lvl + location.highestLvl) / 2) {
-            return;
+    public boolean beastBattleCheck() {
+        if (age < 8 || location.monsters <= 0 || lvl < (location.lvl + location.highestLvl) / 2) {
+            return false;
         }
         if (lvl < location.lvl) {
             if ( rand.nextInt(4) != 0) {
-                return;
+                return false;
             }
         }
         location.monsters--;
         battle(new Character(location, this));
-    }
-    public void battle(Character opponent) {
-        //System.out.println(this + " has challenged " + opponent + " to a fight!");
-        int index = 50;
-        int counter = 0;
-
-
-        // Optimizes Equipment and Techniques and Updates Corresponding TempLvl
-        equip();
-        opponent.equip();
-
-        boolean fighting = true;
-
-        int speedMeter1 = (tempLvl + movementTechnique.lvl) / 2;
-        int dmgMeter1 = (((tempLvl * 2) + martialTechnique.lvl) / 3) - opponent.tempLvl;
-        if (equippedWeapon != null && equippedWeapon.lvl > lvl) {
-            dmgMeter1 = ((tempLvl + martialTechnique.lvl + equippedWeapon.lvl) / 3) - opponent.tempLvl;
-        }
-        int speedMeter2 = (opponent.tempLvl + opponent.movementTechnique.lvl) / 2;
-        int dmgMeter2 = (((opponent.tempLvl * 2) + opponent.martialTechnique.lvl) / 3) - tempLvl;
-        if (opponent.equippedWeapon != null && opponent.equippedWeapon.lvl > opponent.lvl) {
-            dmgMeter2 = ((opponent.tempLvl + opponent.martialTechnique.lvl + opponent.equippedWeapon.lvl) / 3) - tempLvl;
-        }
-        int actionBar1 = 0; // Player's Action Bar
-        int actionBar2 = 0; // Opponent's Action Bar
-        if (dmgMeter1 < 1) {
-            dmgMeter1 = 1;
-        }
-        if (dmgMeter2 < 1) {
-            dmgMeter2 = 1;
-        }
-
-        // Actual Fight Sequence
-        while (fighting) {
-            //Forbidden Check
-            if (forbidden || opponent.forbidden) {
-                forbiddenCheck(opponent);
-                opponent.forbiddenCheck(this);
-                speedMeter1 = (tempLvl + movementTechnique.lvl) / 2;
-                dmgMeter1 = (((tempLvl * 2) + martialTechnique.lvl) / 3) - opponent.tempLvl;
-                if (equippedWeapon != null && equippedWeapon.lvl > lvl) {
-                    dmgMeter1 = ((tempLvl + martialTechnique.lvl + equippedWeapon.lvl) / 3) - opponent.tempLvl;
-                }
-                speedMeter2 = (opponent.tempLvl + opponent.movementTechnique.lvl) / 2;
-                dmgMeter2 = (((opponent.tempLvl * 2) + opponent.martialTechnique.lvl) / 3) - tempLvl;
-                if (opponent.equippedWeapon != null && opponent.equippedWeapon.lvl > opponent.lvl) {
-                    dmgMeter2 = ((opponent.tempLvl + opponent.martialTechnique.lvl + opponent.equippedWeapon.lvl) / 3) - tempLvl;
-                }
-                if (dmgMeter1 < 1) {
-                    dmgMeter1 = 1;
-                }
-                if (dmgMeter2 < 1) {
-                    dmgMeter2 = 1;
-                }
-            }
-
-            if (dead || opponent.dead) {
-                fighting = false;
-                sparring = false;
-                opponent.sparring = false;
-                forbidden = false;
-                opponent.forbidden = false;
-                break;
-            }
-
-            actionBar1 += speedMeter1;
-            actionBar2 += speedMeter2;
-            if (actionBar1 >= 100 && actionBar2 >= 100) {
-                if (speedMeter1 >= speedMeter2) {
-                    index += dmgMeter1;
-                    durabilityCheck(opponent);
-                    //System.out.println(this + " has pushed back " + opponent + " by " + dmgMeter1 + " to tile " + index + "!");
-                    if (!indexCheck(opponent, index)) {
-                        fighting = false;
-                        sparring = false;
-                        opponent.sparring = false;
-                        forbidden = false;
-                        opponent.forbidden = false;
-                        break;
-                    }
-                    index -= dmgMeter2;
-                    opponent.durabilityCheck(this);
-                    //System.out.println(opponent + " has pushed back " + this + " by " + dmgMeter2 + " to tile " + index + "!");
-                    actionBar1 -= 100;
-                    actionBar2 -= 100;
-                }
-                else{
-                    index -= dmgMeter2;
-                    opponent.durabilityCheck(this);
-                    //System.out.println(opponent + " has pushed back " + this + " by " + dmgMeter2 + " to tile " + index + "!");
-                    if (!indexCheck(opponent, index)) {
-                        fighting = false;
-                        sparring = false;
-                        opponent.sparring = false;
-                        forbidden = false;
-                        opponent.forbidden = false;
-                        break;
-                    }
-                    index += dmgMeter1;
-                    durabilityCheck(opponent);
-                    //System.out.println(this + " has pushed back " + opponent + " by " + dmgMeter1 + " to tile " + index + "!");
-                    actionBar1 -= 100;
-                    actionBar2 -= 100;
-                }
-            }
-            else if (actionBar1 >= 100) {
-                index += dmgMeter1;
-                durabilityCheck(opponent);
-                //System.out.println(this + " has pushed back " + opponent + " by " + dmgMeter1 + " to tile " + index + "!");
-                actionBar1 -= 100;
-            }
-            else if (actionBar2 >= 100) {
-                index -= dmgMeter2;
-                opponent.durabilityCheck(this);
-                //System.out.println(opponent + " has pushed back " + this + " by " + dmgMeter2 + " to tile " + index + "!");
-                actionBar2 -= 100;
-            }
-            if (!indexCheck(opponent, index)) {
-                fighting = false;
-                sparring = false;
-                opponent.sparring = false;
-                forbidden = false;
-                opponent.forbidden = false;
-                break;
-            }
-            counter++;
-            if (counter >= 200) {
-                fighting = false;
-                sparring = false;
-                opponent.sparring = false;
-                forbidden = false;
-                opponent.forbidden = false;
-                break;
-                //System.out.println(this + " and " + opponent + " have fought to a tie!");
-            }
-        }
-    }
-    // If returns false the fight will end
-    public boolean indexCheck(Character opponent, int index) {
-        if (index <= 0) {
-            if (this.trait != Traits.Beast) {
-                System.out.println("" + this + ": " + this.lvl + " " + potential + " has lost to " + opponent + ": " + opponent.lvl + " " + opponent.potential);
-            }
-            opponent.winCheck(this);
-            return false;
-        }
-        else if (index >= 100) {
-            if (opponent.trait != Traits.Beast) {
-                System.out.println("" + opponent + ": " + opponent.lvl + " " + opponent.potential + " has lost to " + this + ": " + this.lvl + " " + this.potential);
-            }
-            this.winCheck(opponent);
-            return false;
-        }
-        else if (index <= 10 && !sparring) {
-            this.forbidden = true;
-        }
-        else if (index >= 90 && !sparring) {
-            opponent.forbidden = true;
-        }
-        else if (index <= 24) {
-            if (fleeCheck(opponent)) {
-                //System.out.println("" + this + " has fleed from " + opponent);
-                return false;
-            }
-        }
-        else if (index >= 76) {
-            if (opponent.fleeCheck(this)) {
-                //System.out.println("" + opponent + " has fleed from " + this);
-                return false;
-            }
-        }
         return true;
     }
+
+    public void battle(Character opponent) {
+        // (MESSAGE) System.out.println(this + " has challenged " + opponent + " to a fight!");
+
+
+        // (NOTE) Optimizes Equipment and Techniques and Updates Corresponding TempLvl
+        this.tempLvlCheck();
+        opponent.tempLvlCheck();
+
+        System.out.println("TempLvl of " + this + " is " + tempLvl);
+        System.out.println("TempLvl of " + opponent + " is " + opponent.tempLvl);
+
+        // Death Chance and Forbidden Init
+        boolean deathChance = deathCheck(opponent);
+        boolean forbiddenUsed = false;
+        boolean oppForbiddenUsed = false;
+
+        //winChanceCheck(opponent);
+        int winChance = 50 - (15 * (opponent.tempLvl - this.tempLvl));
+        if (this.trait == Traits.Lucky) {
+            winChance += 45;
+        }
+        if (opponent.trait == Traits.Lucky) {
+            winChance -= 45;
+        }
+
+        System.out.println(this + "'s chance of winning is " + winChance);
+
+        if (winChance < caution) {
+            if (fleeCheck(opponent)) {
+                System.out.println("Fleed Fight");
+                return;
+            }
+            else if (deathChance) {
+                forbiddenCheck();
+                forbiddenUsed = true;
+                System.out.println("Forbiden technique used");
+            }
+        }
+        else if (winChance > opponent.caution) {
+            if(opponent.fleeCheck(this)) {
+                System.out.println("Fight Fleed");
+                return;
+            }
+            else if (deathChance) {
+                opponent.forbiddenCheck();
+                oppForbiddenUsed = true;
+                System.out.println("Opponent used forbidden technique");
+            }
+        }
+
+        if (deathChance) {
+            // Second Win Chance Calculation
+            winChance = 50 - (15 * (opponent.tempLvl - this.tempLvl));
+            if (this.trait == Traits.Lucky) {
+                winChance += 45;
+            }
+            if (opponent.trait == Traits.Lucky) {
+                winChance -= 45;
+            }
+
+            System.out.println(this + "/'s chance of winning is " + winChance);
+
+            if (winChance < caution && oppForbiddenUsed) {
+                if (fleeCheck(opponent)) {
+                    System.out.println("Fight Fleed");
+                    return;
+                } else if (deathChance) {
+                    forbiddenCheck();
+                    System.out.println("Forbiden technique used");
+                }
+            } else if (winChance > opponent.caution && forbiddenUsed) {
+                if (opponent.fleeCheck(this)) {
+                    System.out.println("Fight Fleed");
+                    return;
+                } else if (deathChance) {
+                    opponent.forbiddenCheck();
+                    System.out.println("Opponent used forbidden technique");
+                }
+            }
+        }
+
+        winChance = 50 - (15 * (opponent.tempLvl - this.tempLvl));
+        if (this.trait == Traits.Lucky) {
+            winChance += 45;
+        }
+        if (opponent.trait == Traits.Lucky) {
+            winChance -= 45;
+        }
+
+        System.out.println(this + "'s chance of winning is " + winChance);
+
+        durabilityCheck(opponent);
+
+        if ((rand.nextInt(100) + 1) <= winChance) {
+            System.out.println(this + " won the fight!");
+            winCheck(opponent);
+        }
+        else {
+            System.out.println(opponent + " won the fight!");
+            opponent.winCheck(this);
+        }
+
+    }
+
+    // Returns true if a deathmatch, returns false if not
+    public boolean deathCheck(Character opponent) {
+        int deathChance = 1;
+
+        if (opponent.trait == Traits.Beast || this.trait == Traits.Beast) {
+            System.out.println("Fighting Beast, No Relation");
+            return true;
+        }
+
+        if (relationshipList.contains(opponent.id) != null) {
+
+            switch (relationshipList.contains(opponent.id).value) {
+                case -4: //System.out.println("Wanted");
+                    deathChance = 100;
+                    break;
+                case -3: //System.out.println("Arch enemy");
+                    deathChance = 75;
+                    break;
+                case -2: //System.out.println("Rival");
+                    deathChance = 25;
+                    break;
+                case -1: //System.out.println("Dislike");
+                    deathChance = 5;
+                    break;
+                case 0: //System.out.println("Neutral");
+                    deathChance = 1;
+                    break;
+                default: //System.out.println("Friendly");
+                    deathChance = 0;
+                    break;
+            }
+        }
+        else {
+            System.out.println(this + " and " + opponent + " fighting with no relation!");
+        }
+
+
+        if (deathChance >= (rand.nextInt(100) + 1)){
+            System.out.println("DEATH MATCH");
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
     public void winCheck(Character loser) {
         if (!sparring) {
             loser.dead(this);
@@ -1793,69 +2151,130 @@ public class Character {
         }
         return false;
     }
+
     public void tempLvlCheck(){
         equip();
         tempLvl = lvl;
-        if (equippedClothing != null && equippedClothing.lvl > lvl) {
-            tempLvl = (lvl + equippedClothing.lvl) / 2;
+
+        if (equippedClothing != null) {
+            tempLvl += equippedClothing.lvl;
         }
 
-        if (forbidden) {
-            if (lvl < potential) {
-                tempLvl = potential;
-                if (equippedClothing != null && equippedClothing.lvl > tempLvl) {
-                    tempLvl = (tempLvl + equippedClothing.lvl) / 2;
-                }
-                potential -= (int) Math.sqrt(potential);
-            }
-            else if (lvl >= potential) {
-                tempLvl = lvl + (2 * majorLvl);
-                if (equippedClothing != null && equippedClothing.lvl > tempLvl) {
-                    tempLvl = (tempLvl + equippedClothing.lvl) / 2;
-                }
-                maxAge -= (int)Math.pow(2, majorLvl);
-            }
+        if (equippedWeapon != null) {
+            tempLvl += equippedWeapon.lvl;
         }
+
+        if (martialTechnique != null) {
+            tempLvl += martialTechnique.lvl;
+        }
+
+        if (movementTechnique != null) {
+            tempLvl += movementTechnique.lvl;
+        }
+
+        tempLvl /= 5;
 
         if (this.trait == Traits.Cheater) {
             tempLvl += 5;
         }
 
     }
-    public void forbiddenCheck(Character opponent) {
-        tempLvlCheck();
-        if (age > maxAge) {
-            opponent.winCheck(this);
+
+    public void forbiddenCheck() {
+        if (trait == Traits.Beast) {
+            return;
         }
-    }
-    public void durabilityCheck(Character opponent) {
-        if (equippedWeapon != null) {
-            if (opponent.equippedClothing != null) {
-                opponent.equippedClothing.durability -= equippedWeapon.lvl;
-                equippedWeapon.durability -= opponent.equippedClothing.lvl;
-            }
-            else {
-                equippedWeapon.durability -= opponent.lvl;
-            }
+        else if (age + totalAgeGained/10 > maxAge) {
+            tempLvl += Math.sqrt(potential);
+            maxAge -= totalAgeGained / 10;
+            dead = true;
+            return;
         }
         else {
-            if (opponent.equippedClothing != null) {
-                opponent.equippedClothing.durability -= lvl;
-            }
-        }
-        if (equippedWeapon != null && equippedWeapon.durability <= 0) {
-            equippedWeapon = null;
-        }
-        if (opponent.equippedClothing != null && opponent.equippedClothing.durability <= 0) {
-            opponent.equippedClothing = null;
-        }
-        if (equippedWeapon == null) {
-            equip();
-        }
-        if (opponent.equippedClothing == null) {
-            opponent.equip();
+            tempLvl += Math.sqrt(potential);
+            maxAge -= totalAgeGained / 10;
         }
     }
+
+    public void durabilityCheck(Character opponent) {
+        int weaponLvl = 0;
+        int armorLvl = 0;
+        int oppWeaponLvl = 0;
+        int oppArmorLvl = 0;
+        int breaker = 0;
+        boolean breakWeapon = false;
+        boolean breakArmor = false;
+        boolean oppBreakWeapon = false;
+        boolean oppBreakArmor = false;
+
+
+        if (equippedWeapon != null) {
+            weaponLvl = equippedWeapon.lvl;
+        }
+        if (equippedClothing != null) {
+            armorLvl = equippedClothing.lvl;
+        }
+        if (opponent.equippedWeapon != null) {
+            oppWeaponLvl = opponent.equippedWeapon.lvl;
+        }
+        if (opponent.equippedClothing != null) {
+            oppArmorLvl = opponent.equippedClothing.lvl;
+        }
+
+        if (equippedWeapon != null) {
+            breaker = Math.max(Math.max(oppWeaponLvl, opponent.lvl), oppArmorLvl);
+            breakWeapon = opponent.durabilityCheckUtil(equippedWeapon.lvl, breaker);
+        }
+
+        if (equippedClothing != null) {
+            breaker = Math.max(oppWeaponLvl, opponent.lvl);
+            breakArmor = opponent.durabilityCheckUtil(equippedClothing.lvl, breaker);
+        }
+
+        if (opponent.equippedWeapon != null) {
+            breaker = Math.max(Math.max(weaponLvl, this.lvl), armorLvl);
+            oppBreakWeapon = opponent.durabilityCheckUtil(opponent.equippedWeapon.lvl, breaker);
+        }
+
+        if (opponent.equippedClothing != null) {
+            breaker =  Math.max(weaponLvl, this.lvl);
+            oppBreakArmor = opponent.durabilityCheckUtil(opponent.equippedClothing.lvl, breaker);
+        }
+
+        if (breakWeapon) {
+            System.out.println("" + equippedWeapon + " Weapon has broken!");
+            equippedWeapon.deconstructor();
+            this.equippedWeapon = null;
+        }
+        if (breakArmor) {
+            System.out.println("" + equippedClothing + " Armor has broken!");
+            equippedClothing.deconstructor();
+            this.equippedClothing = null;
+        }
+        if (oppBreakWeapon) {
+            System.out.println("" + opponent.equippedWeapon + " Weapon has broken!");
+            opponent.equippedWeapon.deconstructor();
+            opponent.equippedWeapon = null;
+        }
+        if (oppBreakArmor) {
+            System.out.println("" + opponent.equippedClothing + " Armor has broken!");
+            opponent.equippedClothing.deconstructor();
+            opponent.equippedClothing = null;
+        }
+
+    }
+
+    public boolean durabilityCheckUtil(int toBreak, int breaker) {
+        int intBreaker = (int)(breaker/10);
+        int intToBreak = (int)(toBreak/10);
+        int breakChance = (int)(Math.pow(2, (intBreaker - intToBreak)) * 10000);
+
+        if (rand.nextInt(100000) + 1 <= breakChance - (900 * intToBreak)) {
+            return true;
+        }
+        return false;
+    }
+
     public String getTrait() {
         switch (trait) {
             case Alchemist:
@@ -1904,6 +2323,10 @@ public class Character {
         else {
             return (name + " " + lastName);
         }
+    }
+
+    public int placeholder() {
+        return 0;
     }
 
 

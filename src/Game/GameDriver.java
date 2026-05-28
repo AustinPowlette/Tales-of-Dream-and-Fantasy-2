@@ -4,84 +4,69 @@ import java.io.IOException;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
+import static Game.Map.*;
 
 public class GameDriver {
 
     static Scanner scan = new Scanner(System.in);
     static Random rand = new Random();
-    static final int startingPopulation = 10000; // Starting Population (Cultivators)
-    //static final int range = 1000 + 100;
-    static final int range = 10000 + 100;
-    //static final int range = 100000 + 100;
     static final boolean printBreakthroughs = false;
+    static final boolean changeMc = true;
     public static int UID = 0;
     //public static int iUID = 0;
-    public static Area[][] tiles = new Area[range/100][range/100];
-    public static ArrayList<Area> createdAreas = new ArrayList<>();
-    public static ArrayList<Area> cityAreas = new ArrayList<>();
-    public static ArrayList<Character> characters = new ArrayList<>();
-    public static ArrayList<Character> tempCharacters = new ArrayList<>();
-    public static ArrayList<Character> remCharacters = new ArrayList<>();
-    public static ArrayList<Character> monstersList = new ArrayList<>();
-    public static String[] ocean = {"Volcanoes", "Underwater Trenches", "Reefs", "Rapids", "Pits", "Oceans", "Islands", "Crags", "Coral Reefs", "Coral Forests", "Underwater Caverns", "Underwater Caves", "Archipelagos", "Atolls", "Barrier Islands"};
-    public static String[] beach = {"Volcanoes", "Tide Pools", "Shorelines", "Pits", "Peninsulas", "Lagoons", "Grottoes", "Giant Footprints", "Coves", "Coasts", "Cliffs", "Caverns", "Caves", "Sea Arches", "Basins", "Bays", "Beach", "Point"};
-    public static String[] desert = {"Ravines", "Plateaus", "Pits", "Oases", "Mountains", "Mounts", "Mesas", "Lake Beds", "Gulches", "Giant Footprints", "Dust Bowls", "Deserts", "Cliffs", "Caverns", "Caves", "Canyons", "Stone Arches", "Burrows", "Badlands", "Basins", "Rivers"};
-    public static String[] savanna = {"Ravines", "Plateaus", "Pits","Mountains", "Mounts", "Mesas", "Springs", "Hills", "Gulches", "Giant Footprints", "Cliffs", "Shrublands", "Caverns", "Caves", "Canyons", "Stone Arches", "Burrows", "Badlands", "Barrens", "Basins",  "Streams", "Brooks", "Rivers", "Ponds", "Lakes"};
-    public static String[] grassland = {"Ravines", "Plateaus", "Pits","Pastures", "Mountains", "Mounts", "Meadows", "Springs", "Hills", "Groves", "Grasslands", "Giant Footprints", "Fields", "Creeks", "Cliffs", "Shrublands", "Caverns", "Caves", "Burrows", "Barrens", "Basins", "Bridges", "Streams", "Brooks", "Rivers", "Ponds", "Lakes"};
-    public static String[] forest = {"Woods", "Ravines", "Rainforests", "Pits","Mountains", "Mounts", "Marshes", "Mangroves", "Jungles", "Springs", "Glades", "Giant Footprints", "Forests", "Fjords", "Creeks", "Cliffs", "Caverns", "Caves", "Calderas", "Burrows", "Basins", "Bayous", "Bogs", "Bridges", "Streams", "Brooks", "Rivers", "Ponds", "Lakes"};
-    public static String[] tundra = {"Volcanoes", "Ravines", "Pits","Mountains", "Mounts", "Glaciers", "Giant Footprints", "Crevasses", "Cliffs", "Caverns", "Caves", "Calderas", "Ice Arches", "Basins"};
-    public static String[] taiga = {"Woods", "Ravines", "Pits","Mountains", "Mounts", "Hot Springs", "Glades", "Giant Footprints", "Forests", "Cliffs", "Caverns", "Caves", "Calderas", "Burrows", "Basins", "Streams", "Brooks", "Rivers", "Ponds", "Lakes"};
-    public static String[] frozenGrassland = {"Volcanoes", "Ravines", "Plateaus", "Pits","Mountains", "Mounts", "Hot Springs", "Hills", "Grasslands", "Giant Footprints", "Fields", "Cliffs", "Shrublands", "Caverns", "Caves", "Calderas", "Burrows", "Barrens", "Basins", "Streams", "Brooks", "Rivers", "Ponds", "Lakes"};
-    public static String[] frozenDesert = {"Volcanoes", "Ravines", "Plateaus", "Pits","Mountains", "Mounts", "Hot Springs", "Giant Footprints", "Cliffs", "Caverns", "Caves", "Burrows", "Badlands", "Basins"};
-    public static String[] adjectivesEntities = {"Destroyed", "Abandoned", "Able", "Absolute", "Academic", "Acceptable", "Acclaimed", "Accomplished", "Accurate", "Aching", "Acidic", "Acrobatic", "Active", "Actual", "Adept", "Admirable", "Admired", "Adolescent", "Adorable", "Adored", "Advanced", "Adventurous", "Affectionate", "Afraid", "Aged", "Aggravating", "Aggressive", "Agile", "Agitated", "Agonizing", "Agreeable", "Ajar", "Alarmed", "Alarming", "Alert", "Alienated", "Alive", "All", "Altruistic", "Amazing", "Ambitious", "Ample", "Amused", "Amusing", "Anchored", "Ancient", "Angelic", "Angry", "Anguished", "Animated", "Annual", "Another", "Antique", "Anxious", "Any", "Apprehensive", "Appropriate", "Apt", "Aromatic", "Artistic", "Ashamed", "Assured", "Astonishing", "Athletic", "Attached", "Attentive", "Attractive", "Austere", "Authentic", "Authorized", "Automatic", "Avaricious", "Average", "Aware", "Awesome", "Awful", "Awkward", "Babyish", "Back", "Bad", "Baggy", "Bare", "Barren", "Basic", "Beautiful", "Belated", "Beloved", "Beneficial", "Best", "Better", "Bewitched", "Big", "Big-Hearted", "Biodegradable", "Bite-Sized", "Bitter", "Bland", "Blank", "Blaring", "Bleak", "Blind", "Blissful", "Blushing", "Bogus", "Boiling", "Bold", "Bony", "Boring", "Bossy", "Both", "Bouncy", "Bountiful", "Bowed", "Brave", "Breakable", "Brief", "Bright", "Brilliant", "Brisk", "Broken", "Bruised", "Bubbly", "Bulky", "Bumpy", "Buoyant", "Burdensome", "Burly", "Bustling", "Busy", "Buttery", "Buzzing", "Calculating", "Calm", "Candid", "Canine", "Capital", "Carefree", "Careful", "Careless", "Caring", "Cautious", "Cavernous", "Celebrated", "Charming", "Cheap", "Cheerful", "Cheery", "Chief", "Chilly", "Chubby", "Circular", "Classic", "Clean", "Clear", "Clear-Cut", "Clever", "Close", "Closed", "Cloudy", "Clueless", "Clumsy", "Cluttered", "Coarse", "Cold", "Colorful", "Colorless", "Colossal", "Comfortable", "Common", "Compassionate", "Competent", "Complete", "Complex", "Complicated", "Composed", "Concerned", "Concrete", "Confused", "Conscious", "Considerate", "Constant", "Content", "Conventional", "Cooked", "Cool", "Cooperative", "Coordinated", "Corny", "Corrupt", "Costly", "Courageous", "Courteous", "Crafty", "Crazy", "Creamy", "Creative", "Creepy", "Criminal", "Crisp", "Critical", "Crooked", "Crowded", "Cruel", "Crushing", "Cuddly", "Cultivated", "Cultured", "Cumbersome", "Curly", "Curvy", "Cute", "Cylindrical", "Damaged", "Damp", "Dangerous", "Dapper", "Daring", "Dark", "Darling", "Dazzling", "Dead", "Deadly", "Deafening", "Dear", "Dearest", "Decent", "Decimal", "Decisive", "Deep", "Defenseless", "Defensive", "Defiant", "Deficient", "Definite", "Definitive", "Delayed", "Delectable", "Delicious", "Delightful", "Delirious", "Demanding", "Dense", "Dental", "Dependable", "Dependent", "Descriptive", "Deserted", "Detailed", "Determined", "Devoted", "Different", "Difficult", "Digital", "Diligent", "Dim", "Dimpled", "Dimwitted", "Direct", "Dirty", "Disastrous", "Discrete", "Disfigured", "Disguised", "Disgusting", "Dishonest", "Disloyal", "Dismal", "Distant", "Distinct", "Distorted", "Dizzy", "Dopey", "Doting", "Double", "Downright", "Drab", "Drafty", "Dramatic", "Dreary", "Droopy", "Dry", "Dual", "Dull", "Dutiful", "Each", "Eager", "Early", "Earnest", "Easy", "Easy-Going", "Ecstatic", "Edible", "Educated", "Elaborate", "Elastic", "Elated", "Elderly", "Electric", "Elegant", "Elementary", "Elliptical", "Embarrassed", "Embellished", "Eminent", "Emotional", "Empty", "Enchanted", "Enchanting", "Energetic", "Enlightened", "Enormous", "Enraged", "Entire", "Envious", "Equal", "Equatorial", "Essential", "Esteemed", "Ethical", "Euphoric", "Even", "Evergreen", "Everlasting", "Every", "Evil", "Exalted", "Excellent", "Excitable", "Excited", "Exciting", "Exemplary", "Exhausted", "Exotic", "Expensive", "Experienced", "Expert", "Extra-Large", "Extra-Small", "Extraneous", "Extroverted", "Fabulous", "Failing", "Faint", "Fair", "Faithful", "Fake", "False", "Familiar", "Famous", "Fancy", "Fantastic", "Far", "Far-Flung", "Far-Off", "Faraway", "Fast", "Fat", "Fatal", "Fatherly", "Favorable", "Favorite", "Fearful", "Fearless", "Feisty", "Feline", "Female", "Feminine", "Few", "Fickle", "Filthy", "Fine", "Finished", "Firm", "First", "Firsthand", "Fitting", "Fixed", "Flaky", "Flamboyant", "Flashy", "Flat", "Flawed", "Flawless", "Flickering", "Flimsy", "Flippant", "Flowery", "Fluffy", "Fluid", "Flustered", "Focused", "Fond", "Foolhardy", "Foolish", "Forceful", "Forked", "Formal", "Forsaken", "Forthright", "Fortunate", "Fragrant", "Frail", "Frank", "Frayed", "Free", "French", "Fresh", "Friendly", "Frightened", "Frightening", "Frigid", "Frilly", "Frivolous", "Frizzy", "Front", "Frosty", "Frozen", "Frugal", "Fruitful", "Full", "Fumbling", "Functional", "Funny", "Fussy", "Fuzzy", "Gargantuan", "Gaseous", "General", "Generous", "Gentle", "Genuine", "Giant", "Giddy", "Gifted", "Gigantic", "Giving", "Glamorous", "Glaring", "Glass", "Gleaming", "Gleeful", "Glistening", "Glittering", "Gloomy", "Glorious", "Glossy", "Glum", "Golden", "Good", "Good-Natured", "Gorgeous", "Graceful", "Gracious", "Grand", "Grandiose", "Granular", "Grateful", "Grave", "Great", "Greedy", "Gregarious", "Grim", "Grimy", "Gripping", "Grizzled", "Gross", "Grotesque", "Grouchy", "Grounded", "Growing", "Growling", "Grown", "Grubby", "Gruesome", "Grumpy", "Guilty", "Gullible", "Gummy", "Hairy", "Half", "Handmade", "Handsome", "Handy", "Happy", "Happy-Go-Lucky", "Hard", "Hard-To-Find", "Harmful", "Harmless", "Harmonious", "Harsh", "Hasty", "Hateful", "Haunting", "Healthy", "Heartfelt", "Hearty", "Heavenly", "Heavy", "Hefty", "Helpful", "Helpless", "Hidden", "Hideous", "High", "High-Level", "Hilarious", "Hoarse", "Hollow", "Homely", "Honest", "Honorable", "Honored", "Hopeful", "Horrible", "Hospitable", "Hot", "Huge", "Humble", "Humiliating", "Humming", "Humongous", "Hungry", "Hurtful", "Husky", "Icky", "Icy", "Ideal", "Idealistic", "Identical", "Idiotic", "Idle", "Idolized", "Ignorant", "Ill", "Ill-Fated", "Ill-Informed", "Illegal", "Illiterate", "Illustrious", "Imaginary", "Imaginative", "Immaculate", "Immaterial", "Immediate", "Immense", "Impartial", "Impassioned", "Impeccable", "Imperfect", "Imperturbable", "Impish", "Impolite", "Important", "Impossible", "Impractical", "Impressionable", "Impressive", "Improbable", "Impure", "Inborn", "Incomparable", "Incompatible", "Incomplete", "Inconsequential", "Incredible", "Indelible", "Indolent", "Inexperienced", "Infamous", "Infantile", "Infatuated", "Inferior", "Infinite", "Informal", "Innocent", "Insecure", "Insidious", "Insignificant", "Insistent", "Instructive", "Insubstantial", "Intelligent", "Intent", "Intentional", "Interesting", "Internal", "International", "Intrepid", "Ironclad", "Irresponsible", "Irritating", "Itchy", "Jaded", "Jagged", "Jam-Packed", "Jaunty", "Jealous", "Jittery", "Joint", "Jolly", "Jovial", "Joyful", "Joyous", "Jubilant", "Judicious", "Juicy", "Jumbo", "Jumpy", "Junior", "Juvenile", "Kaleidoscopic", "Keen", "Key", "Kind", "Kindhearted", "Kindly", "Klutzy", "Knobby", "Knotty", "Knowing", "Knowledgeable", "Known", "Kooky", "Kosher", "Lame", "Lanky", "Large", "Last", "Lasting", "Late", "Lavish", "Lawful", "Lazy", "Leading", "Leafy", "Lean", "Left", "Legal", "Legitimate", "Light", "Lighthearted", "Likable", "Likely", "Limited", "Limp", "Limping", "Linear", "Lined", "Liquid", "Little", "Live", "Lively", "Livid", "Loathsome", "Lone", "Lonely", "Long", "Long-Term", "Loose", "Lopsided", "Lost", "Loud", "Lovable", "Lovely", "Loving", "Low", "Loyal", "Lucky", "Lumbering", "Luminous", "Lump", "Lustrous", "Luxurious", "Mad", "Made-Up", "Magnificent", "Majestic", "Major", "Male", "Mammoth", "Married", "Marvelous", "Masculine", "Massive", "Mature", "Meager", "Mealy", "Mean", "Measly", "Meaty", "Medical", "Mediocre", "Medium", "Meek", "Mellow", "Melodic", "Memorable", "Menacing", "Merry", "Messy", "Metallic", "Mild", "Milky", "Mindless", "Miniature", "Minor", "Minty", "Miserable", "Miserly", "Misguided", "Misty", "Mixed", "Modern", "Modest", "Moist", "Monstrous", "Monthly", "Monumental", "Moral", "Mortified", "Motherly", "Motionless", "Mountainous", "Muddy", "Muffled", "Multicolored", "Mundane", "Murky", "Mushy", "Musty", "Muted", "Mysterious", "Naïve", "Narrow", "Nasty", "Natural", "Naughty", "Nautical", "Near", "Neat", "Necessary", "Needy", "Negative", "Neglected", "Negligible", "Neighboring", "Nervous", "New", "Next", "Nice", "Nifty", "Nimble", "Nippy", "Nocturnal", "Noisy", "Nonstop", "Normal", "Notable", "Noted", "Noteworthy", "Novel", "Noxious", "Numb", "Nutritious", "Nutty", "Obedient", "Obese", "Oblong", "Obvious", "Occasional", "Odd", "Oddball", "Offbeat", "Offensive", "Official", "Oily", "Old", "Old-Fashioned", "Only", "Open", "Optimal", "Optimistic", "Opulent", "Orange", "Orderly", "Ordinary", "Organic", "Original", "Ornate", "Ornery", "Our", "Outgoing", "Outlandish", "Outlying", "Outrageous", "Outstanding", "Oval", "Overcooked", "Overdue", "Overjoyed", "Overlooked", "Palatable", "Pale", "Paltry", "Parallel", "Parched", "Partial", "Passionate", "Past", "Pastel", "Peaceful", "Peppery", "Perfect", "Perfumed", "Periodic", "Perky", "Personal", "Pertinent", "Pesky", "Pessimistic", "Petty", "Phony", "Physical", "Piercing", "Pink", "Pitiful", "Plain", "Plaintive", "Plastic", "Playful", "Pleasant", "Pleased", "Pleasing", "Plump", "Plush", "Pointed", "Pointless", "Poised", "Polished", "Polite", "Political", "Poor", "Popular", "Portly", "Posh", "Positive", "Possible", "Potable", "Powerful", "Powerless", "Practical", "Precious", "Present", "Prestigious", "Pretty", "Previous", "Pricey", "Prickly", "Primary", "Prime", "Pristine", "Private", "Prize", "Probable", "Productive", "Profitable", "Profuse", "Proper", "Proud", "Prudent", "Punctual", "Pungent", "Puny", "Pure", "Purple", "Pushy", "Putrid", "Puzzled", "Puzzling", "Quaint", "Qualified", "Quarrelsome", "Quarterly", "Queasy", "Querulous", "Questionable", "Quick", "Quick-Witted", "Quiet", "Quintessential", "Quirky", "Quixotic", "Quizzical", "Radiant", "Ragged", "Rapid", "Rare", "Rash", "Raw", "Ready", "Real", "Realistic", "Reasonable", "Recent", "Reckless", "Rectangular", "Reflecting", "Regal", "Regular", "Reliable", "Relieved", "Remarkable", "Remorseful", "Remote", "Repentant", "Repulsive", "Required", "Respectful", "Responsible", "Revolving", "Rewarding", "Rich", "Right", "Rigid", "Ringed", "Ripe", "Roasted", "Robust", "Rosy", "Rotating", "Rotten", "Rough", "Round", "Rowdy", "Royal", "Rubbery", "Ruddy", "Rude", "Rundown", "Runny", "Rural", "Rusty", "Sad", "Safe", "Salty", "Same", "Sandy", "Sane", "Sarcastic", "Sardonic", "Satisfied", "Scaly", "Scarce", "Scared", "Scary", "Scented", "Scholarly", "Scientific", "Scornful", "Scratchy", "Scrawny", "Second", "Second-Hand", "Secondary", "Secret", "Self-Assured", "Self-Reliant", "Selfish", "Sentimental", "Separate", "Serene", "Serious", "Serpentine", "Several", "Severe", "Shabby", "Shadowy", "Shady", "Shallow", "Shameful", "Shameless", "Sharp", "Shimmering", "Shiny", "Shocked", "Shocking", "Shoddy", "Short", "Short-Term", "Showy", "Shrill", "Shy", "Sick", "Silent", "Silky", "Silly", "Silver", "Similar", "Simple", "Simplistic", "Sinful", "Single", "Sizzling", "Skeletal", "Skinny", "Sleepy", "Slight", "Slim", "Slimy", "Slippery", "Slow", "Slushy", "Small", "Smart", "Smoggy", "Smooth", "Smug", "Snappy", "Snarling", "Sneaky", "Sniveling", "Snoopy", "Sociable", "Soft", "Soggy", "Solid", "Somber", "Some", "Sophisticated", "Sore", "Sorrowful", "Soulful", "Soupy", "Sour", "Spanish", "Sparkling", "Sparse", "Specific", "Spectacular", "Speedy", "Spherical", "Spicy", "Spiffy", "Spirited", "Spiteful", "Splendid", "Spotless", "Spotted", "Spry", "Square", "Squeaky", "Squiggly", "Stable", "Staid", "Stained", "Stale", "Standard", "Starchy", "Stark", "Starry", "Steel", "Steep", "Sticky", "Stiff", "Stimulating", "Stingy", "Stormy", "Straight", "Strange", "Strict", "Strident", "Striking", "Striped", "Strong", "Studious", "Stunning", "Stupendous", "Stupid", "Sturdy", "Stylish", "Subdued", "Submissive", "Substantial", "Subtle", "Suburban", "Sudden", "Sugary", "Sunny", "Super", "Superb", "Superficial", "Superior", "Supportive", "Sure-Footed", "Surprised", "Suspicious", "Svelte", "Sweaty", "Sweet", "Sweltering", "Swift", "Sympathetic", "Talkative", "Tall", "Tame", "Tan", "Tangible", "Tart", "Tasty", "Tattered", "Taut", "Tedious", "Teeming", "Tempting", "Tender", "Tense", "Tepid", "Terrible", "Terrific", "Testy", "Thankful", "That", "Thick", "Thin", "Third", "Thirsty", "This", "Thorny", "Thorough", "Those", "Thoughtful", "Threadbare", "Thrifty", "Thunderous", "Tidy", "Tight", "Timely", "Tinted", "Tiny", "Tired", "Torn", "Total", "Tough", "Tragic", "Trained", "Traumatic", "Treasured", "Tremendous", "Triangular", "Tricky", "Trifling", "Trim", "Trivial", "Troubled", "True", "Trusting", "Trustworthy", "Trusty", "Truthful", "Tubby", "Turbulent", "Twin", "Ugly", "Ultimate", "Unacceptable", "Unaware", "Uncomfortable", "Uncommon", "Unconscious", "Unequaled", "Uneven", "Unfinished", "Unfit", "Unfolded", "Unfortunate", "Unhappy", "Unhealthy", "Uniform", "Unimportant", "Unique", "United", "Unkempt", "Unknown", "Unlawful", "Unlined", "Unlucky", "Unnatural", "Unpleasant", "Unrealistic", "Unripe", "Unruly", "Unselfish", "Unsightly", "Unsteady", "Unsung", "Untidy", "Untimely", "Untried", "Untrue", "Unused", "Unusual", "Unwelcome", "Unwieldy", "Unwilling", "Unwitting", "Unwritten", "Upbeat", "Upright", "Upset", "Urban", "Usable", "Used", "Useful", "Useless", "Utilized", "Utter", "Vacant", "Vague", "Vain", "Valid", "Valuable", "Vapid", "Variable", "Vast", "Velvety", "Venerated", "Vengeful", "Verifiable", "Vibrant", "Vicious", "Victorious", "Vigilant", "Vigorous", "Villainous", "Violent", "Violet", "Virtual", "Virtuous", "Visible", "Vital", "Vivacious", "Vivid", "Voluminous", "Wan", "Warlike", "Warm", "Warmhearted", "Warped", "Wary", "Wasteful", "Watchful", "Waterlogged", "Watery", "Wavy", "Weak", "Wealthy", "Weary", "Webbed", "Wee", "Weepy", "Weighty", "Weird", "Well-Documented", "Well-Groomed", "Well-Informed", "Well-Lit", "Well-Made", "Well-Off", "Well-To-Do", "Well-Worn", "Wet", "Which", "Whimsical", "Whirlwind", "Whispered", "White", "Whole", "Whopping", "Wicked", "Wide", "Wide-Eyed", "Wiggly", "Wild", "Willing", "Wilted", "Winding", "Windy", "Winged", "Wiry", "Wise", "Witty", "Wobbly", "Woeful", "Wonderful", "Wooden", "Woozy", "Wordy", "Worldly", "Worn", "Worried", "Worrisome", "Worse", "Worst", "Worthless", "Worthwhile", "Worthy", "Wrathful", "Wretched", "Writhing", "Wrong", "Wry", "Yawning", "Young", "Youthful", "Yummy", "Zany", "Zealous", "Zesty", "Zigzag"};
-    public static String[] adjectivesPlaces = {"Chaotic", "Delusional", "Heavenly", "Chaos", "Abandoned", "Abysmal", "Arid", "Awakened", "Bald", "Baleful", "Barbarous", "Bittersweet", "Blessed", "Bloody", "Bountiful", "Broken", "Burning", "Crescent", "Crooked", "Crumbling", "Cursed", "Dancing", "Dank", "Dark", "Deep", "Desolate", "Dire", "Dread", "Dreaded", "Dreadful", "Dusty", "Eerie", "Elder", "Eldritch", "Enchanted", "Endless", "Eternal", "Far", "Fell", "Fertile", "Fetid", "Flooded", "Foggy", "Forbidden", "Forsaken", "Fragrant", "Giant", "Glittering", "Gloomy", "Glowing", "Grand", "Grassy", "Great", "Greater", "Grim", "Haunted", "Hidden", "High", "Hot", "Burning", "Fiery", "Scorching", "Sweltering", "Infernal", "Infested", "Jagged", "Jurassic", "Kin", "Landlocked", "Last", "Leaning", "Lone", "Lonesome", "Lost", "Luminous", "Luminescent", "Muddy", "Murky", "Musky", "Mystic", "New", "Old", "Painted", "Pale", "Parlous", "Peaceful", "Primeval", "Primordial", "Quaking", "Quiet", "Reeking", "Rocky", "Sacred", "Sandy", "Scorching", "Shadowy", "Shady", "Shattered", "Sheltered", "Shimmering", "Sleepy", "Sleeping", "Slumbering", "Smokey", "Snowy", "Spiny", "Spiteful", "Stinging", "Still", "Sundered", "Sunless", "Sunny", "Tall", "Tangled", "Thorny", "Towering", "Toxic", "Treacherous", "Twisted", "Uncharted", "Vast", "Wanderer's", "Windswept"};
-    public static String[] adjectiveOf = {"Delusion", "Blood", "Desolation", "Dread", "Dust", "Fog", "Giants", "Fire", "Flames", "The Lost", "Mud", "Murk", "10,000 Corpses", "Ancestors", "The Ancestors", "Contemplation", "Corpses", "Death", "The Dead", "Bitter Dreams", "Broken Dreams", "Forgotten Dreams", "Prophetic Dreams", "Shattered Dreams", "Waking Dreams", "Walking Dreams", "Horrors", "Lights", "Miracles", "Sorrows", "The Ancients", "Visions", "Webs", "Wisdom", "Wonders", "Sand", "Smoke", "Spines", "Spite", "Thorns", "Ash", "Burdens", "Chaos", "God", "Mirages", "Mist", "Nightmares", "Phantoms", "Shadows", "Spirits", "Storms", "Trials", "Wards"};
-    public static String[] nouns = {};
-    public static String[] animals = {"Cow", "Boar", "Chicken", "Lamb", "Horse", "Buffalo", "Duck", "Coyote", "Snake", "Monkey"};
-    public static String[] monsters = {"Grizzly Bear", "Red Fox", "Spirit Skeleton", "Fire Salamander", "Witch", "Solar Boa", "Ghoul Lynx", "Progenitor God", "Vampire Queen", "Evil Dominator", "Hellish Imp", "Malachite Fiend", "Monkey King", "Viridescent Thunderhawk", "Combat God", "Nephilic Judge", "Shadow Fiend", "Abyssal Spearfiend", "Silver-Armored General", "Winged Snake", "Titan Bug", "Golden Bug", "Mother Bug Servant", "Mother Bug", "Death Lord", "Enchantress", "Super Battle Ape", "Mysterious Minstrel", "Sea King Shi", "King Ku"};
-    public static String[] numbers = {"Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Sixteen", "Twenty-One", "Thirty-Six", "Sixty-Nine", "Hundred", "Thousand", "Three-Thousand", "Ten-Thousand"};
-    public static String[] colors = {"White", "Black", "Red", "Gray", "Raspberry", "Maroon", "Ruby Red", "Red Orange", "Orange", "Light Orange", "Yellow Orange", "Mango", "Golden Yellow", "Yellow", "Lemon Yellow", "Lime Green", "Yellow Green", "Jade Green", "Olive Green", "Green", "Pine Green", "Teal", "Green Blue", "Aqua Green", "Turquoise", "Sky Blue", "Cerulean", "Light Blue", "True Blue", "Metallic Blue", "Blue", "Navy Blue", "Plum", "Violet", "Lilac", "Orchid", "Mauve", "Pale Rose", "Pink", "Magenta", "Bubblegum", "Salmon", "Peach", "Light Brown", "Mahogany", "Cocoa", "Brown", "Dark Brown", "Hazel", "Taupe", "Sand", "Tan", "Bronze Yellow", "Warm Gray", "Coal Gray", "Slate"};
-    public static String[] maleNames = {"Slim", "Oliver", "Jack", "Noah", "Leo", "Hunter", "George", "William", "Lucas", "James", "Mason", "Ethan", "Charlie", "Lachlan", "Thomas", "Liam", "Cooper", "Elijah", "Arlo", "Oscar", "Benjamin", "Henry", "Harry", "Archie", "Max", "Jackson", "Alexander", "Carter", "Harrison", "Jacob", "Samuel", "Isaac", "Finn", "Hudson", "Luca", "Lincoln", "Theodore", "Archer", "Joshua", "Hugo", "Blake", "Levi", "Ryan", "Eli", "Connor", "Luke", "Theo", "Dan", "Jaxon", "Daniel", "Beau", "Riley", "Logan", "Sebastian", "Braxton", "Asher", "Ryder", "Xavier", "Joseph", "Louis", "Charles", "Ezra", "Jasper", "Nathan", "Edward", "Arthur", "Toby", "Tyler", "Jordan", "Harvey", "Jayden", "Caleb", "Felix", "Aiden", "Austin", "Michael", "Bodhi", "John", "Quinn", "Flynn", "Gabriel", "Dylan", "Nixon", "Beauden", "Matthew", "Angus", "Wyatt", "Louie", "Roman", "Luka", "Ashton", "Zachary", "Phoenix", "Kingston", "Harley", "Adam", "Fletcher", "Alex", "Kayden", "Grayson", "David", "Patrick", "Isaiah", "Stefon", "Dale", "Andrew", "Evan"};
-    public static String[] femaleNames = {"Lana", "Charlotte", "Isla", "Olivia", "Amelia", "Harper", "Ella", "Isabella", "Emily", "Mia", "Ava", "Aria", "Zoe", "Mila", "Willow", "Lucy", "Grace", "Sophie", "Georgia", "Lily", "Chloe", "Sophia", "Evelyn", "Ruby", "Hazel", "Ivy", "Emma", "Freya", "Isabella", "Evie", "Matilda", "Alice", "Eva", "Mackenzie", "Layla", "Scarlett", "Hannah", "Thea", "Abigail", "Bella", "Maia", "Frankie", "Stella", "Zara", "Indie", "Millie", "Florence", "Eden", "Poppy", "Aurora", "Olive", "Violet", "Sienna", "Penelope", "Ellie", "Riley", "Sadie", "Madison", "Addison", "Quinn", "Ayla", "Luna", "Harriet", "Elizabeth", "Lily", "Phoebe", "Piper", "Zoey", "Charlie", "Michaella", "Kiara", "Emilia", "Rose", "Alexis", "Summer", "Peyton", "Gabriella", "Leah", "Ariana", "Anna", "Sofia", "Cora", "Imogen", "Paige", "Nina", "Jasmine", "Heidi", "Brooklyn", "Aaliyah", "Billie", "Victoria", "Eliza", "Daisy", "Eleanor", "Jessica", "Elsie", "Annabelle", "Athena", "Sarah", "Maya", "Kaia", "Amber", "Euthonya", "Andrea", "Piper", "Michelle"};
-    public static String[] lastNames = {"Anderson", "Ashwoon", "Aikin", "Bateman", "Bongard", "Bowers", "Boyd", "Cannon", "Cast", "Deitz", "Dewalt", "Ebner", "Frick", "Hancock", "Haworth", "Hesch", "Hoffman", "Kassing", "Knutson", "Lawless", "Lawicki", "Mccord", "McCormack", "Miller", "Myers", "Nugent", "Ortiz", "Orwig", "Ory", "Paiser", "Pak", "Pettigrew", "Quinn", "Quizoz", "Ramachandran", "Resnick", "Sagar", "Schickowski", "Schiebel", "Sellon", "Severson", "Shaffer", "Solberg", "Soloman", "Sonderling", "Soukup", "Soulis", "Stahl", "Sweeney", "Tandy", "Trebil", "Trusela", "Trussel", "Turco", "Uddin", "Uflan", "Ulrich", "Upson", "Vader", "Vail", "Valente", "Van Zandt", "Vanderpoel", "Ventotla", "Vogal", "Wagle", "Wagner", "Wakefield", "Weinstein", "Weiss", "Woo", "Yang", "Yates", "Yocum", "Zeaser", "Zeller", "Ziegler", "Bauer", "Baxster", "Casal", "Cataldi", "Caswell", "Bizarro", "Celedon", "Chambers", "Chapman", "Christensen", "Darnell", "Davidson", "Davis", "DeLorenzo", "Dinkins", "Doran", "Dugelman", "Dugan", "Duffman", "Eastman", "LaVille", "Ferro", "Ferry", "Fletcher", "Fietzer", "Hylan", "Hydinger", "Illingsworth", "Ingram", "Irwin", "Jagtap", "Jenson", "Johnson", "Johnsen", "Jones", "Jurgenson", "Kalleg", "Kaskel", "Keller", "Leisinger", "LePage", "Wise", "Lewis", "Linde", "Lulloff", "Maki", "Martin", "McGinnis", "Mills", "Moody", "Pierre", "Moore", "Napier", "Nelson", "Norquist", "Nuttle", "Olson", "Ostrander", "Reamer", "Reaper", "Reardon", "Reyes", "Rice", "Ripka", "Roberts", "Rogers", "Root", "Sandstrom", "Sawyer", "Schlicht", "Schmitt", "Schwager", "Schutz", "Schuster", "Tapia", "Thompson", "Tiernan", "Tisler", "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores", "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts", "Gomez", "Phillips", "Evans", "Turner", "Diaz", "Parker", "Cruz", "Edwards", "Collins", "Reyes", "Stewart", "Morris", "Morales", "Murphy", "Cook", "Rogers", "Gutierrez", "Ortiz", "Morgan", "Cooper", "Peterson", "Bailey", "Reed", "Kelly", "Howard", "Ramos", "Kim", "Cox", "Ward", "Richardson", "Watson", "Brooks", "Chavez", "Wood", "James", "Bennett", "Gray", "Mendoza", "Ruiz", "Hughes", "Price", "Alvarez", "Castillo", "Sanders", "Patel", "Myers", "Long", "Ross", "Foster", "Jimenez", "Powell", "Jenkins", "Perry", "Russell", "Sullivan", "Bell", "Coleman", "Butler", "Henderson", "Barnes", "Gonzales", "Fisher", "Vasquez", "Simmons", "Romero", "Jordan", "Patterson", "Alexander", "Hamilton", "Graham", "Reynolds", "Griffin", "Wallace", "Moreno", "West", "Cole", "Hayes", "Bryant", "Herrera", "Gibson", "Ellis", "Tran", "Medina", "Aguilar", "Stevens", "Murray", "Ford", "Castro", "Marshall", "Owens", "Harrison", "Fernandez", "Mcdonald", "Woods", "Washington", "Kennedy", "Wells", "Vargas", "Henry", "Chen", "Freeman", "Webb", "Tucker", "Guzman", "Burns", "Crawford", "Olson", "Simpson", "Porter", "Hunter", "Gordon", "Mendez", "Silva", "Shaw", "Snyder", "Mason", "Dixon", "Munoz", "Hunt", "Hicks", "Holmes", "Palmer", "Wagner", "Black", "Robertson", "Egan", "Boyd", "Rose", "Stone", "Salazar", "Fox", "Warren", "Mills", "Meyer", "Rice", "Schmidt", "Garza", "Daniels", "Ferguson", "Nichols", "Stephens", "Soto", "Weaver", "Ryan", "Gardner", "Payne", "Grant", "Dunn", "Kelley", "Spencer", "Hawkins", "Arnold", "Pierce", "Vazquez", "Hansen", "Peters", "Santos", "Hart", "Bradley", "Knight", "Elliott", "Cunningham", "Duncan", "Armstrong", "Hudson", "Carroll", "Lane", "Riley", "Andrews", "Alvarado", "Ray", "Delgado", "Berry", "Perkins", "Hoffman", "Johnston", "Matthews", "Pena", "Richards", "Contreras", "Willis", "Carpenter", "Lawrence", "Sandoval", "Guerrero", "George", "Chapman", "Rios", "Estrada", "Ortega", "Watkins", "Greene", "Nunez", "Wheeler", "Valdez", "Harper", "Burke", "Larson", "Santiago", "Maldonado", "Morrison", "Franklin", "Carlson", "Powlette", "Austin", "Dominguez", "Carr", "Lawson", "Jacobs", "Obrien", "Lynch", "Singh", "Vega", "Bishop", "Montgomery", "Oliver", "Jensen", "Harvey", "Williamson", "Gilbert", "Dean", "Sims", "Espinoza", "Howell", "Li", "Wong", "Reid", "Hanson", "Le", "Mccoy", "Garrett", "Burton", "Fuller", "Wang", "Weber", "Welch", "Rojas", "Lucas", "Marquez", "Fields", "Park", "Yang", "Little", "Banks", "Padilla", "Day", "Walsh", "Bowman", "Schultz", "Luna", "Fowler", "Mejia", "Davidson", "Acosta", "Brewer", "May", "Holland", "Juarez", "Newman", "Pearson", "Curtis", "Cortez", "Douglas", "Schneider", "Joseph", "Barrett", "Navarro", "Figueroa", "Keller", "Avila", "Wade", "Molina", "Stanley", "Hopkins", "Campos", "Barnett", "Bates", "Chambers", "Caldwell", "Beck", "Lambert", "Miranda", "Byrd", "Craig", "Ayala", "Lowe", "Frazier", "Powers", "Neal", "Leonard", "Gregory", "Carrillo", "Sutton", "Fleming", "Rhodes", "Shelton", "Schwartz", "Norris", "Jennings", "Watts", "Duran", "Walters", "Cohen", "Mcdaniel", "Moran", "Parks", "Steele", "Vaughn", "Becker", "Holt", "Deleon", "Barker", "Terry", "Hale", "Leon", "Hail", "Benson", "Haynes", "Horton", "Miles", "Lyons", "Pham", "Graves", "Bush", "Thornton", "Wolfe", "Warner", "Cabrera", "Mckinney", "Mann", "Zimmerman", "Dawson", "Lara", "Fletcher", "Page", "Mccarthy", "Love", "Robles", "Cervantes", "Solis", "Erickson", "Reeves", "Chang", "Klein", "Salinas", "Fuentes", "Baldwin", "Daniel", "Simon", "Velasquez", "Hardy", "Higgins", "Aguirre", "Lin", "Cummings", "Chandler", "Sharp", "Barber", "Bowen", "Ochoa", "Dennis", "Robbins", "Liu", "Ramsey", "Francis", "Griffith", "Paul", "Blair", "Oconnor", "Cardenas", "Pacheco", "Cross", "Calderon", "Quinn", "Moss", "Swanson", "Chan", "Rivas", "Khan", "Rodgers", "Serrano", "Fitzgerald", "Rosales", "Stevenson", "Christensen", "Manning", "Gill", "Curry", "Mclaughlin", "Harmon", "Mcgee", "Gross", "Doyle", "Garner", "Newton", "Burgess", "Reese", "Walton", "Blake", "Trujillo", "Adkins", "Brady", "Goodman", "Roman", "Webster", "Goodwin", "Fischer", "Huang", "Potter", "Delacruz", "Montoya", "Todd", "Wu", "Hines", "Mullins", "Castaneda", "Malone", "Cannon", "Tate", "Mack", "Sherman", "Paradiso", "Hubbard", "Hodges", "Zhang", "Guerra", "Wolf", "Valencia", "Franco", "Saunders", "Sauers", "Rowe", "Gallagher", "Farmer", "Hammond", "Hampton", "Townsend", "Ingram", "Wise", "Gallegos", "Clarke", "Barton", "Schroeder", "Maxwell", "Waters", "Logan", "Camacho", "Strickland", "Norman", "Person", "Colon", "Parsons", "Frank", "Harrington", "Glover", "Osborne", "Buchanan", "Casey", "Floyd", "Patton", "Ibarra", "Ball", "Tyler", "Suarez", "Bowers", "Orozco", "Salas", "Cobb", "Gibbs", "Andrade", "Bauer", "Conner", "Moody", "Escobar", "Mcguire", "Lloyd", "Mueller", "Hartman", "French", "Kramer", "Mcbride", "Pope", "Lindsey", "Velazquez", "Norton", "Mccormick", "Sparks", "Flynn", "Yates", "Hogan", "Marsh", "Macias", "Villanueva", "Zamora", "Pratt", "Stokes", "Owen", "Ballard", "Lang", "Brock", "Villarreal", "Charles", "Drake", "Barrera", "Cain", "Patrick", "Pineda", "Burnett", "Mercado", "Santana", "Shepherd", "Bautista", "Ali", "Shaffer", "Lamb", "Trevino", "Mckenzie", "Hess", "Beil", "Olsen", "Cochran", "Morton", "Nash", "Wilkins", "Petersen", "Briggs", "Shah", "Roth", "Nicholson", "Holloway", "Lozano", "Flowers", "Rangel", "Hoover", "Arias", "Short", "Mora", "Valenzuela", "Bryan", "Meyers", "Weiss", "Underwood", "Bass", "Greer", "Summers", "Houston", "Carson", "Morrow", "Clayton", "Whitaker", "Decker", "Yoder", "Collier", "Zuniga", "Carey", "Wilcox", "Melendez", "Poole", "Roberson", "Larsen", "Conley", "Davenport", "Copeland", "Massey", "Lam", "Huff", "Rocha", "Cameron", "Jefferson", "Hood", "Monroe", "Anthony", "Pittman", "Huynh", "Randall", "Singleton", "Kirk", "Combs", "Mathis", "Christian", "Skinner", "Bradford", "Richard", "Galvan", "Wall", "Boone", "Kirby", "Wilkinson", "Bridges", "Bruce", "Atkinson", "Velez", "Meza", "Roy", "Vincent", "York", "Hodge", "Villa", "Abbott", "Allison", "Tapia", "Gates", "Chase", "Sosa", "Sweeney", "Farrell", "Wyatt", "Dalton", "Horn", "Barron", "Phelps", "Yu", "Dickerson", "Heath", "Foley", "Atkins", "Mathews", "Bonilla", "Acevedo", "Benitez", "Zavala", "Hensley", "Glenn", "Cisneros", "Harrell", "Shields", "Rubio", "Choi", "Huffman", "Boyer", "Garrison", "Arroyo", "Bond", "Kane", "Hancock", "Callahan", "Dillon", "Cline", "Wiggins", "Grimes", "Arellano", "Melton", "Oneill", "Savage", "Ho", "Beltran", "Pitts", "Parris", "Altman", "Parrish", "Ponce", "Rich", "Booth", "Koch", "Golden", "Ware", "Brennan", "Mcdowell", "Marks", "Cantu", "Humphrey", "Baxter", "Sawyer", "Clay", "Tanner", "Hutchinson", "Kaur", "Berg", "Wiley", "Gilmore", "Russo", "Villegas", "Hobbs", "Keith", "Wilkerson", "Ahmed", "Beard", "Mcclain", "Montes", "Mata", "Rosario", "Vang", "S", "S", "Walter", "Henson", "Oneal", "Mosley", "Mcclure", "Beasley", "Stephenson", "Snow", "Huerta", "Preston", "Vance", "Barry", "Johns", "Eaton", "Blackwell", "Dyer", "Prince", "Macdonald", "Solomon", "Guevara", "Stafford", "English", "Hurst", "Woodard", "Cortes", "Shannon", "Kemp", "Nolan", "Mccullough", "Merritt", "Murillo", "Moon", "Salgado", "Strong", "Kline", "Cordova", "Barajas", "Roach", "Rosas", "Winters", "Jacobson", "Lester", "Knox", "Bullock", "Kerr", "Leach", "Meadows", "Davila", "Orr", "Whitehead", "Pruitt", "Kent", "Conway", "Mckee", "Barr", "David", "Dejesus", "Marin", "Berger", "Mcintyre", "Blankenship", "Gaines", "Palacios", "Cuevas", "Bartlett", "Durham", "Dorsey", "Mccall", "Odonnell", "Stein", "Browning", "Stout", "Lowery", "Sloan", "Mclean", "Hendricks", "Calhoun", "Sexton", "Chung", "Gentry", "Hull", "Duarte", "Ellison", "Nielsen", "Gillespie", "Buck", "Middleton", "Sellers", "Leblanc", "Esparza", "Hardin", "Bradshaw", "Mcintosh", "Howe", "Livingston", "Frost", "Glass", "Morse", "Knapp", "Herman", "Stark", "Bravo", "Noble", "Spears", "Weeks", "Corona", "Frederick", "Buckley", "Mcfarland", "Hebert", "Enriquez", "Hickman", "Quintero", "Randolph", "Schaefer", "Walls", "Trejo", "House", "Reilly", "Pennington", "Michael", "Conrad", "Giles", "Benjamin", "Crosby", "Fitzpatrick", "Donovan", "Mays", "Mahoney", "Valentine", "Raymond", "Medrano", "Hahn", "Mcmillan", "Small", "Ceron", "Bentley", "Felix", "Peck", "Lucero", "Boyle", "Hanna", "Pace", "Rush", "Hurley", "Harding", "Mcconnell", "Bernal", "Nava", "Ayers", "Everett", "Ventura", "Avery", "Pugh", "Mayer", "Bender", "Shepard", "Mcmahon", "Landry", "Case", "Sampson", "Moses", "Magana", "Blackburn", "Dunlap", "Gould", "Duffy", "Vaughan", "Herring", "Mckay", "Espinosa", "Rivers", "Farley", "Bernard", "Ashley", "Friedman", "Blemur", "Potts", "Truong", "Costa", "Correa", "Blevins", "Nixon", "Clements", "Fry", "Delarosa", "Best", "Benton", "Lugo", "Portillo", "Dougherty", "Crane", "Haley", "Phan", "Villalobos", "Blanchard", "Horne", "Finley", "Quintana", "Lynn", "Esquivel", "Bean", "Dodson", "Mullen", "Xiong", "Hayden", "Cano", "Levy", "Huber", "Richmond", "Moyer", "Lim", "Frye", "Sheppard", "Mccarty", "Avalos", "Booker", "Waller", "Parra", "Woodward", "Jaramillo", "Krueger", "Rasmussen", "Brandt", "Peralta", "Donaldson", "Stuart", "Faulkner", "Maynard", "Galindo", "Coffey", "Estes", "Sanford", "Burch", "Maddox", "Vo", "Oconnell", "Vu", "S", "S", "Andersen", "Spence", "Mcpherson", "Church", "Schmitt", "Stanton", "Leal", "Cherry", "Compton", "Dudley", "Sierra", "Pollard", "Alfaro", "Hester", "Proctor", "Lu", "Hinton", "Novak", "Good", "Madden", "Mccann", "Terrell", "Jarvis", "Dickson", "Reyna", "Cantrell", "Mayo", "Branch", "Hendrix", "Rollins", "Rowland", "Whitney", "Duke", "Odom", "Daugherty", "Travis", };
-    public static String[] places = {}; // Structure and Building Names
-    public static Character currentCharacter;
 
 
     public static void main(String[] args) throws InterruptedException, IOException {
-        tiles[range/200][range/200] = new Area(); // Starting Point of the World
+        //tiles[range / 2][range / 2] = new Area(); // Starting Point of the World
+        Map map = new Map(); // Starting Point of the World
         //Character[] characters = new Character[startingPopulation];
         int time = 0; // In Weeks
         System.out.println("Would you like to play? Y/n");
-        Character bete = new Character(tiles[range / 200][range / 200]);
-        characters.add(bete);
-        if (scan.next().charAt(0) == 'Y') {
-            bete.player = true;
+        char input = scan.next().charAt(0);
+
+        if (input == 'Y' || input == 'y') {
+            Character bete = new Character(tiles[range / 2][range / 2]);
             currentCharacter = bete;
-            bete.potential = 1000;
+            characters.add(bete);
+            population++; // Don't forget to add player characters to population
+            bete.player = true;
+            bete.potential = 100;
             bete.trait = Character.Traits.Alchemist;
             System.out.println("" + bete + bete.location);
             System.out.println(bete + "'s Potential: " + bete.potential + " Trait: " + bete.getTrait());
-        /*while (true) {
-            bete.movement(scan.next().charAt(0));
-            bete.cultivate();
-            System.out.println(bete.location);
-            System.out.println(bete);
-            if (scan.next().charAt(0) == '0') {
-                break;
-            }
-        }*/
+
+            //Quest quest1 = new Quest("Random", false, 50, 5, 50);
+            //Quest quest2 = new Quest("Test", false, 45, 5, 50);
+            //bete.quests.add(quest1);
+            //bete.quests.add(quest2);
+            //System.out.println(bete.quests);
+            //System.out.println(quest1);
+            //System.out.println(quest2);
+
+            /*while (true) {
+                currentCharacter = bete;
+                bete.quest();
+                bete.movement(scan.next().charAt(0));
+                bete.cultivate();
+                System.out.print(bete);
+                System.out.println(bete.location);
+                System.out.println(bete.backpack + "\n" + bete.materialBag + "\n" + bete.pillBag);
+                if (scan.next().charAt(0) == '0') {
+                    break;
+                }
+            }*/
+
         }
         // Character Creation
         for (int i = 0; i < startingPopulation; i++) {
-            characters.add(new Character(tiles[range/200][range/200]));
+            characters.add(new Character(tiles[range / 2][range / 2]));
         }
 
 
         while (true) {
             //System.out.println("It's day: " + (time/24 + 1));
             if ((time) % 52 == 0) {
-                System.out.println("It's year: " + (((time / 52)) + 1) + " Population: " + characters.size() + " " + monstersList);
+                System.out.println("It's year: " + (((time / 52)) + 1) + " Population: " + population + " " + monstersList);
                 //scan.nextLine();
             }
 
@@ -101,98 +86,96 @@ public class GameDriver {
             }
 
             // Causes Players to Move and Go Through Events
-            boolean moveMade = true;
-            int movesMade = 0;
-            while (moveMade) {
-                moveMade = false;
-                for (Character character : characters) {
-                    currentCharacter = character;
-                    if (!character.dead && character.born && character.travellingSpeed > movesMade) {
-                        moveMade = true;
-                        if (character.player == true && character.age >= 8) {
-                            //character.movement(scan.next().charAt(0));
-                            if (character.skipping <= 0) {
-                                System.out.println(character.backpack + "\n" + character.materialBag + "\n" + character.pillBag); // Change .backpack to just character
-                                if (character.spouse != null) {
-                                    System.out.println("" + character.spouse + character.spouse.location);
-                                }
 
-                                switch (scan.next().charAt(0)) {
-                                    case 'w':
-                                        character.movement('w');
-                                        break;
-                                    case 'a':
-                                        character.movement('a');
-                                        break;
-                                    case 's':
-                                        character.movement('s');
-                                        break;
-                                    case 'd':
-                                        character.movement('d');
-                                        break;
-                                    case 'o':
-                                        System.out.println("Welcome to Options!\nInput 'x' to skip turns without movement!\nInput 'm' to skip turns with movement");
-                                        switch (scan.next().charAt(0)) {
-                                            case 'x':
-                                                character.movement = 'x';
-                                                System.out.println("How many turns do you want to skip?");
-                                                character.skipping = scan.nextInt() - 1;
-                                                character.movement('x');
-                                                break;
-                                            case 'm':
-                                                character.movement = 'm';
-                                                System.out.println("How many turns do you want to skip?");
-                                                character.skipping = scan.nextInt() - 1;
-                                                character.movement();
-                                                break;
-                                        }
-                                    default:
-                                        character.movement('x');
-                                        break;
-                                }
+            for (Character character : characters) {
+                currentCharacter = character;
+                if (!character.dead && character.born) {
+                    if (character.player == true && character.age >= 8) {
+                        //character.movement(scan.next().charAt(0));
+                        if (character.skipping <= 0) {
+                            System.out.println(character.backpack + "\n" + character.materialBag + "\n" + character.pillBag); // Change .backpack to just character
+                            if (character.spouse != null) {
+                                System.out.println("" + character.spouse + character.spouse.location);
                             }
-                            else {
-                                character.skipping--;
-                                if (character.movement == 'm') {
-                                    character.movement();
-                                }
-                                else {
-                                    character.movement(character.movement);
-                                }
+
+                            switch (scan.next().charAt(0)) {
+                                case 'w':
+                                    character.movement('w');
+                                    break;
+                                case 'a':
+                                    character.movement('a');
+                                    break;
+                                case 's':
+                                    character.movement('s');
+                                    break;
+                                case 'd':
+                                    character.movement('d');
+                                    break;
+                                case 'o':
+                                    System.out.println("Welcome to Options!\nInput 'x' to skip turns without movement!\nInput 'm' to skip turns with movement");
+                                    switch (scan.next().charAt(0)) {
+                                        case 'x':
+                                            character.movement = 'x';
+                                            System.out.println("How many turns do you want to skip?");
+                                            character.skipping = scan.nextInt() - 1;
+                                            character.movement('x');
+                                            break;
+                                        case 'm':
+                                            character.movement = 'm';
+                                            System.out.println("How many turns do you want to skip?");
+                                            character.skipping = scan.nextInt() - 1;
+                                            character.movement();
+                                            break;
+                                    }
+                                default:
+                                    character.movement('x');
+                                    break;
                             }
-                            if (character.skipping <= 0) {
-                                System.out.println("" + character + character.location);
-                            }
-                            character.event();
-                        } else if (character.age >= 8) {
-                            character.movement();
-                            character.event();
                         } else {
-                            character.event();
-                        }
-                        if (character.gender.equals("Female") && !character.children.isEmpty()) {
-                            for (Character child : character.children) {
-                                if (child.age < 8) {
-                                    child.location.characters.remove(child);
-                                    child.location = child.mother.location;
-                                    if (!child.location.characters.contains(child)) {
-                                        child.location.characters.add(child); // Adds This Character to the Character List of the New Location
-                                    }
-                                    if (!child.knownLocations.contains(child.location)) {
-                                        child.knownLocations.add(child.location); // Adds New Location to knownLocations
-                                    }
-                                }
+                            character.skipping--;
+                            if (character.movement == 'm') {
+                                character.movement();
+                            } else {
+                                character.movement(character.movement);
                             }
                         }
-                        if (character.lvl > character.location.highestLvl) {
-                            character.location.highestLvl = character.lvl;
+                        if (character.skipping <= 0) {
+                            System.out.println("" + character + character.location);
+                        }
+                        //System.out.println(character + " is doing their quest!");
+                        character.quest();
+                    }
+                    else if (character.age >= 8) {
+                        //System.out.println(character + " is doing their quest!!");
+                        character.movement();
+                        character.quest();
+                    }
+                    else {
+                        //System.out.println(character + " is doing their quest!!!");
+                        character.quest();
+                    }
+
+                    // For Mothers
+                    if (character.gender.equals("Female") && !character.children.isEmpty()) {
+                        for (Character child : character.children) {
+                            if (child.age < 8) {
+                                child.location.characters.remove(child);
+                                child.location = child.mother.location;
+                                if (!child.location.characters.contains(child)) {
+                                    child.location.characters.add(child); // Adds This Character to the Character List of the New Location
+                                }
+                                if (!child.knownLocations.contains(child.location)) {
+                                    child.knownLocations.add(child.location); // Adds New Location to knownLocations
+                                }
+                            }
                         }
                     }
                 }
-                movesMade++;
             }
 
+
             // Ages the areas and adds the tempCharacters list to the characters list.
+
             for (Area area : createdAreas) {
                 area.age();
             }
@@ -204,12 +187,21 @@ public class GameDriver {
                 monster.movement();
             }
             time++;
+
             characters.addAll(tempCharacters);
-            characters.removeAll(remCharacters);
+            population += tempCharacters.size();
+
+            //characters.removeAll(remCharacters); // Old removal method
+            if (!remCharacters.isEmpty()) {
+                for (Character character : remCharacters) {
+                    characters.set(character.id, null); // Sets the index to null
+                    population--;
+                }
+            }
             monstersList.removeAll(remCharacters);
             tempCharacters.clear();
             remCharacters.clear();
-            //Thread.sleep(1);
+            Thread.sleep(10000);
         }
     }
 }

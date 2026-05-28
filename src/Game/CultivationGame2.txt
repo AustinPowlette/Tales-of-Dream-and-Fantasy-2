@@ -12,7 +12,7 @@ Ghost Trait (Just an idea, but if they die they become a ghost and must consume 
 *Friendly (Makes someone more likely to interact with others)
 *Runner (Makes you run with 100% chance if the person is only 10 levels above you or less)
 *Cheater (Makes someone stronger by 5 combat level/ 1 in a million)
-*Lucky Trait (Makes someone more lucky by giving them more random events)
+*Lucky Trait (Makes someone more lucky by giving them more random events) (Increases Ability to Win and Flee by 3 level)
 
 9:   100  2500kmph 51200
 8: 97-99  2025kmph 34300
@@ -156,3 +156,93 @@ You can consume other players to cultivate
 You can possess dead bodies (your new potential will be and average of your potentials and your new level will be the level of the deceased)
 You can only possess dead bodies at a lower level than your level
 Don't forget to change trait and player variables to ghosts and ghost boolean
+
+ || (Math.pow(potential, 2) > rand.nextInt((Math.pow(lvl, 3) / 3)))
+x: 100, y: 1600
+Luca Moran Zachary Jenkins
+
+
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+Cultivation 2.5
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+
+Fighting System - Universal
+Production (Resources + Items + Techniques)
+NPC Fighting (Monsters)
+Cultivation
+Relationships
+
+Town Creation
+Sect Creation
+Questing
+
+
+
+Change Area Generation
+Create "Hotspots"
+Moveable Enemies That Become Wanted
+Difficulty gets stronger further from Originis
+
+Remove Forbidden System
+
+
+Change Durability System (Figure out if you want to average the lvl of the clothing/weapon with the lvl or not.
+Instead of Reducing Durability of Weapons, Give Them a Chance to Break
+
+
+
+Redo Item Transfer and Item Creation for Bugs
+Test equip function
+Test deconstructor functions
+
+
+Rebirth Killed Original NPCs to start new family lines
+
+
+
+Movement
+Martial
+Weapon
+Armor
+Cultivation Lvl
+
+winCheck?
+fleeCheck???
+
+60 - 61
+
+Make it so that armor and weapons and pills can only be 5 cultivation levels above the crafter
+
+Redo relationship. Don't make people hate people on death, just give the quest
+Evil vs Good dilemma for killing
+Good never kills (Unless you're evil)
+Neutral only kills if hates you or incentivized to
+
+
+Create a make MC option
+Instead of a siblings list, just check for same mother or father
+Maybe allow family clans? Matriarch/Patriarch type beat. Depending on who's stronger
+
+50% - 50
+34% - 35/65
+16% - 20/80
+
+Test Caution System (Initialization + Battle)
+Test Battle System (winCheck, fleeCheck,
+
+
+
+Personalities (Nice, Bully,
+
+Ideas
+Media/Journalism/World Messages
+Faction Types (Farmers, Miners whatevers based on the majority of profession)
+
+

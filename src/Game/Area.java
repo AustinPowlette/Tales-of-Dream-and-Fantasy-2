@@ -3,8 +3,11 @@ package Game;
 import java.util.ArrayList;
 
 import static Game.GameDriver.*;
+import static Game.Dictionary.*;
+import static Game.Map.*;
 
 public class Area {
+
     static int uindex = 1;
     int index;
     String name = "";
@@ -33,55 +36,55 @@ public class Area {
     public Area() {
         name = "Originis";
         index = uindex++;
-        x = GameDriver.range / 2 - 50;
-        y = GameDriver.range / 2 - 50;
+        x = range / 2;
+        y = range / 2;
         city = true;
         biomeM = "Forest";
         biomem = "Forest";
         lvl = 1;
-        monsters = rand.nextInt((startingPopulation * 1000) - startingPopulation + 1) + startingPopulation;
-        herbMaterials = rand.nextInt((startingPopulation * 1000000) - startingPopulation + 1) + startingPopulation;
-        metalMaterials = rand.nextInt((startingPopulation * 100000) - startingPopulation + 1) + startingPopulation;
-        population = rand.nextInt((startingPopulation * 100000) - startingPopulation + 1) + startingPopulation;
+        monsters = rand.nextInt(10000000);
+        herbMaterials = rand.nextInt(1000000000);
+        metalMaterials = rand.nextInt(1000000000);
+        population = rand.nextInt(100000000);
         backpack = new ArrayList<>();
         materialBag = new ArrayList<>();
         pillBag = new ArrayList<>();
         arrayBag = new ArrayList<>();
-        GameDriver.createdAreas.add(this);
+        createdAreas.add(this);
     }
     public Area(Area area, char dir) { // dir stands for direction. Ex: East, West, South, North
         switch (dir) {
             case 'w':
                 y = area.y;
                 if (area.x <= 0) {
-                    x = GameDriver.range - 100;
+                    x = range - 1;
                     break;
                 }
-                x = area.x - 100;
+                x = area.x - 1;
                 break;
             case 'e':
                 y = area.y;
-                if (area.x >= GameDriver.range - 100) {
+                if (area.x >= range - 1) {
                     x = 0;
                     break;
                 }
-                x = area.x + 100;
+                x = area.x + 1;
                 break;
             case 'n':
                 x = area.x;
-                if (area.y >= GameDriver.range - 100) {
+                if (area.y >= range - 1) {
                     y = 0;
                     break;
                 }
-                y = area.y + 100;
+                y = area.y + 1;
                 break;
             case 's':
                 x = area.x;
                 if (area.y <= 0) {
-                    y = GameDriver.range - 100;
+                    y = range - 1;
                     break;
                 }
-                y = area.y - 100;
+                y = area.y - 1;
                 break;
         } // Sets the Coordinate
 
@@ -186,53 +189,53 @@ public class Area {
 
         // Naming The Area
         if (rand.nextInt(5) == 0) {
-            name = name.concat(GameDriver.numbers[rand.nextInt(GameDriver.numbers.length)] + " ");
+            name = name.concat(numbers[rand.nextInt(numbers.length)] + " ");
         }
         if (rand.nextInt(1) == 0) {
-            name = name.concat(GameDriver.adjectivesPlaces[rand.nextInt(GameDriver.adjectivesPlaces.length)] + " ");
+            name = name.concat(adjectivesPlaces[rand.nextInt(adjectivesPlaces.length)] + " ");
         }
 
         switch (biomem) {
             case "Ocean":
-                name = name.concat(GameDriver.ocean[rand.nextInt(GameDriver.ocean.length)]);
+                name = name.concat(ocean[rand.nextInt(ocean.length)]);
                 break;
             case "Grassland":
-                name = name.concat(GameDriver.grassland[rand.nextInt(GameDriver.grassland.length)]);
+                name = name.concat(grassland[rand.nextInt(grassland.length)]);
                 break;
             case "Forest":
-                name = name.concat(GameDriver.forest[rand.nextInt(GameDriver.forest.length)]);
+                name = name.concat(forest[rand.nextInt(forest.length)]);
                 break;
             case "Desert":
-                name = name.concat(GameDriver.desert[rand.nextInt(GameDriver.desert.length)]);
+                name = name.concat(desert[rand.nextInt(desert.length)]);
                 break;
             case "Tundra":
-                name = name.concat(GameDriver.tundra[rand.nextInt(GameDriver.tundra.length)]);
+                name = name.concat(tundra[rand.nextInt(tundra.length)]);
                 break;
             case "Beach":
-                name = name.concat(GameDriver.beach[rand.nextInt(GameDriver.beach.length)]);
+                name = name.concat(beach[rand.nextInt(beach.length)]);
                 break;
             case "Frozen Grassland":
-                name = name.concat(GameDriver.frozenGrassland[rand.nextInt(GameDriver.frozenGrassland.length)]);
+                name = name.concat(frozenGrassland[rand.nextInt(frozenGrassland.length)]);
                 break;
             case "Frozen Desert":
-                name = name.concat(GameDriver.frozenDesert[rand.nextInt(GameDriver.frozenDesert.length)]);
+                name = name.concat(frozenDesert[rand.nextInt(frozenDesert.length)]);
                 break;
             case "Taiga":
-                name = name.concat(GameDriver.taiga[rand.nextInt(GameDriver.taiga.length)]);
+                name = name.concat(taiga[rand.nextInt(taiga.length)]);
                 break;
             case "Savanna":
-                name = name.concat(GameDriver.savanna[rand.nextInt(GameDriver.savanna.length)]);
+                name = name.concat(savanna[rand.nextInt(savanna.length)]);
                 break;
         }
 
         if (rand.nextInt(5) == 0) {
-            name = name.concat(" of " + GameDriver.adjectiveOf[rand.nextInt(GameDriver.adjectiveOf.length)]);
+            name = name.concat(" of " + adjectiveOf[rand.nextInt(adjectiveOf.length)]);
         }
         lvl = currentCharacter.lvl;
         monsters = rand.nextInt((startingPopulation * 10) - startingPopulation + 1) + startingPopulation;
         herbMaterials = rand.nextInt((startingPopulation * 10000) - startingPopulation + 1) + startingPopulation;
         metalMaterials = rand.nextInt((startingPopulation * 1000) - startingPopulation + 1) + startingPopulation;
-        GameDriver.createdAreas.add(this);
+        createdAreas.add(this);
     }
 
     public void age() {
@@ -245,7 +248,7 @@ public class Area {
             if (rand.nextInt(2) == 0 && sect != null) {
                 sect.join(temp);
             }
-            GameDriver.tempCharacters.add(temp);
+            tempCharacters.add(temp);
         }
         if (population > 0 && cityOwner != null) {
             cityOwner.ss += population;
@@ -253,8 +256,8 @@ public class Area {
     }
 
     public String toString() {
-        return (" is in the " + name + " at x: " + x + ", y: " + y);
-        //return (currentCharacter + " is in the " + name + " at x: " + x + ", y: " + y + " Lvl: " + lvl + " animalCount: " + animals + " monsterCount: " + monsters + " spiritStoneCount: " + spiritStoneMaterials + " herbMaterialCount: " + herbMaterials + " metalMaterialCount: " + metalMaterials);
+        return (" is in the " + name + " at x: " + x * 100 + ", y: " + y * 100);
+        //return (currentCharacter + " is in the " + name + " at x: " + x * 100 + ", y: " + y * 100 + " Lvl: " + lvl + " animalCount: " + animals + " monsterCount: " + monsters + " spiritStoneCount: " + spiritStoneMaterials + " herbMaterialCount: " + herbMaterials + " metalMaterialCount: " + metalMaterials);
     }
 }
 
