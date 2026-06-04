@@ -1,0 +1,120 @@
+Finished
+Map Generation
+Character/Beast Generation
+Foraging
+Item Smithing
+Check
+Movement Techniques
+Smithing (Inventory Bugs)
+Sword Technique
+Town Creation / Sect Creation
+Traits
+Txt File
+To Do
+Quests
+Economy (Putting items in shops)
+Revamp Battle System
+Revamp Relationships
+QuestList Object
+Every Quest has a priority, a category, and a target
+Revamp movement to activate based on quest (Currently randomized, make it quest based)
+Make foraging tasks create when missing resources to craft something
+Use Switch case for categories decisions.
+Make template Tasks:
+Foraging
+Hunting Player
+Hunt Beast
+Talk
+
+Make a quest for each movement option
+Battle System
+Two checks
+First check
+winChance = 50 - (10 * (OppLvl - ProtagLvl))
+if winChance >= 100 && malIntent
+(Do Opp Forbidden Check)
+if winChance <= 0 && OppMalIntent
+(Do Protag Forbidden Check)
+
+Figure out how to do forbidden check and how that's gonna work
+
+Forbidden technique gets stronger based on how much potential you have and depletes your lifespan by a calculated amount (level gap jumped to the power of some exponent)
+
+Forbidden Technique should only be used if it's a death match. There should be a cost benefit analysis where over a certain amount they always use it, and then depending on personality as well. Maybe give a benefit to certain traits or affinities to have stronger benefits in lifespan or potential
+
+Weapon Destruction will be based on the highest cultivation, weapon, or armor
+
+Armor destruction will be based on the highest of weapon or cultivation
+
+USE MAX FUNCTION HERE and Spreadsheet of values from ChatGPT
+
+Make Group Battle Algorithm
+Sort by strength, have a formula to create groups and have each group fight
+
+Have a percentage chance for each task to be randomly assigned, based on how much I want them to be done
+Sect Politic Events
+
+Quest Logic Chain
+if questCategory is spot {
+switch ():
+DO ACTIONS
+return success or not???
+}
+else if questCategory is Area
+{
+if targetArea.location != character.location {
+MOVE DIAGONALLY
+}
+else {
+switch ():
+DO ACTIONS
+return success or not???
+}
+}
+else if questCategory is Character {
+if targetCharacter.location != character.location {
+MOVE DIAGONALLY
+}
+else {
+switch ():
+DO ACTIONS
+return success or not???
+}
+}
+
+
+Quest Priority
+None 0-20
+Low 21-40
+Medium 41-60
+High 61-80
+Critical 81-100
+
+QuestFailed = 0
+QuestSuccess = 1
+QuestProgressed = 2
+Go Sell: When your backpack gets to a certain size
+Can't Buy: Hunt for money (Check to see which area is good for your level in your known locations)
+Bounty Hunt: Check for bounties you can take in the city at your level. If someone can't get revenge themselves they will put a bounty out (For example, if they're too weak or too strong)
+Profession: Regular
+Interact: Regular
+Find (Friend (1), Good Friend (2), Close Friend (3)
+Battle Rival
+Battle Dislike
+Battle Arch Enemy
+Sect Events?
+Revenge: When one of your close friends gets killed
+Forage/Mine: If Profession failed cause of materials
+Buy Gear: When your slots are empty or if you have outgrown your stuff
+
+Move towards the target and then do a spot quest (Was writing this)
+Actually structure the questing, like write it down for everything (Check to see if target dead or area exists first)
+
+
+Appropriate relationship losing/gaining from fighting
+
+Marketing (Make Markets, Make City Object w/ Market Array, add markets and cities to known locations)
+Make AI logic for shopping and buying
+Make quest for shopping and buying
+Test
+Change leadership so that it's a 20% of making a city and 80% of making a sect. Then have the profession skill do related tasks for leader or city
