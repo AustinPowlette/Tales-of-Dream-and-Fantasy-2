@@ -73,3 +73,31 @@ Add the following quest types to `spotQuests()` and `targetQuests()`:
 - Item level is major cultivation level (1–10 = Qi to Pseudo Immortal realms).
 - All cross-character references use integer id (index into `Map.characters`).
 - Print statements should be wrapped in `if (player && skipping <= 0 && age >= 8)` — many are not yet.
+
+## Development Workflow
+
+### Branch Strategy
+- All development happens on `dev` branch. Push to `main` only when the version is stable and tested.
+- Create `dev` branch from `main` if it does not exist: `git checkout -b dev`
+
+### Before Any Code Change
+- **Propose the change to the user first** — describe what you plan to change, what files/lines are affected, why, and what edge cases you considered. Wait for explicit approval before editing any `.java` file.
+
+### After Any Code Change
+1. **Compile**: Run `javac -cp src src/Game/*.java` from the repo root using Bash. Fix all errors before proceeding.
+2. **Smoke test**: Run `echo "n" | timeout 15 java -cp src Game.GameDriver 2>&1` — answer 'n' to skip player creation, let it run 15 seconds, scan output for stack traces. A timeout exit (no crash output) is a pass.
+3. **Update `DEVLOG.md`** — append a dated entry (see format below).
+4. **Update `Game Outline.md`** — flip ❌→🟡→✅ for any feature whose status changed.
+5. **Update `Game Info.md`** — update any class reference, formula, or system description affected by the change.
+
+### DEVLOG Entry Format
+```
+## YYYY-MM-DD
+- Fixed/Added/Changed: <what changed> (`File.java:line`) — <one line why>
+```
+
+### Design Doc Reference
+Before implementing any new feature, read the relevant section of:
+- `src/Game/CultivationGame2.txt` — original design vision
+- `src/Game/CultivationGame2Recent.txt` — revised notes, combat revamp, quest logic
+- `src/Game/Cultivation Game 2 Temp.txt` — working scratchpad, quest categories, priorities
