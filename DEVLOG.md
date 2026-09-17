@@ -1,5 +1,18 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-17
+- Added: `Design Notes` section to `CLAUDE.md` — documents Array defense design (arrays protect area features, give defenders temp level boost, multiple arrays don't buff each other, must break array AND beat defenders)
+- Added: `Design Doc Update Rule` to `CLAUDE.md` — rule to append design decisions to relevant design docs each session
+- Created: `src/Game/Shop.java` — per-merchant shop class with `buyRate=0.55`, `sellRate=1.50`, `cityBuyRate=0.30`; `buyFromSeller()`, `sellToBuyer()`, `restockFromCity()` methods; Non-Merchants cannot access city pool directly
+- Added: `ArrayList<Shop> shops` field to `Area.java` — initialized empty on all areas
+- Added: `ArrayList<Shop> ownedShops` field to `Character.java` — initialized in both constructors
+- Added: `maxShops()` — returns `Math.max(1, majorLvl)` as shop cap
+- Added: `canAfford(long)` and `deductSs(long)` helpers to `Character.java`
+- Added: `buyGear()` to `Character.java` — checks shops in current city for weapon/clothing upgrades (lvl+3 threshold, 25% wealth cap)
+- Updated: `sell(Area city)` — prefers merchant shops at buyRate=0.55 over city pool at 50%; only city-pool items use backpack.removeAll; merchant sales handled by `buyFromSeller()`
+- Added: Merchant case to `professionPicker()` — sets up shop in city when under maxShops cap; restocks from city pool when at own shop
+- Added: Buy Gear trigger in `quest()` dynamic triggers — calls `buyGear()` immediately when in a city with shops and missing equipped weapon or clothing
+
 ## 2026-09-16
 - Setup: Added `## Development Workflow` section to `CLAUDE.md` — establishes dev branch strategy, compile/smoke-test steps, and doc-update rules
 - Setup: Created `DEVLOG.md`

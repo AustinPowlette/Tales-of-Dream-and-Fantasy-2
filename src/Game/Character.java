@@ -67,6 +67,7 @@ public class Character {
     PriorityQueue<Quest> spotQuests = null;
     PriorityQueue<Quest> targetQuests = null;
     Quest currentQuest = null;
+    ArrayList<Shop> ownedShops = null;
     // Relationship variables
     RelationshipList relationshipList;
     Character spouse = null;
@@ -104,6 +105,7 @@ public class Character {
         materialBag = new ArrayList<>();
         pillBag = new ArrayList<>();
         arrayBag = new ArrayList<>();
+        ownedShops = new ArrayList<>();
         movementTechnique = new Technique(Technique.techniqueType.Movement);
         martialTechnique = new Technique(Technique.techniqueType.Martial);
         techniqueList = new ArrayList<>();
@@ -214,6 +216,7 @@ public class Character {
         materialBag = new ArrayList<>();
         pillBag = new ArrayList<>();
         arrayBag = new ArrayList<>();
+        ownedShops = new ArrayList<>();
         movementTechnique = new Technique(Technique.techniqueType.Movement);
         martialTechnique = new Technique(Technique.techniqueType.Martial);
         techniqueList = new ArrayList<>();
@@ -823,6 +826,12 @@ public class Character {
                 targetQuests.add(new Quest("Go Sell", true, 50, 0, 70, targetCity));
         }
 
+        // Buy Gear: if in a city with shops and missing or outgrown equipment, buy immediately
+        if (location.city && !location.shops.isEmpty()
+                && (equippedWeapon == null || equippedClothing == null)) {
+            buyGear();
+        }
+
         Quest tempQuest = this.spotQuests.peek();
         int questCode = -2;
 
@@ -1164,7 +1173,16 @@ public class Character {
                 }
                 break;
             case Merchant:
-
+                if (location.city && location.cityOwner != null) {
+                    boolean hasShopHere = ownedShops.stream().anyMatch(s -> s.location == location);
+                    if (!hasShopHere && ownedShops.size() < maxShops()) {
+                        Shop shop = new Shop(this, location);
+                        ownedShops.add(shop);
+                        location.shops.add(shop);
+                    }
+                    Shop myShop = ownedShops.stream().filter(s -> s.location == location).findFirst().orElse(null);
+                    if (myShop != null) myShop.restockFromCity(location);
+                }
                 break;
             case Lucky:
                 eventLootDead();
@@ -1775,6 +1793,41 @@ public class Character {
         while (dc >= RATE) { ij++; dc -= RATE; }
     }
 
+    public boolean canAfford(long amount) { return ss >= amount; }
+
+    public void deductSs(long amount) { ss = Math.max(0, ss - amount); }
+
+    public int maxShops() { return Math.max(1, majorLvl); }
+
+    public void buyGear() {
+        if (!location.city || location.shops.isEmpty()) return;
+        boolean boughtWeapon = false;
+        boolean boughtArmor = false;
+        for (Shop shop : location.shops) {
+            if (!boughtWeapon) {
+                for (Item item : new ArrayList<>(shop.inventory)) {
+                    if (item.itemType == Item.ItemType.Weapon
+                            && (equippedWeapon == null || item.lvl > equippedWeapon.lvl + 3)
+                            && canAfford(shop.sellPrice(item))
+                            && ss <= shop.sellPrice(item) * 4) { // spend at most 25% of ss
+                        if (shop.sellToBuyer(this, item)) { equip(); boughtWeapon = true; break; }
+                    }
+                }
+            }
+            if (!boughtArmor) {
+                for (Item item : new ArrayList<>(shop.inventory)) {
+                    if (item.itemType == Item.ItemType.Clothing
+                            && (equippedClothing == null || item.lvl > equippedClothing.lvl + 3)
+                            && canAfford(shop.sellPrice(item))
+                            && ss <= shop.sellPrice(item) * 4) {
+                        if (shop.sellToBuyer(this, item)) { equip(); boughtArmor = true; break; }
+                    }
+                }
+            }
+            if (boughtWeapon && boughtArmor) break;
+        }
+    }
+
     // TODO: price formulas are placeholders — confirm before finalising economy pass
     public static long itemPrice(Item item) {
         if (item.lvl <= 0) return 0; // Blood and unlevelled items handled separately
@@ -1799,10 +1852,32 @@ public class Character {
             if (item == spareWeapon   || item == spareClothing)    continue;
             toSell.add(item);
         }
-        long earned = 0;
-        for (Item item : toSell) {
-            long price = itemPrice(item);
-            earned += price;
+        // Find best-paying merchant shop in this city (beats city pool 0.50 rate)
+        Shop bestShop = null;
+        for (Shop shop : city.shops) {
+            if (bestShop == null || shop.buyRate > bestShop.buyRate) bestShop = shop;
+        }
+
+        // buyFromSeller() handles backpack removal and ss payment directly
+        ArrayList<Item> soldToMerchant = new ArrayList<>();
+        long merchantEarned = 0;
+        if (bestShop != null) {
+            for (Item item : new ArrayList<>(toSell)) {
+                long price = bestShop.buyPrice(item);
+                if (bestShop.buyFromSeller(this, item)) {
+                    soldToMerchant.add(item);
+                    merchantEarned += price;
+                }
+            }
+        }
+
+        // Remaining items go to city pool at base 50% rate
+        long poolEarned = 0;
+        ArrayList<Item> remaining = new ArrayList<>(toSell);
+        remaining.removeAll(soldToMerchant);
+        for (Item item : remaining) {
+            long price = itemPrice(item) / 2;
+            poolEarned += price;
             if (city.backpack != null) {
                 boolean merged = false;
                 for (Item cityItem : city.backpack) {
@@ -1815,12 +1890,12 @@ public class Character {
                 if (!merged) city.backpack.add(item);
             }
         }
-        backpack.removeAll(toSell);
-        ss += earned;
+        backpack.removeAll(remaining);
+        ss += poolEarned;
         convertCurrency();
         // TODO: handle pillBag selling (cultivation pills vs potential pills have different rules)
         if (player && skipping <= 0 && age >= 8)
-            System.out.println("Sold " + toSell.size() + " items for " + earned + " ss at " + city.name);
+            System.out.println("Sold " + toSell.size() + " items for " + (merchantEarned + poolEarned) + " ss at " + city.name);
     }
 
     public void technique() {

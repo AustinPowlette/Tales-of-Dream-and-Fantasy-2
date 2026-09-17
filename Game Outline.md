@@ -107,7 +107,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ **Forage/Mine spot quests** — queued from `professionPicker()` when materials are missing; call forage()/mine() in current tile
 - ✅ **Battle Dislike / Battle Rival / Battle Arch-Enemy quests** — queued from `changeRelationship()` when value reaches -1/-2/-3; Dislike is placeholder for bullyCheck()
 - ❌ **Hunt Beast quest** (seek out a specific beast in known locations)
-- ❌ **Buy Gear quest** (when slots are empty or gear is outgrown)
+- 🟡 **Buy Gear quest** — immediate `buyGear()` call when in city with shops and missing equipment; travel-to-city quest deferred
 - ❌ **Go Sell quest** (when backpack reaches size threshold)
 - ❌ **Bounty Hunt quest** (within 5–10 levels of target beast/player)
 - ✅ **Revenge quest** — queued in `dead()` when close friend (value>=2) is within 1 major realm of killer; weaker friends defer to bounty/squad (not yet implemented)
@@ -130,7 +130,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
 - 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
 - ❌ **Sect NPC decision engine** — sects exist but members have no sect-specific behavior
-- ❌ **Economy/Merchant decision engine** — Merchant trait is a stub
+- 🟡 **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel and full NPC buy/sell trees deferred
 - ❌ Higher-level characters avoiding weaker targets (design doc note)
 - ❌ Affiliation-based aggression rules fully enforced (Good should never attack non-Evil; Neutral should rarely attack)
 - ❌ Bully personality type
@@ -147,8 +147,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `sell(Area city)` — transfers non-spare backpack items to city pool; pays `100^(lvl/10)` ss (placeholder pricing); pill selling deferred
 - ✅ Go Sell quest — triggers at backpack.size() > 20; Area quest to nearest known city; calls sell() on arrival
 - ✅ Currency tiers added — `sc`, `dc`, `ij` fields; `convertCurrency()` rolls up at 1M:1 per tier
-- ❌ **Shop class** (no vendor/market object — per-merchant shops deferred)
-- ❌ **Merchant trait** AI and buy/sell rates
+- ✅ **Shop class** — `Shop.java`; per-merchant; buyRate=0.55, sellRate=1.50, cityBuyRate=0.30; `buyFromSeller()`, `sellToBuyer()`, `restockFromCity()`
+- 🟡 **Merchant trait** — sets up shops in cities, restocks from city pool; arbitrage travel and NPC buy decision tree deferred
 - ❌ Potential pill selling restriction (only sell if potential = 100)
 - ❌ **Item pricing** confirmed (current formula is placeholder — needs economy pass)
 - ❌ 10% city tax routing (tax already collected; distribution logic not implemented)

@@ -25,6 +25,9 @@ Solid foundation implemented: world generation, cultivation, combat, all craftin
 7. **Relationship string comparison** — `q.name == "Find Person"` uses reference equality instead of `.equals()`, so the remove condition never fires.
 8. **Quest target area is stale** — Character-category quests store `targetArea` at creation time; it is never updated when the target character moves.
 
+## Design Notes
+- **Arrays** protect area features (Shops, Dungeons/Tombs, Sects, Cities). Attackers must break the array AND defeat any defending cultivators to take the area. Arrays give defenders a temporary level boost during the fight. Multiple arrays can be installed in one area but they do not buff each other — only the array being broken at that moment matters.
+
 ## Architecture Notes
 - `Map.characters` is an ArrayList where dead characters are nulled out by index (`characters.set(id, null)`). Always null-check before use: `Map.characters.get(someId)`.
 - `Map.tempCharacters` accumulates new births; added to `characters` at end of tick.
@@ -101,3 +104,6 @@ Before implementing any new feature, read the relevant section of:
 - `src/Game/CultivationGame2.txt` — original design vision
 - `src/Game/CultivationGame2Recent.txt` — revised notes, combat revamp, quest logic
 - `src/Game/Cultivation Game 2 Temp.txt` — working scratchpad, quest categories, priorities
+
+### Design Doc Update Rule
+**Any time a design decision is made during development** (in conversation, during debugging, or through implementation discovery), append it to the most relevant design doc before the session ends. New mechanics → `CultivationGame2.txt`. Quest/combat revisions → `CultivationGame2Recent.txt`. Working notes / priorities → `Cultivation Game 2 Temp.txt`. Keep entries terse (1–2 lines each). This prevents design drift from context window loss.
