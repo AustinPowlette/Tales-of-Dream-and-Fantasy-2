@@ -937,6 +937,16 @@ public class Character {
                 }
                 break;
 
+            case "Forage":
+                forage();
+                questSuccess = 2;
+                break;
+
+            case "Mine":
+                mine();
+                questSuccess = 2;
+                break;
+
             case "Test":
                 //System.out.println("Test completed");
                 questSuccess = 2;
@@ -971,6 +981,17 @@ public class Character {
                     System.out.println("Weird Case?");
                     return -1;
                 }
+
+            case "Battle Dislike":
+                // TODO: replace with bullyCheck() at -1 relationship when bully system is implemented
+            case "Battle Rival":
+            case "Battle Arch-Enemy": {
+                Character enemy = characters.get(quest.targetCharacter);
+                if (enemy != null && !enemy.dead) {
+                    battleCheck(enemy);
+                }
+                return 1;
+            }
 
         }
         return -1;
@@ -1062,9 +1083,14 @@ public class Character {
                 success = alchemy();
                 if (success == -2) {
                     forage();
+                    if (spotQuests.stream().noneMatch(q -> "Forage".equals(q.name)))
+                        spotQuests.add(new Quest("Forage", false, 40, 3, 70));
                 }
                 return success;
             case Blacksmith:
+                if (materialBag.stream().noneMatch(i -> i.itemType == Item.ItemType.Metal && i.quantity >= 1000))
+                    if (spotQuests.stream().noneMatch(q -> "Mine".equals(q.name)))
+                        spotQuests.add(new Quest("Mine", false, 40, 3, 70));
                 smithing();
                 break;
             case Friendly:
@@ -1078,9 +1104,15 @@ public class Character {
                 }
                 break;
             case Tailor:
+                if (materialBag.stream().noneMatch(i -> i.quantity >= 1000))
+                    if (spotQuests.stream().noneMatch(q -> "Forage".equals(q.name)))
+                        spotQuests.add(new Quest("Forage", false, 40, 3, 70));
                 tailoring();
                 break;
             case Scribe:
+                if (materialBag.stream().noneMatch(i -> i.quantity >= 10000))
+                    if (spotQuests.stream().noneMatch(q -> "Forage".equals(q.name)))
+                        spotQuests.add(new Quest("Forage", false, 40, 3, 70));
                 array();
                 break;
             case Leader:
@@ -1401,6 +1433,24 @@ public class Character {
         }
         temp.changeValue(change);
         temp2.changeValue(change);
+
+        if (change < 0) {
+            final String bName;
+            final int bPriority;
+            final int bPriorityDiff;
+            final int bMaxPriority;
+            if (change == -1) {
+                bName = "Battle Dislike";   bPriority = 20; bPriorityDiff = 3; bMaxPriority = 40;
+            } else if (change == -2) {
+                bName = "Battle Rival";     bPriority = 35; bPriorityDiff = 5; bMaxPriority = 60;
+            } else {
+                bName = "Battle Arch-Enemy"; bPriority = 50; bPriorityDiff = 8; bMaxPriority = 80;
+            }
+            if (this.targetQuests.stream().noneMatch(q -> q.targetCharacter == player.id && bName.equals(q.name)))
+                this.targetQuests.add(new Quest(bName, false, bPriority, bPriorityDiff, bMaxPriority, player));
+            if (player.targetQuests.stream().noneMatch(q -> q.targetCharacter == this.id && bName.equals(q.name)))
+                player.targetQuests.add(new Quest(bName, false, bPriority, bPriorityDiff, bMaxPriority, this));
+        }
 
         checkRelationship(player);
 

@@ -104,13 +104,13 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `spotQuests()` return value fixed — now returns `questSuccess`
 - ✅ Quest target area refreshed from live character location before each pathfinder call
 - ✅ `currentQuest` null-check added in `changeRelationship()`
-- ❌ **Forage/Mine quest** (when profession fails due to missing materials)
+- ✅ **Forage/Mine spot quests** — queued from `professionPicker()` when materials are missing; call forage()/mine() in current tile
+- ✅ **Battle Dislike / Battle Rival / Battle Arch-Enemy quests** — queued from `changeRelationship()` when value reaches -1/-2/-3; Dislike is placeholder for bullyCheck()
 - ❌ **Hunt Beast quest** (seek out a specific beast in known locations)
 - ❌ **Buy Gear quest** (when slots are empty or gear is outgrown)
 - ❌ **Go Sell quest** (when backpack reaches size threshold)
 - ❌ **Bounty Hunt quest** (within 5–10 levels of target beast/player)
 - ❌ **Revenge quest** (when close friend is killed)
-- ❌ **Battle Rival / Battle Dislike / Battle Arch-Enemy quests**
 - ❌ **Sect events** (politics, recruitment, tournaments)
 - ❌ **Potential quest** (seek potential-raising pills or events)
 - ❌ **Join Sect quest**
