@@ -1998,19 +1998,18 @@ public class Character {
             }
             else if (deathChance) {
                 forbiddenCheck();
+                if (this.dead) { this.dead(opponent); return; }
                 forbiddenUsed = true;
-                System.out.println("Forbiden technique used");
             }
         }
         else if (winChance > opponent.caution) {
             if(opponent.fleeCheck(this)) {
-                System.out.println("Fight Fleed");
                 return;
             }
             else if (deathChance) {
                 opponent.forbiddenCheck();
+                if (opponent.dead) { opponent.dead(this); return; }
                 oppForbiddenUsed = true;
-                System.out.println("Opponent used forbidden technique");
             }
         }
 
@@ -2028,19 +2027,17 @@ public class Character {
 
             if (winChance < caution && oppForbiddenUsed) {
                 if (fleeCheck(opponent)) {
-                    System.out.println("Fight Fleed");
                     return;
                 } else if (deathChance) {
                     forbiddenCheck();
-                    System.out.println("Forbiden technique used");
+                    if (this.dead) { this.dead(opponent); return; }
                 }
             } else if (winChance > opponent.caution && forbiddenUsed) {
                 if (opponent.fleeCheck(this)) {
-                    System.out.println("Fight Fleed");
                     return;
                 } else if (deathChance) {
                     opponent.forbiddenCheck();
-                    System.out.println("Opponent used forbidden technique");
+                    if (opponent.dead) { opponent.dead(this); return; }
                 }
             }
         }
