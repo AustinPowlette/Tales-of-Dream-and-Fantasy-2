@@ -61,7 +61,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Lucky trait (±45 win chance)
 - 🟡 Sparring (`sparring` boolean exists, no dedicated sparring quest/event path)
 - ❌ Group/party battle algorithm
-- ❌ Bounty system (wanted flag, bounty board in cities)
+- ✅ Bounty system (wanted flag, bounty board in cities)
 - ❌ Arena/tournament combat
 - ✅ Combat system complete — current `battle()` IS the revamped design; tile-based push mechanic was intentionally dropped as too complex
 - ✅ Second technique slot (slot 2) is a training slot — holds highest-potential technique, does NOT contribute to combat power by design; children inherit it as their starting technique
@@ -76,6 +76,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `smithing()` — create weapons from metals
 - ✅ `tailoring()` — create clothing/armor from materials
 - ✅ `array()` — create magical arrays from materials
+- ✅ `installArray(Area)` — any character can install an array at a location; Scribes auto-install on craft
+- ✅ Array combat — `arrayBreakAttempt()`: attacker fights strongest array first; array removed on break; 5% death on loss; defender gets `bestArrayLvl/10+1` tempLvl boost; beasts blocked entirely; array stronger than attacker → defender won't interfere
 - ✅ `technique()` — Innovative trait creates new techniques
 - ✅ `cityLeadership()` — Leader creates city (1M ss)
 - ✅ `sectLeadership()` — Leader creates sect (1B ss)
@@ -130,7 +132,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
 - 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
 - 🟡 **Sect NPC decision engine** — Join Sect implemented; sect-location preference, recruitment quests, and political events still deferred
-- 🟡 **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel and full NPC buy/sell trees deferred
+- 🟡 **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel via Restock Trip quest (combines pool-size scan, own-shop bonus, circuit distance); full NPC buy/sell trees deferred
 - ❌ Higher-level characters avoiding weaker targets (design doc note)
 - ❌ Affiliation-based aggression rules fully enforced (Good should never attack non-Evil; Neutral should rarely attack)
 - ❌ Bully personality type

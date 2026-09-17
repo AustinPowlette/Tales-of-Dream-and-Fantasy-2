@@ -1,5 +1,16 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-17 (5)
+- Added: `arrayBreakAttempt(Area area)` — attacker fights strongest array first; removes it on break (win OR lose); 5% death chance on loss; win chance uses `50 - 15*(arrayPower - tempLvl)` where `arrayPower = array.lvl / 5`
+- Added: `installArray(Area area)` — moves first item from `arrayBag` to `area.arrayBag`
+- Changed: Scribe `professionPicker()` — auto-installs crafted arrays at current location via `installArray(location)`
+- Changed: `battleCheck()` — beasts are blocked entirely by area arrays; human attackers must call `arrayBreakAttempt()` before engaging defender; if array is stronger than attacker (`arrayPower > this.tempLvl`), defender won't interfere and attacker only fights array
+- Changed: `battle()` — defender gets `bestArrayLvl / 10 + 1` bonus to `tempLvl` from arrays in their area (after both `tempLvlCheck()` calls, before win chance)
+- Added: `findBestRestockCity()` — scores known cities by pool size ×10 (Option A), own-shop presence +50 (Option B), proximity bonus up to +30 (Option C); returns highest-scoring city with a non-empty backpack
+- Added: Restock Trip Area quest trigger in `quest()` — Merchant with ownedShops has 10% chance/turn to queue travel to best restock city
+- Added: Restock Trip viability in `questViable()` Area branch — invalidates if city lost owner or pool is empty
+- Added: Restock Trip case in `targetQuests()` — opens shop at new city if under cap, restocks all owned shops there
+
 ## 2026-09-17 (4)
 - Fixed: Buy Gear trigger and `buyGear()` item level comparison — now uses `character.lvl` (1-100) vs `item.lvl` (1-100) instead of `majorLvl` (0-10); one major realm = 10 item levels; trigger fires when `equipped.lvl + 10 <= lvl`; `buyGear()` buys items at `item.lvl >= lvl - 9`
 - Changed: Leader 20/80 split in `professionPicker()` — at professionLvl 1, 80% skip straight to sect track (`professionLvl = 50`), 20% try city first; both then attempt `sectLeadership()` at professionLvl 50

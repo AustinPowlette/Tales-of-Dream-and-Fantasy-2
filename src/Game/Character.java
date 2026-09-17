@@ -884,6 +884,16 @@ public class Character {
             }
         }
 
+        // Restock Trip: Merchant with shops seeks best city for arbitrage restocking (10% chance/turn)
+        if (trait == Traits.Merchant && !ownedShops.isEmpty() && rand.nextInt(10) == 0
+                && targetQuests.stream().noneMatch(q -> "Restock Trip".equals(q.name))
+                && (currentQuest == null || !"Restock Trip".equals(currentQuest.name))) {
+            Area bestCity = findBestRestockCity();
+            if (bestCity != null) {
+                targetQuests.add(new Quest("Restock Trip", true, 30, 2, 60, bestCity));
+            }
+        }
+
         Quest tempQuest = this.spotQuests.peek();
         int questCode = -2;
 
@@ -996,6 +1006,10 @@ public class Character {
                 if ("Join Sect".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.sect != null && sect == null) ? 1 : 0;
                 }
+                if ("Restock Trip".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.city && quest.targetArea.cityOwner != null
+                            && quest.targetArea.backpack != null && !quest.targetArea.backpack.isEmpty()) ? 1 : 0;
+                }
                 return 1;
 
         }
@@ -1105,6 +1119,20 @@ public class Character {
                     location.sect.join(this);
                 }
                 return 1;
+            case "Restock Trip": {
+                if (location.city && location.cityOwner != null) {
+                    boolean hasShopHere = ownedShops.stream().anyMatch(s -> s.location == location);
+                    if (!hasShopHere && ownedShops.size() < maxShops()) {
+                        Shop shop = new Shop(this, location);
+                        ownedShops.add(shop);
+                        location.shops.add(shop);
+                    }
+                    for (Shop shop : ownedShops) {
+                        if (shop.location == location) shop.restockFromCity(location);
+                    }
+                }
+                return 1;
+            }
 
         }
         return -1;
@@ -1230,6 +1258,7 @@ public class Character {
                     if (spotQuests.stream().noneMatch(q -> "Forage".equals(q.name)))
                         spotQuests.add(new Quest("Forage", false, 40, 3, 70));
                 array();
+                if (!arrayBag.isEmpty()) installArray(location);
                 break;
             case Leader:
                 if (professionLvl == 1) {
@@ -1875,6 +1904,22 @@ public class Character {
 
     public int maxShops() { return Math.max(1, majorLvl); }
 
+    // Scores known cities by pool size (A), own shop presence (B), and proximity (C).
+    private Area findBestRestockCity() {
+        Area best = null;
+        int bestScore = -1;
+        for (Area area : knownLocations) {
+            if (area == null || !area.city || area.cityOwner == null
+                    || area.backpack == null || area.backpack.isEmpty()) continue;
+            int score = area.backpack.size() * 10;
+            for (Shop s : ownedShops) { if (s.location == area) { score += 50; break; } }
+            int dist = Math.abs(area.x - location.x) + Math.abs(area.y - location.y);
+            score += Math.max(0, 30 - dist);
+            if (score > bestScore) { bestScore = score; best = area; }
+        }
+        return best;
+    }
+
     public void buyGear() {
         if (!location.city || location.shops.isEmpty()) return;
         int currentWeaponLvl = equippedWeapon != null ? equippedWeapon.lvl : -1;
@@ -2260,6 +2305,10 @@ public class Character {
 
     public void battleCheck(Character opponent) {
         if (trait == Traits.Beast && !opponent.dead && opponent.time >= 0) {
+            // Beasts are blocked by arrays
+            if (opponent.location.arrayBag != null && !opponent.location.arrayBag.isEmpty()) {
+                return;
+            }
             if (opponent.age < 8 && opponent.mother != null && !opponent.mother.dead) {
                 battle(opponent.mother);
                 return;
@@ -2274,6 +2323,26 @@ public class Character {
         if (relationshipList.contains(opponent.id) != null) {
             if (!sparring && relationshipList.contains(opponent.id).value >= 1) {
                 return;
+            }
+        }
+
+        // Array protection: attacker must break the strongest array before engaging
+        if (opponent.location.arrayBag != null && !opponent.location.arrayBag.isEmpty()) {
+            Item strongestArray = null;
+            for (Item a : opponent.location.arrayBag) {
+                if (strongestArray == null || a.lvl > strongestArray.lvl) strongestArray = a;
+            }
+            if (strongestArray != null) {
+                this.tempLvlCheck();
+                opponent.tempLvlCheck();
+                int arrayPower = strongestArray.lvl / 5;
+                if (arrayPower > this.tempLvl) {
+                    // Array stronger than attacker — defender won't interfere; just fight the array
+                    arrayBreakAttempt(opponent.location);
+                    return;
+                }
+                // Array weak/equal — must break it, then fight defender
+                if (!arrayBreakAttempt(opponent.location)) return;
             }
         }
 
@@ -2302,6 +2371,34 @@ public class Character {
         return true;
     }
 
+    // Returns true if the attacker breaks the strongest array; removes it regardless of outcome.
+    // On failure: 5% chance to die.
+    public boolean arrayBreakAttempt(Area area) {
+        if (area.arrayBag == null || area.arrayBag.isEmpty()) return true;
+        Item strongest = null;
+        for (Item a : area.arrayBag) {
+            if (strongest == null || a.lvl > strongest.lvl) strongest = a;
+        }
+        if (strongest == null) return true;
+        tempLvlCheck();
+        int arrayPower = strongest.lvl / 5;
+        int winChance = Math.max(0, Math.min(100, 50 - 15 * (arrayPower - tempLvl)));
+        area.arrayBag.remove(strongest);
+        if (rand.nextInt(100) < winChance) {
+            return true;
+        }
+        if (rand.nextInt(20) == 0) {
+            dead(null);
+        }
+        return false;
+    }
+
+    public void installArray(Area area) {
+        if (!arrayBag.isEmpty()) {
+            area.arrayBag.add(arrayBag.remove(0));
+        }
+    }
+
     public void battle(Character opponent) {
         // (MESSAGE) System.out.println(this + " has challenged " + opponent + " to a fight!");
 
@@ -2309,6 +2406,15 @@ public class Character {
         // (NOTE) Optimizes Equipment and Techniques and Updates Corresponding TempLvl
         this.tempLvlCheck();
         opponent.tempLvlCheck();
+
+        // Defender gets a boost from arrays protecting their area
+        if (opponent.location.arrayBag != null && !opponent.location.arrayBag.isEmpty()) {
+            int bestArrayLvl = 0;
+            for (Item a : opponent.location.arrayBag) {
+                if (a.lvl > bestArrayLvl) bestArrayLvl = a.lvl;
+            }
+            opponent.tempLvl += bestArrayLvl / 10 + 1;
+        }
 
         System.out.println("TempLvl of " + this + " is " + tempLvl);
         System.out.println("TempLvl of " + opponent + " is " + opponent.tempLvl);
