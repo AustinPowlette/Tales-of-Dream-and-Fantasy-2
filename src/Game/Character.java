@@ -1022,7 +1022,7 @@ public class Character {
             case 1:
                 beastBattleCheck();
                 result = 2;
-                //Interact With A Player
+                break;
             case 2:
                 interact(target);
                 result = 2;
@@ -1070,8 +1070,10 @@ public class Character {
                 else {
                     success = -2;
                 }
+                break;
             case Tailor:
                 tailoring();
+                break;
             case Scribe:
                 array();
                 break;
