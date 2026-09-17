@@ -31,6 +31,7 @@ public class Area {
     // Create an ArrayList of Structures and Create a Structure Object
 
     ArrayList<Shop> shops = new ArrayList<>();
+    ArrayList<Quest> bounties = new ArrayList<>();
     ArrayList<Character> characters = new ArrayList<Character>();
     ArrayList<Character> deadCharacters = new ArrayList<>();
 

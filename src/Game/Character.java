@@ -783,13 +783,25 @@ public class Character {
                 if (friend != null && !friend.dead && value >= 2) {
                     value -= 1;
                     friend.changeRelationship(killer, -value);
-                    // Queue Revenge if within one major realm of the killer; otherwise bounty/squad (not yet implemented)
                     if (!killer.dead && friend.majorLvl >= killer.majorLvl - 1) {
+                        // Strong enough for revenge
                         final int killerId = killer.id;
                         boolean hasRevenge = friend.targetQuests.stream()
                                 .anyMatch(q -> "Revenge".equals(q.name) && q.targetCharacter == killerId);
                         if (!hasRevenge)
                             friend.targetQuests.add(new Quest("Revenge", true, 60, 8, 80, killer));
+                    } else if (!killer.dead) {
+                        // Too weak for revenge — post a bounty at the nearest known city
+                        final int killerId = killer.id;
+                        for (Area area : friend.knownLocations) {
+                            if (area != null && area.city) {
+                                boolean alreadyPosted = area.bounties.stream()
+                                        .anyMatch(b -> b.targetCharacter == killerId);
+                                if (!alreadyPosted)
+                                    area.bounties.add(new Quest("Bounty Hunt", true, 40, 3, 70, killer));
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -826,12 +838,50 @@ public class Character {
                 targetQuests.add(new Quest("Go Sell", true, 50, 0, 70, targetCity));
         }
 
-        // Buy Gear: missing slot, or equipped gear is a full major level behind current realm
+        // Buy Gear: missing slot, or equipped gear is a full major realm (10 levels) behind character level
         if (location.city && !location.shops.isEmpty()
                 && (equippedWeapon == null || equippedClothing == null
-                    || (equippedWeapon != null && equippedWeapon.lvl < majorLvl)
-                    || (equippedClothing != null && equippedClothing.lvl < majorLvl))) {
+                    || (equippedWeapon != null && equippedWeapon.lvl + 10 <= lvl)
+                    || (equippedClothing != null && equippedClothing.lvl + 10 <= lvl))) {
             buyGear();
+        }
+
+        // Hunt Beast: 20% chance per turn to seek combat in a known area with level-appropriate monsters
+        if (rand.nextInt(5) == 0
+                && targetQuests.stream().noneMatch(q -> "Hunt Beast".equals(q.name))
+                && (currentQuest == null || !"Hunt Beast".equals(currentQuest.name))) {
+            for (Area area : knownLocations) {
+                if (area != null && area.monsters > 0
+                        && area.highestLvl >= lvl - 10 && area.highestLvl <= lvl + 15) {
+                    targetQuests.add(new Quest("Hunt Beast", false, 30, 2, 50, area));
+                    break;
+                }
+            }
+        }
+
+        // Join Sect: non-Leader adults with no sect seek a known sect (5% chance per turn, low priority)
+        if (sect == null && trait != Traits.Leader && age >= 8 && rand.nextInt(20) == 0
+                && targetQuests.stream().noneMatch(q -> "Join Sect".equals(q.name))
+                && (currentQuest == null || !"Join Sect".equals(currentQuest.name))) {
+            for (Area area : knownLocations) {
+                if (area != null && area.sect != null) {
+                    targetQuests.add(new Quest("Join Sect", true, 20, 1, 40, area));
+                    break;
+                }
+            }
+        }
+
+        // Bounty Hunt: pick up posted bounties at cities within 10 levels of the target
+        if (location.city && !location.bounties.isEmpty()) {
+            for (Quest bounty : new ArrayList<>(location.bounties)) {
+                Character target = characters.get(bounty.targetCharacter);
+                if (target != null && !target.dead && Math.abs(lvl - target.lvl) <= 10
+                        && targetQuests.stream().noneMatch(q -> "Bounty Hunt".equals(q.name)
+                                && q.targetCharacter == bounty.targetCharacter)) {
+                    targetQuests.add(new Quest("Bounty Hunt", true, 40, 3, 70, target));
+                    location.bounties.remove(bounty);
+                }
+            }
         }
 
         Quest tempQuest = this.spotQuests.peek();
@@ -940,6 +990,12 @@ public class Character {
                 if ("Go Sell".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.city && quest.targetArea.cityOwner != null) ? 1 : 0;
                 }
+                if ("Hunt Beast".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.monsters > 0) ? 1 : 0;
+                }
+                if ("Join Sect".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.sect != null && sect == null) ? 1 : 0;
+                }
                 return 1;
 
         }
@@ -1024,17 +1080,31 @@ public class Character {
                 }
                 return 1;
 
-            case "Battle Dislike":
-                // TODO: replace with bullyCheck() at -1 relationship when bully system is implemented
+            case "Battle Dislike": {
+                Character bully = characters.get(quest.targetCharacter);
+                if (bully != null && !bully.dead) {
+                    bullyCheck(bully);
+                }
+                return 1;
+            }
             case "Battle Rival":
             case "Battle Arch-Enemy":
-            case "Revenge": {
+            case "Revenge":
+            case "Bounty Hunt": {
                 Character enemy = characters.get(quest.targetCharacter);
                 if (enemy != null && !enemy.dead) {
                     battleCheck(enemy);
                 }
                 return 1;
             }
+            case "Hunt Beast":
+                beastBattleCheck();
+                return 1;
+            case "Join Sect":
+                if (location.sect != null && sect == null) {
+                    location.sect.join(this);
+                }
+                return 1;
 
         }
         return -1;
@@ -1163,7 +1233,11 @@ public class Character {
                 break;
             case Leader:
                 if (professionLvl == 1) {
-                    cityLeadership();
+                    if (rand.nextInt(5) == 0) {
+                        cityLeadership(); // 20%: city path (sets professionLvl to 50 on success)
+                    } else {
+                        professionLvl = 50; // 80%: skip straight to sect track
+                    }
                 }
                 if (professionLvl == 50) {
                     sectLeadership();
@@ -1812,7 +1886,7 @@ public class Character {
                 for (Item item : new ArrayList<>(shop.inventory)) {
                     long price = shop.sellPrice(item);
                     if (item.itemType == Item.ItemType.Weapon
-                            && item.lvl >= majorLvl - 1       // at or near current realm
+                            && item.lvl >= lvl - 9             // within one major realm of current level
                             && item.lvl > currentWeaponLvl    // strictly better than equipped
                             && canAfford(price)
                             && ss <= price * 4) {             // spend at most 25% of ss
@@ -1824,7 +1898,7 @@ public class Character {
                 for (Item item : new ArrayList<>(shop.inventory)) {
                     long price = shop.sellPrice(item);
                     if (item.itemType == Item.ItemType.Clothing
-                            && item.lvl >= majorLvl - 1
+                            && item.lvl >= lvl - 9
                             && item.lvl > currentArmorLvl
                             && canAfford(price)
                             && ss <= price * 4) {
@@ -1838,8 +1912,11 @@ public class Character {
 
     // TODO: price formulas are placeholders — confirm before finalising economy pass
     public static long itemPrice(Item item) {
-        if (item.lvl <= 0) return 0; // Blood and unlevelled items handled separately
-        return (long) Math.pow(100, item.lvl / 10.0);
+        if (item.lvl <= 0) return 0;
+        long base = (long) Math.pow(100, item.lvl / 10.0);
+        if (item.itemType == Item.ItemType.Pill && item.pillType == Item.PillType.Potential)
+            return base * 5; // Potential Pills require deaths (blood), more valuable
+        return base;
     }
 
     public void sell(Area city) {
@@ -1901,9 +1978,38 @@ public class Character {
         backpack.removeAll(remaining);
         ss += poolEarned;
         convertCurrency();
-        // TODO: handle pillBag selling (cultivation pills vs potential pills have different rules)
-        if (player && skipping <= 0 && age >= 8)
-            System.out.println("Sold " + toSell.size() + " items for " + (merchantEarned + poolEarned) + " ss at " + city.name);
+        // Sell pills: cultivation pills at or below current majorLvl are past-realm useless
+        // Never sell Potential Pills if potential < 100 (still need them)
+        long pillEarned = 0;
+        ArrayList<Item> pillsToSell = new ArrayList<>();
+        for (Item item : pillBag) {
+            if (item.pillType == Item.PillType.Potential) {
+                if (potential >= 100) pillsToSell.add(item);
+            } else if (item.pillType == Item.PillType.Cultivation) {
+                if (item.lvl <= majorLvl) pillsToSell.add(item);
+            }
+        }
+        for (Item pill : pillsToSell) {
+            pillEarned += itemPrice(pill) * pill.quantity;
+            if (city.pillBag != null) {
+                boolean merged = false;
+                for (Item cityPill : city.pillBag) {
+                    if (cityPill.name.equals(pill.name) && cityPill.lvl == pill.lvl) {
+                        cityPill.quantity += pill.quantity;
+                        merged = true;
+                        break;
+                    }
+                }
+                if (!merged) city.pillBag.add(pill);
+            }
+        }
+        pillBag.removeAll(pillsToSell);
+        ss += pillEarned;
+        convertCurrency();
+        if (player && skipping <= 0 && age >= 8) {
+            long totalEarned = merchantEarned + poolEarned + pillEarned;
+            System.out.println("Sold " + (toSell.size() + pillsToSell.size()) + " items for " + totalEarned + " ss at " + city.name);
+        }
     }
 
     public void technique() {
@@ -2133,6 +2239,23 @@ public class Character {
         arrayBag.clear();
         receiver.ss += this.ss;
         this.ss = 0;
+    }
+
+    public void bullyCheck(Character target) {
+        if (target == null || target.dead) return;
+        if (lvl > target.lvl + 15) {
+            // Much stronger: intimidate and steal 25% of their ss
+            long stolen = target.ss / 4;
+            if (stolen > 0) {
+                target.deductSs(stolen);
+                ss += stolen;
+                convertCurrency();
+            }
+            target.changeRelationship(this, -1);
+        } else {
+            // Close enough in level: escalates to a fight
+            battleCheck(target);
+        }
     }
 
     public void battleCheck(Character opponent) {

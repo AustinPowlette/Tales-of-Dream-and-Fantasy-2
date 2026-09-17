@@ -1,5 +1,16 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-17 (4)
+- Fixed: Buy Gear trigger and `buyGear()` item level comparison — now uses `character.lvl` (1-100) vs `item.lvl` (1-100) instead of `majorLvl` (0-10); one major realm = 10 item levels; trigger fires when `equipped.lvl + 10 <= lvl`; `buyGear()` buys items at `item.lvl >= lvl - 9`
+- Changed: Leader 20/80 split in `professionPicker()` — at professionLvl 1, 80% skip straight to sect track (`professionLvl = 50`), 20% try city first; both then attempt `sectLeadership()` at professionLvl 50
+- Added: Hunt Beast Area quest — 20% chance per turn to queue travel to a known area with monsters within ±10/+15 levels; `beastBattleCheck()` called on arrival; viability check invalidates if area runs dry
+- Added: Join Sect Area quest — 5% chance per turn for non-Leader adults with no sect to seek a known sect location; calls `Organization.join()` on arrival; low priority (20, max 40); viability check invalidates if sect dissolves or character already joined
+- Added: Bounty Hunt system — when a close friend is too weak for direct revenge, they post a `Quest("Bounty Hunt")` to the nearest known city's `area.bounties`; characters within 10 levels of the target automatically pick up posted bounties at cities and add to their `targetQuests`; calls `battleCheck()` on target arrival; added `ArrayList<Quest> bounties` to `Area.java`
+- Changed: `targetQuests()` "Battle Dislike" — no longer falls through to battleCheck(); now calls `bullyCheck()` which steals 25% ss when 15+ levels stronger, otherwise escalates to battle
+- Added: `bullyCheck(Character target)` — intimidation mechanic for Dislike quest; significantly weaker targets lose 25% ss and relationship decreases; comparable/stronger targets fight back
+- Changed: `itemPrice()` — Potential Pills priced at 5× base (require deaths/blood, so more valuable); all other items unchanged
+- Changed: `sell()` — pill selling implemented; sells cultivation pills at or below current majorLvl (past-realm, useless); sells Potential Pills only if potential >= 100; pills go to city.pillBag; print now includes pill count and pill earnings
+
 ## 2026-09-17 (3)
 - Fixed: Buy Gear trigger in `quest()` — now also fires when equipped weapon or clothing is a full major level below character's `majorLvl` (previously only fired when slot was empty)
 - Fixed: `buyGear()` purchase threshold — replaced `item.lvl > equipped.lvl + 3` with `item.lvl >= majorLvl - 1 && item.lvl > currentLvl`; character now buys gear that brings them up to their current realm rather than waiting for a 3-level gap

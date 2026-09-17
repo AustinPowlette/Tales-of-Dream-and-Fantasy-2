@@ -106,14 +106,14 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `currentQuest` null-check added in `changeRelationship()`
 - ✅ **Forage/Mine spot quests** — queued from `professionPicker()` when materials are missing; call forage()/mine() in current tile
 - ✅ **Battle Dislike / Battle Rival / Battle Arch-Enemy quests** — queued from `changeRelationship()` when value reaches -1/-2/-3; Dislike is placeholder for bullyCheck()
-- ❌ **Hunt Beast quest** (seek out a specific beast in known locations)
-- 🟡 **Buy Gear quest** — immediate `buyGear()` call when in city with shops and missing equipment; travel-to-city quest deferred
+- ✅ **Hunt Beast quest** — 20% chance/turn to travel to level-appropriate known area; `beastBattleCheck()` on arrival
+- 🟡 **Buy Gear quest** — fires when gear is a full major realm (10 levels) behind or slot is empty; travel-to-city quest deferred
 - ❌ **Go Sell quest** (when backpack reaches size threshold)
-- ❌ **Bounty Hunt quest** (within 5–10 levels of target beast/player)
+- ✅ **Bounty Hunt quest** — posted by close friends too weak for Revenge; characters within 10 levels pick up from city bounty board; calls battleCheck on target
 - ✅ **Revenge quest** — queued in `dead()` when close friend (value>=2) is within 1 major realm of killer; weaker friends defer to bounty/squad (not yet implemented)
 - ❌ **Sect events** (politics, recruitment, tournaments)
 - ❌ **Potential quest** (seek potential-raising pills or events)
-- ❌ **Join Sect quest**
+- ✅ **Join Sect quest** — non-Leader adults with no sect seek known sect locations; calls `Organization.join()` on arrival
 - ❌ **Find Dead Parent's Body quest**
 - ❌ **Get Pregnant quest** (prerequisite check version)
 - ❌ Quest priority deconstructor on death (dead characters leave dangling quests)
@@ -129,7 +129,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Beast autonomous movement + attacking characters in tile
 - ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
 - 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
-- ❌ **Sect NPC decision engine** — sects exist but members have no sect-specific behavior
+- 🟡 **Sect NPC decision engine** — Join Sect implemented; sect-location preference, recruitment quests, and political events still deferred
 - 🟡 **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel and full NPC buy/sell trees deferred
 - ❌ Higher-level characters avoiding weaker targets (design doc note)
 - ❌ Affiliation-based aggression rules fully enforced (Good should never attack non-Evil; Neutral should rarely attack)
@@ -152,7 +152,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ❌ Potential pill selling restriction (only sell if potential = 100)
 - ❌ **Item pricing** confirmed (current formula is placeholder — needs economy pass)
 - ❌ 10% city tax routing (tax already collected; distribution logic not implemented)
-- ❌ Leader/city 20%/80% split — NPC Leaders: 20% chance city, 80% chance sect; player character chooses freely
+- ✅ Leader/city 20%/80% split — NPC Leaders: 80% skip to sect track, 20% try city first
 
 ---
 
