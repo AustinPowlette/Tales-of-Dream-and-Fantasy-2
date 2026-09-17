@@ -1462,39 +1462,27 @@ public class Character {
             }
         }
         int value = Math.abs(relationship);
-        System.out.println("Value: " + value);
 
         if (value == 0) {
-            System.out.println("Creating Find Person quest with no change in relationship");
-            System.out.println("Quests before: " + targetQuests);
-            System.out.println("Quests before: " + player.targetQuests);
-
-            // Remove 0 Relation Quests
-            targetQuests.removeIf(q -> q.targetCharacter == player.id && q.name == "Find Person");
-            player.targetQuests.removeIf(q -> q.targetCharacter == this.id && q.name == "Find Person");
-
-            System.out.println("Quests after: " + targetQuests);
-            System.out.println("Quests after: " + player.targetQuests);
+            // Remove Find Person quests when relationship dissolves to neutral
+            targetQuests.removeIf(q -> q.targetCharacter == player.id && "Find Person".equals(q.name));
+            player.targetQuests.removeIf(q -> q.targetCharacter == this.id && "Find Person".equals(q.name));
         }
         else {
-            System.out.println("Creating Find Person quest because change in relationship");
-            System.out.println("Quests before: " + targetQuests);
-            System.out.println("Quests before: " + player.targetQuests);
-
-            // Always ensure both sides have the quest if needed
+            // Ensure both sides have an active Find Person quest (in targetQuests or currentQuest)
             boolean hasQuest1 = this.targetQuests.stream()
-                    .anyMatch(q -> q.targetCharacter == player.id && "Find Person".equals(q.name));
-            hasQuest1 = this.currentQuest.targetCharacter == player.id && "Find Person".equals(this.currentQuest.name);
+                    .anyMatch(q -> q.targetCharacter == player.id && "Find Person".equals(q.name))
+                    || (this.currentQuest != null && this.currentQuest.targetCharacter == player.id
+                        && "Find Person".equals(this.currentQuest.name));
             boolean hasQuest2 = player.targetQuests.stream()
-                    .anyMatch(q -> q.targetCharacter == this.id && "Find Person".equals(q.name));
-            hasQuest2 = player.currentQuest.targetCharacter == this.id && "Find Person".equals(player.currentQuest.name);
+                    .anyMatch(q -> q.targetCharacter == this.id && "Find Person".equals(q.name))
+                    || (player.currentQuest != null && player.currentQuest.targetCharacter == this.id
+                        && "Find Person".equals(player.currentQuest.name));
 
             if (!hasQuest1) {
-                System.out.println("Quest not existing!!!");
                 this.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, player));
             }
             if (!hasQuest2) {
-                System.out.println("Quest not existing!!!2");
                 player.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, this));
             }
 
@@ -1513,9 +1501,6 @@ public class Character {
                     q.maxPriority = 20 * value;
                 }
             });
-
-            System.out.println("Quests after: " + targetQuests);
-            System.out.println("Quests after: " + player.targetQuests);
         }
 
 
