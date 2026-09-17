@@ -941,7 +941,7 @@ public class Character {
         }
 
 
-        return 0;
+        return questSuccess;
     }
 
     public int targetQuests (Quest quest) {
