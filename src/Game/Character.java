@@ -826,9 +826,11 @@ public class Character {
                 targetQuests.add(new Quest("Go Sell", true, 50, 0, 70, targetCity));
         }
 
-        // Buy Gear: if in a city with shops and missing or outgrown equipment, buy immediately
+        // Buy Gear: missing slot, or equipped gear is a full major level behind current realm
         if (location.city && !location.shops.isEmpty()
-                && (equippedWeapon == null || equippedClothing == null)) {
+                && (equippedWeapon == null || equippedClothing == null
+                    || (equippedWeapon != null && equippedWeapon.lvl < majorLvl)
+                    || (equippedClothing != null && equippedClothing.lvl < majorLvl))) {
             buyGear();
         }
 
@@ -1801,25 +1803,31 @@ public class Character {
 
     public void buyGear() {
         if (!location.city || location.shops.isEmpty()) return;
+        int currentWeaponLvl = equippedWeapon != null ? equippedWeapon.lvl : -1;
+        int currentArmorLvl  = equippedClothing != null ? equippedClothing.lvl : -1;
         boolean boughtWeapon = false;
         boolean boughtArmor = false;
         for (Shop shop : location.shops) {
             if (!boughtWeapon) {
                 for (Item item : new ArrayList<>(shop.inventory)) {
+                    long price = shop.sellPrice(item);
                     if (item.itemType == Item.ItemType.Weapon
-                            && (equippedWeapon == null || item.lvl > equippedWeapon.lvl + 3)
-                            && canAfford(shop.sellPrice(item))
-                            && ss <= shop.sellPrice(item) * 4) { // spend at most 25% of ss
+                            && item.lvl >= majorLvl - 1       // at or near current realm
+                            && item.lvl > currentWeaponLvl    // strictly better than equipped
+                            && canAfford(price)
+                            && ss <= price * 4) {             // spend at most 25% of ss
                         if (shop.sellToBuyer(this, item)) { equip(); boughtWeapon = true; break; }
                     }
                 }
             }
             if (!boughtArmor) {
                 for (Item item : new ArrayList<>(shop.inventory)) {
+                    long price = shop.sellPrice(item);
                     if (item.itemType == Item.ItemType.Clothing
-                            && (equippedClothing == null || item.lvl > equippedClothing.lvl + 3)
-                            && canAfford(shop.sellPrice(item))
-                            && ss <= shop.sellPrice(item) * 4) {
+                            && item.lvl >= majorLvl - 1
+                            && item.lvl > currentArmorLvl
+                            && canAfford(price)
+                            && ss <= price * 4) {
                         if (shop.sellToBuyer(this, item)) { equip(); boughtArmor = true; break; }
                     }
                 }
