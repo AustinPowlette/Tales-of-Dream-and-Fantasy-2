@@ -56,7 +56,10 @@ public class Character {
     int professionLvl = 1;
     double professionExp = 0;
     double professionExpMax = Math.pow(10, professionLvl / 10);
-    long ss = 0; // Spirit Stones
+    long ss = 0; // Spirit Stones (Major 1-3)
+    long sc = 0; // Spirit Crystals — 1 SC = 1,000,000 SS (Major 4-6)
+    long dc = 0; // Divine Crystals  — 1 DC = 1,000,000 SC (Major 7-9)
+    long ij = 0; // Immortal Jades   — 1 IJ = 1,000,000 DC (Major 10)
     String affiliation = ""; // Evil, Good, Neutral
     Integer affiliationNum;
     Organization sect;
@@ -774,9 +777,17 @@ public class Character {
             for (Relationship relationship : relationshipList.relationships) {
                 Character friend = characters.get(relationship.friendID);
                 Integer value = relationship.value;
-                if (!friend.dead && value >= 2) {
+                if (friend != null && !friend.dead && value >= 2) {
                     value -= 1;
                     friend.changeRelationship(killer, -value);
+                    // Queue Revenge if within one major realm of the killer; otherwise bounty/squad (not yet implemented)
+                    if (!killer.dead && friend.majorLvl >= killer.majorLvl - 1) {
+                        final int killerId = killer.id;
+                        boolean hasRevenge = friend.targetQuests.stream()
+                                .anyMatch(q -> "Revenge".equals(q.name) && q.targetCharacter == killerId);
+                        if (!hasRevenge)
+                            friend.targetQuests.add(new Quest("Revenge", true, 60, 8, 80, killer));
+                    }
                 }
             }
 
@@ -800,6 +811,18 @@ public class Character {
     }
     public void quest () {
         consume(); // Consume pills IMPORTANT!!!
+
+        // Dynamic quest triggers — checked each turn
+        if (backpack.size() > 20 && targetQuests.stream().noneMatch(q -> "Go Sell".equals(q.name))
+                && (currentQuest == null || !"Go Sell".equals(currentQuest.name))) {
+            Area targetCity = null;
+            for (Area area : knownLocations) {
+                if (area != null && area.city && area.cityOwner != null) { targetCity = area; break; }
+            }
+            if (targetCity != null)
+                targetQuests.add(new Quest("Go Sell", true, 50, 0, 70, targetCity));
+        }
+
         Quest tempQuest = this.spotQuests.peek();
         int questCode = -2;
 
@@ -903,8 +926,10 @@ public class Character {
                     return 1;
                 }
             case Area:
-                // Come back and fill this in later for merchants and sects
-                return 1; // Make sure this makes sense later
+                if ("Go Sell".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.city && quest.targetArea.cityOwner != null) ? 1 : 0;
+                }
+                return 1;
 
         }
         return 0;
@@ -982,10 +1007,17 @@ public class Character {
                     return -1;
                 }
 
+            case "Go Sell":
+                if (location.city && location.cityOwner != null) {
+                    sell(location);
+                }
+                return 1;
+
             case "Battle Dislike":
                 // TODO: replace with bullyCheck() at -1 relationship when bully system is implemented
             case "Battle Rival":
-            case "Battle Arch-Enemy": {
+            case "Battle Arch-Enemy":
+            case "Revenge": {
                 Character enemy = characters.get(quest.targetCharacter);
                 if (enemy != null && !enemy.dead) {
                     battleCheck(enemy);
@@ -1104,9 +1136,12 @@ public class Character {
                 }
                 break;
             case Tailor:
-                if (materialBag.stream().noneMatch(i -> i.quantity >= 1000))
-                    if (spotQuests.stream().noneMatch(q -> "Forage".equals(q.name)))
+                if (materialBag.stream().noneMatch(i -> i.itemType == Item.ItemType.Herb && i.quantity >= 1000))
+                    if (location.herbMaterials > 0 && spotQuests.stream().noneMatch(q -> "Forage".equals(q.name)))
                         spotQuests.add(new Quest("Forage", false, 40, 3, 70));
+                if (materialBag.stream().noneMatch(i -> i.itemType == Item.ItemType.Metal && i.quantity >= 1000))
+                    if (location.metalMaterials > 0 && spotQuests.stream().noneMatch(q -> "Mine".equals(q.name)))
+                        spotQuests.add(new Quest("Mine", false, 40, 3, 70));
                 tailoring();
                 break;
             case Scribe:
@@ -1733,6 +1768,61 @@ public class Character {
             }
         }
     }
+    public void convertCurrency() {
+        final long RATE = 1_000_000L;
+        while (ss >= RATE) { sc++; ss -= RATE; }
+        while (sc >= RATE) { dc++; sc -= RATE; }
+        while (dc >= RATE) { ij++; dc -= RATE; }
+    }
+
+    // TODO: price formulas are placeholders — confirm before finalising economy pass
+    public static long itemPrice(Item item) {
+        if (item.lvl <= 0) return 0; // Blood and unlevelled items handled separately
+        return (long) Math.pow(100, item.lvl / 10.0);
+    }
+
+    public void sell(Area city) {
+        // Identify spare weapon/clothing to keep as backup in case equipped item breaks
+        Item spareWeapon = null;
+        Item spareClothing = null;
+        for (Item item : backpack) {
+            if (item.itemType == Item.ItemType.Weapon && item != equippedWeapon) {
+                if (spareWeapon == null || item.lvl > spareWeapon.lvl) spareWeapon = item;
+            }
+            if (item.itemType == Item.ItemType.Clothing && item != equippedClothing) {
+                if (spareClothing == null || item.lvl > spareClothing.lvl) spareClothing = item;
+            }
+        }
+        ArrayList<Item> toSell = new ArrayList<>();
+        for (Item item : backpack) {
+            if (item == equippedWeapon || item == equippedClothing) continue;
+            if (item == spareWeapon   || item == spareClothing)    continue;
+            toSell.add(item);
+        }
+        long earned = 0;
+        for (Item item : toSell) {
+            long price = itemPrice(item);
+            earned += price;
+            if (city.backpack != null) {
+                boolean merged = false;
+                for (Item cityItem : city.backpack) {
+                    if (cityItem.name.equals(item.name) && cityItem.lvl == item.lvl) {
+                        cityItem.quantity += item.quantity;
+                        merged = true;
+                        break;
+                    }
+                }
+                if (!merged) city.backpack.add(item);
+            }
+        }
+        backpack.removeAll(toSell);
+        ss += earned;
+        convertCurrency();
+        // TODO: handle pillBag selling (cultivation pills vs potential pills have different rules)
+        if (player && skipping <= 0 && age >= 8)
+            System.out.println("Sold " + toSell.size() + " items for " + earned + " ss at " + city.name);
+    }
+
     public void technique() {
         Technique technique = null;
         switch (rand.nextInt(2)) {
@@ -1767,6 +1857,7 @@ public class Character {
     public void cityLeadership() {
         if (ss >= 1000000 && !location.city && rand.nextInt(100) == 0) {
             location.city = true;
+            location.cityOwner = this;
             location.population = rand.nextInt((startingPopulation * 100000) - startingPopulation + 1) + startingPopulation;
             location.backpack = new ArrayList<>();
             location.materialBag = new ArrayList<>();

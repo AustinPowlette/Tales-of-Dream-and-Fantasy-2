@@ -110,7 +110,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ❌ **Buy Gear quest** (when slots are empty or gear is outgrown)
 - ❌ **Go Sell quest** (when backpack reaches size threshold)
 - ❌ **Bounty Hunt quest** (within 5–10 levels of target beast/player)
-- ❌ **Revenge quest** (when close friend is killed)
+- ✅ **Revenge quest** — queued in `dead()` when close friend (value>=2) is within 1 major realm of killer; weaker friends defer to bounty/squad (not yet implemented)
 - ❌ **Sect events** (politics, recruitment, tournaments)
 - ❌ **Potential quest** (seek potential-raising pills or events)
 - ❌ **Join Sect quest**
@@ -143,13 +143,15 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ City initialization creates area inventory bags
 - ✅ Tax collection stub (cityOwner.ss += population per tick — but `cityOwner` is never set)
 - 🟡 Area inventory bags (`backpack`, `materialBag`, `pillBag`, `arrayBag`) initialized in cities but never used
-- ❌ **Shop class** (no vendor/market object)
-- ❌ **Market array** in city (city item pool with seller tracking)
-- ❌ **Buy Gear AI logic** (NPCs checking if they need gear)
-- ❌ **Sell AI logic** (NPCs selling surplus items to city market)
-- ❌ Merchant trait buying at 1/100th price, selling at normal
+- ✅ `cityLeadership()` now sets `cityOwner` — unblocks tax collection
+- ✅ `sell(Area city)` — transfers non-spare backpack items to city pool; pays `100^(lvl/10)` ss (placeholder pricing); pill selling deferred
+- ✅ Go Sell quest — triggers at backpack.size() > 20; Area quest to nearest known city; calls sell() on arrival
+- ✅ Currency tiers added — `sc`, `dc`, `ij` fields; `convertCurrency()` rolls up at 1M:1 per tier
+- ❌ **Shop class** (no vendor/market object — per-merchant shops deferred)
+- ❌ **Merchant trait** AI and buy/sell rates
 - ❌ Potential pill selling restriction (only sell if potential = 100)
-- ❌ 10% city tax routing to founder
+- ❌ **Item pricing** confirmed (current formula is placeholder — needs economy pass)
+- ❌ 10% city tax routing (tax already collected; distribution logic not implemented)
 - ❌ Leader/city 20%/80% split — NPC Leaders: 20% chance city, 80% chance sect; player character chooses freely
 
 ---
