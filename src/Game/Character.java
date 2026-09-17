@@ -829,6 +829,12 @@ public class Character {
 
         // If currentQuest exists and is viable, do pathfinding
         if (questCode != -3) {
+            if (currentQuest.category == Quest.QuestCategory.Character) {
+                Character target = characters.get(currentQuest.targetCharacter);
+                if (target != null && !target.dead) {
+                    currentQuest.targetArea = target.location;
+                }
+            }
             questCode = pathfinder(currentQuest.targetArea);
             if (questCode == 1) {
                 // Do Target Actions
@@ -1785,10 +1791,10 @@ public class Character {
         boolean freshMartial = false;
         boolean freshMovement = false;
         //System.out.println(this + " | " + movementTechnique + " | " + movementTechnique2 + " | " + techniqueList);
-        if (movementTechnique2 != null) {
+        if (movementTechnique2 != null && !techniqueList.contains(movementTechnique2)) {
             techniqueList.add(movementTechnique2);
         }
-        if (martialTechnique2 != null) {
+        if (martialTechnique2 != null && !techniqueList.contains(martialTechnique2)) {
             techniqueList.add(martialTechnique2);
         }
         movementTechnique2 = null;

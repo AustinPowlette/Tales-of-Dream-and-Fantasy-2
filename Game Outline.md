@@ -63,8 +63,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ❌ Group/party battle algorithm
 - ❌ Bounty system (wanted flag, bounty board in cities)
 - ❌ Arena/tournament combat
-- ❌ Revamped tile-based battle sequence (design doc: 100-tile push mechanic)
-- ❌ Second technique slot contributing to combat power
+- ✅ Combat system complete — current `battle()` IS the revamped design; tile-based push mechanic was intentionally dropped as too complex
+- ✅ Second technique slot (slot 2) is a training slot — holds highest-potential technique, does NOT contribute to combat power by design; children inherit it as their starting technique
 
 ---
 
@@ -80,7 +80,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `cityLeadership()` — Leader creates city (1M ss)
 - ✅ `sectLeadership()` — Leader creates sect (1B ss)
 - ✅ Profession exp + level cap at 100
-- 🟡 `professionPicker()` dispatch exists but has missing `break` statements (Friendly→Tailor→Scribe fall-through bug)
+- ✅ `professionPicker()` dispatch — fall-throughs fixed (Friendly/Tailor breaks added)
 - ❌ Merchant profession (stub only — no buying/selling logic)
 - ❌ Pre-req check: if profession fails due to missing materials, queue a Forage/Mine quest (design doc requirement)
 - ❌ Crafting level cap on item quality (items should be capped at crafter's level + 5 majorLvl, per design doc)
@@ -101,9 +101,9 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `targetQuests()` dispatcher — Find Person
 - ✅ "Find Person" quest created for every new relationship
 - ✅ Priority increment per tick (`priorityDiff`)
-- 🟡 `spotQuests()` method always returns 0 (bug — questSuccess is computed but not returned)
-- 🟡 Quest target area is not updated when target character moves
-- 🟡 `currentQuest` null-check is incomplete (NPE risk in `changeRelationship`)
+- ✅ `spotQuests()` return value fixed — now returns `questSuccess`
+- ✅ Quest target area refreshed from live character location before each pathfinder call
+- ✅ `currentQuest` null-check added in `changeRelationship()`
 - ❌ **Forage/Mine quest** (when profession fails due to missing materials)
 - ❌ **Hunt Beast quest** (seek out a specific beast in known locations)
 - ❌ **Buy Gear quest** (when slots are empty or gear is outgrown)
@@ -127,8 +127,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Quest-based pathfinding (`pathfinder()`)
 - ✅ Event probability by affiliation (`eventChoosing()`)
 - ✅ Beast autonomous movement + attacking characters in tile
-- 🟡 `event()` case 1 has fall-through bug (beast battle always also triggers interact)
-- 🟡 `event()` case 0 (PvP battle) is commented out
+- ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
+- 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
 - ❌ **Sect NPC decision engine** — sects exist but members have no sect-specific behavior
 - ❌ **Economy/Merchant decision engine** — Merchant trait is a stub
 - ❌ Higher-level characters avoiding weaker targets (design doc note)
@@ -150,7 +150,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ❌ Merchant trait buying at 1/100th price, selling at normal
 - ❌ Potential pill selling restriction (only sell if potential = 100)
 - ❌ 10% city tax routing to founder
-- ❌ Leader/city 20%/80% split (20% chance city, 80% chance sect, per recent design notes)
+- ❌ Leader/city 20%/80% split — NPC Leaders: 20% chance city, 80% chance sect; player character chooses freely
 
 ---
 
@@ -163,7 +163,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Marriage logic (both adults, single, opposite gender, not related)
 - ✅ Sibling detection
 - ✅ `checkBirth()` — pregnancy trigger from spouse interaction
-- 🟡 Relationship removal on value=0 uses reference equality bug (`q.name == "Find Person"`)
+- ✅ Relationship removal string comparison fixed — `==` → `.equals()`; NPE guard added
 - ❌ Relationship recycling on death (design doc: don't hate killer, just give revenge quest)
 - ❌ Kill counter
 - ❌ Appropriate relationship gain/loss from fighting (design doc requirement)
@@ -180,7 +180,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `eventLootDead()` — loot corpses in area (within 2 majorLvl)
 - ✅ `durabilityCheck()` / `durabilityCheckUtil()` — equipment breaking
 - ✅ Item stackability (Herb, Metal, Pill, Blood stackable; Weapon, Clothing, Array not)
-- 🟡 `equip()` has potential duplication bug when multiple upgrades exist in backpack
+- ✅ `equip()` technique duplication fixed — `!techniqueList.contains()` guard prevents duplicate adds
 - 🟡 `transferAllItems()` doesn't merge Weapons/Arrays by name (only merges Herbs, Metals, Pills by name)
 - ❌ Random name generation for weapons, clothing, arrays, techniques (all use maker's name)
 - ❌ Item counter / kill counter tracking
