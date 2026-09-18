@@ -161,7 +161,8 @@ public class GameDriver {
                                     System.out.println("Weapon: " + (character.equippedWeapon != null ? character.equippedWeapon : "None"));
                                     System.out.println("Armor:  " + (character.equippedClothing != null ? character.equippedClothing : "None"));
                                     System.out.println("Martial Technique: " + character.martialTechnique + "  Movement Technique: " + character.movementTechnique);
-                                    if (character.sect != null) System.out.println("Sect: " + character.sect);
+                                    System.out.println("Kills: " + character.kills + "  Sect Points: " + character.sectPoints);
+                                    if (character.sect != null) System.out.println("Sect: " + character.sect + " [" + character.sect.getRank(character) + "]");
                                     character.movement('x');
                                     break;
                                 case 'l':
@@ -195,21 +196,49 @@ public class GameDriver {
                                     character.movement('x');
                                     break;
                                 case 'o':
-                                    System.out.println("Welcome to Options!\nInput 'x' to skip turns without movement!\nInput 'm' to skip turns with movement");
-                                    switch (scan.next().charAt(0)) {
+                                    System.out.println("Auto-move options:");
+                                    System.out.println("  x — Wait N turns (quest auto-runs)");
+                                    System.out.println("  w/a/s/d — Move in direction N turns");
+                                    System.out.println("  c — Move toward coordinate N turns");
+                                    System.out.println("  m — Random movement N turns");
+                                    char moveOpt = scan.next().charAt(0);
+                                    switch (moveOpt) {
                                         case 'x':
                                             character.movement = 'x';
-                                            System.out.println("How many turns do you want to skip?");
+                                            System.out.println("How many turns?");
                                             character.skipping = scan.nextInt() - 1;
                                             character.movement('x');
                                             break;
+                                        case 'w': case 'a': case 's': case 'd':
+                                            character.movement = moveOpt;
+                                            System.out.println("How many turns?");
+                                            character.skipping = scan.nextInt() - 1;
+                                            character.movement(moveOpt);
+                                            break;
+                                        case 'c':
+                                            System.out.println("Target tile X Y (0-" + (Map.range-1) + ", e.g. '15 15'):");
+                                            character.autoX = scan.nextInt();
+                                            character.autoY = scan.nextInt();
+                                            character.movement = 'c';
+                                            System.out.println("How many turns?");
+                                            character.skipping = scan.nextInt() - 1;
+                                            // first step toward coord
+                                            int dx0 = character.autoX - character.location.x;
+                                            int dy0 = character.autoY - character.location.y;
+                                            if (dx0 == 0 && dy0 == 0) { character.autoX = -1; character.autoY = -1; character.movement = 'x'; character.movement('x'); }
+                                            else if (Math.abs(dx0) >= Math.abs(dy0)) character.movement(dx0 > 0 ? 'd' : 'a');
+                                            else character.movement(dy0 > 0 ? 's' : 'w');
+                                            break;
                                         case 'm':
                                             character.movement = 'm';
-                                            System.out.println("How many turns do you want to skip?");
+                                            System.out.println("How many turns?");
                                             character.skipping = scan.nextInt() - 1;
                                             character.movement();
                                             break;
+                                        default:
+                                            character.movement('x');
                                     }
+                                    break;
                                 default:
                                     character.movement('x');
                                     break;
@@ -218,6 +247,18 @@ public class GameDriver {
                             character.skipping--;
                             if (character.movement == 'm') {
                                 character.movement();
+                            } else if (character.movement == 'c' && character.autoX >= 0) {
+                                int dxc = character.autoX - character.location.x;
+                                int dyc = character.autoY - character.location.y;
+                                if (dxc == 0 && dyc == 0) {
+                                    character.autoX = -1; character.autoY = -1;
+                                    character.movement = 'x';
+                                    character.movement('x');
+                                } else if (Math.abs(dxc) >= Math.abs(dyc)) {
+                                    character.movement(dxc > 0 ? 'd' : 'a');
+                                } else {
+                                    character.movement(dyc > 0 ? 's' : 'w');
+                                }
                             } else {
                                 character.movement(character.movement);
                             }

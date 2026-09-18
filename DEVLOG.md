@@ -1,5 +1,15 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-18 (9)
+- Added: Tournament quest — "Hold Tournament" spot quest for city owners and sect masters (2%/turn); single-elimination bracket with probability-based outcomes (no death risk); major-realm band ±1 around organizer's level; organizer funds prize at `(maxBand+1)*10 + rand(11)` level; winner receives weapon or clothing prize
+- Added: Sect contribution points earning — Hunt Beast (+5), Explore Dungeon (+10), Sect Raid (+20), Forage/Mine while in sect (+2), donating unique technique to sect library (+10 in `technique()`)
+- Added: Innovative technique selling — "Sell Technique" spot/area quest (10% chance/turn); travels to nearest city library and sells best unique technique; `Library.sellTechnique()` pays seller; `technique()` also auto-donates a copy to sect library with 20% chance
+- Added: City library initialization — `cityLeadership()` and Originis constructor now add a `Library` to `area.libraries`
+- Added: Relationship recycling on death — `dead()` and `dead(Character killer)` now remove the deceased from all living friends' RelationshipLists; prevents stale relationship accumulation
+- Changed: 'i' stat screen — now shows `kills`, `sectPoints`, and sect rank alongside sect name
+- Changed: 'o' auto-move menu — expanded to: `x` (wait/quest-auto), `w/a/s/d` (directional N turns), `c` (coordinate pathfind: enter tile X Y then N turns), `m` (random N turns); added `autoX`/`autoY` fields to Character for coordinate tracking
+- Fixed: Sect Raid `targetQuests()` — broadened condition to allow crisis raids (any enemy sect at location, not just warTarget); sectPoints awarded on success
+
 ## 2026-09-17 (8)
 - Added: Sequential tag-team party battle — `partyBattleCheck(Character opponent)` in Character.java; positive-relationship allies at same location join in sequence; enemy accumulates `exhaustionPenalty` (+2 per fighter) applied at end of `tempLvlCheck()`; "Battle Rival", "Battle Arch-Enemy", "Revenge", "Bounty Hunt" in `targetQuests()` now call `partyBattleCheck()` instead of `battleCheck()`
 - Added: `int exhaustionPenalty` field on Character; applied in `tempLvlCheck()` after base calculation

@@ -59,6 +59,7 @@ public class Area {
         materialBag = new ArrayList<>();
         pillBag = new ArrayList<>();
         arrayBag = new ArrayList<>();
+        libraries.add(new Library(this));
         createdAreas.add(this);
     }
     public Area(Area area, char dir) { // dir stands for direction. Ex: East, West, South, North

@@ -54,6 +54,8 @@ public class Character {
     int kills = 0;
     int sectPoints = 0;
     int exhaustionPenalty = 0;
+    int autoX = -1;
+    int autoY = -1;
     double cultivationBase = 0;
     double cultivationBaseMax = Math.pow(lvl, 3) * (((70.+1./3.) + ((11./6.) * lvl)) / 25.);
     int professionLvl = 1;
@@ -722,6 +724,11 @@ public class Character {
         targetQuests.clear();
         spotQuests.clear();
         currentQuest = null;
+        // Recycling: remove this character from living friends' relationship lists
+        for (Relationship rel : new ArrayList<>(relationshipList.relationships)) {
+            Character friend = characters.get(rel.friendID);
+            if (friend != null && !friend.dead) friend.relationshipList.remove(this.id);
+        }
         remCharacters.add(this);
         location.characters.remove(this);
         location.deadCharacters.add(this);
@@ -817,6 +824,11 @@ public class Character {
                 }
             }
 
+            // Recycling: remove this character from living characters' relationship lists
+            for (Relationship rel : new ArrayList<>(relationshipList.relationships)) {
+                Character friend = characters.get(rel.friendID);
+                if (friend != null && !friend.dead) friend.relationshipList.remove(this.id);
+            }
             killer.kills++;
             // Transers all items to the killer
             transferAllItems(killer);
@@ -1030,6 +1042,32 @@ public class Character {
             }
         }
 
+        // Sell Technique: Innovative chars sell techniques to city libraries (10% chance/turn)
+        if (trait == Traits.Innovative && !techniqueList.isEmpty() && rand.nextInt(10) == 0
+                && spotQuests.stream().noneMatch(q -> "Sell Technique".equals(q.name))
+                && targetQuests.stream().noneMatch(q -> "Sell Technique".equals(q.name))
+                && (currentQuest == null || !"Sell Technique".equals(currentQuest.name))) {
+            if (location.city && !location.libraries.isEmpty()) {
+                spotQuests.add(new Quest("Sell Technique", true, 40, 0, 60));
+            } else {
+                for (Area area : knownLocations) {
+                    if (area != null && area.city && !area.libraries.isEmpty()) {
+                        targetQuests.add(new Quest("Sell Technique", true, 40, 0, 60, area));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Hold Tournament: city owners and sect masters hold periodic tournaments (2% chance/turn)
+        if (rand.nextInt(50) == 0 && spotQuests.stream().noneMatch(q -> "Hold Tournament".equals(q.name))) {
+            boolean isCityOwner = location.city && location.cityOwner == this;
+            boolean isSectMasterAtHome = sect != null && sect.isMaster(this) && location == sect.location;
+            if (isCityOwner || isSectMasterAtHome) {
+                spotQuests.add(new Quest("Hold Tournament", true, 35, 0, 55));
+            }
+        }
+
         Quest tempQuest = this.spotQuests.peek();
         int questCode = -2;
 
@@ -1156,6 +1194,9 @@ public class Character {
                     if (quest.targetArea.sect.inCrisis()) return 1;
                     return (sect.isAtWar() && quest.targetArea.sect == sect.warTarget) ? 1 : 0;
                 }
+                if ("Sell Technique".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.city && !quest.targetArea.libraries.isEmpty()) ? 1 : 0;
+                }
                 if ("Seek Potential".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.city
                             && quest.targetArea.pillBag != null
@@ -1197,11 +1238,13 @@ public class Character {
 
             case "Forage":
                 forage();
+                if (sect != null) sectPoints += 2;
                 questSuccess = 2;
                 break;
 
             case "Mine":
                 mine();
+                if (sect != null) sectPoints += 2;
                 questSuccess = 2;
                 break;
 
@@ -1211,6 +1254,65 @@ public class Character {
                 //Quest onetime = new Quest("One Time", true, 80, 5, 90);
                 //spotQuests.add(onetime);
                 break;
+
+            case "Sell Technique": {
+                if (location.city && !location.libraries.isEmpty()) {
+                    Library lib = location.libraries.get(0);
+                    Technique best = null;
+                    for (Technique t : techniqueList) {
+                        final String tn = t.name;
+                        boolean alreadyIn = lib.techniques.stream().anyMatch(lt -> lt.name.equals(tn));
+                        if (!alreadyIn && (best == null || t.potential > best.potential)) best = t;
+                    }
+                    if (best != null) {
+                        lib.sellTechnique(this, new Technique(best));
+                        if (player && skipping <= 0) System.out.println("Sold " + best.name + " to city library");
+                    }
+                }
+                questSuccess = 2;
+                break;
+            }
+
+            case "Hold Tournament": {
+                // Band: ±1 major realm around organizer's level
+                int minMajor = Math.max(0, (majorLvl / 2) * 2);
+                int maxMajor = Math.min(10, minMajor + 1);
+                // Collect eligible participants
+                ArrayList<Character> pool = new ArrayList<>();
+                for (Character c : new ArrayList<>(location.characters)) {
+                    if (c == null || c.dead || c == this || c.trait == Traits.Beast) continue;
+                    if (c.majorLvl >= minMajor && c.majorLvl <= maxMajor) pool.add(c);
+                }
+                if (pool.size() < 2) { questSuccess = -2; break; }
+                // Fund the prize
+                int prizeLvl = Math.min(100, (maxMajor + 1) * 10 + rand.nextInt(11));
+                Item prize = new Item(rand.nextInt(2) == 0 ? Item.ItemType.Weapon : Item.ItemType.Clothing, prizeLvl);
+                long prizeCost = itemPrice(prize);
+                if (!canAfford(prizeCost)) { questSuccess = -2; break; }
+                deductSs(prizeCost);
+                // Shuffle seeding
+                java.util.Collections.shuffle(pool, rand);
+                // Single-elimination bracket — probability-based, no death risk
+                while (pool.size() > 1) {
+                    ArrayList<Character> next = new ArrayList<>();
+                    for (int _i = 0; _i + 1 < pool.size(); _i += 2) {
+                        Character a = pool.get(_i), b = pool.get(_i + 1);
+                        a.tempLvlCheck(); b.tempLvlCheck();
+                        int wc = Math.max(5, Math.min(95, 50 - 15 * (b.tempLvl - a.tempLvl)));
+                        if (a.trait == Traits.Lucky) wc = Math.min(95, wc + 45);
+                        if (b.trait == Traits.Lucky) wc = Math.max(5, wc - 45);
+                        next.add(rand.nextInt(100) < wc ? a : b);
+                    }
+                    if (pool.size() % 2 == 1) next.add(pool.get(pool.size() - 1));
+                    pool = next;
+                }
+                Character winner = pool.get(0);
+                winner.backpack.add(prize);
+                if (player || winner.player)
+                    System.out.println("=== Tournament: " + winner + " wins " + prize + " ===");
+                questSuccess = 2;
+                break;
+            }
 
         }
 
@@ -1242,6 +1344,23 @@ public class Character {
                     sell(location);
                 }
                 return 1;
+
+            case "Sell Technique": {
+                if (location.city && !location.libraries.isEmpty()) {
+                    Library lib = location.libraries.get(0);
+                    Technique best = null;
+                    for (Technique t : techniqueList) {
+                        final String tn = t.name;
+                        boolean alreadyIn = lib.techniques.stream().anyMatch(lt -> lt.name.equals(tn));
+                        if (!alreadyIn && (best == null || t.potential > best.potential)) best = t;
+                    }
+                    if (best != null) {
+                        lib.sellTechnique(this, new Technique(best));
+                        if (player && skipping <= 0) System.out.println("Sold " + best.name + " to city library");
+                    }
+                }
+                return 1;
+            }
 
             case "Battle Dislike": {
                 Character bully = characters.get(quest.targetCharacter);
@@ -1309,6 +1428,7 @@ public class Character {
             }
             case "Hunt Beast":
                 beastBattleCheck();
+                if (sect != null) sectPoints += 5;
                 return 1;
             case "Join Sect":
                 if (location.sect != null && sect == null && location.sect.canJoin(this)) {
@@ -1372,21 +1492,25 @@ public class Character {
                         }
                         break;
                 }
+                if (sect != null) sectPoints += 10;
                 return 1;
             }
             case "Sect Raid": {
-                if (location.sect != null && sect != null && sect.isAtWar() && location.sect == sect.warTarget) {
+                boolean raidSuccess = false;
+                if (location.sect != null && sect != null && location.sect != sect) {
                     for (Character c : new ArrayList<>(location.characters)) {
-                        if (c == null || c.dead || c == this || c.sect != sect.warTarget) continue;
+                        if (c == null || c.dead || c == this || c.sect != location.sect) continue;
                         battleCheck(c);
+                        raidSuccess = true;
                         // War ends if enemy sect master is dead or sect dissolved
-                        if (sect.warTarget == null || sect.warTarget.master == null || sect.warTarget.master.dead
-                                || location.sect == null) {
-                            sect.endWar(quest.targetArea.sect != null ? quest.targetArea.sect : sect.warTarget);
+                        if (sect.warTarget != null && (sect.warTarget.master == null || sect.warTarget.master.dead
+                                || location.sect == null)) {
+                            sect.endWar(sect.warTarget);
                         }
                         break;
                     }
                 }
+                if (raidSuccess && sect != null) sectPoints += 20;
                 return 1;
             }
             case "Buy Gear":
@@ -2412,6 +2536,15 @@ public class Character {
         if (player && skipping <= 0 && age >= 8) {
             System.out.println("Created " + technique);
         }
+        // Donate a copy to sect library (earns sectPoints)
+        if (technique != null && sect != null && sect.sectLibrary != null) {
+            final String tname = technique.name;
+            boolean notYetIn = sect.sectLibrary.techniques.stream().noneMatch(t -> t.name.equals(tname));
+            if (notYetIn && rand.nextInt(5) == 0) {
+                sect.sectLibrary.techniques.add(new Technique(technique));
+                sectPoints += 10;
+            }
+        }
     }
     public void cityLeadership() {
         if (ss >= 1000000 && !location.city && rand.nextInt(100) == 0) {
@@ -2422,6 +2555,7 @@ public class Character {
             location.materialBag = new ArrayList<>();
             location.pillBag = new ArrayList<>();
             location.arrayBag = new ArrayList<>();
+            location.libraries.add(new Library(location));
             professionLvl = 50;
         }
     }
