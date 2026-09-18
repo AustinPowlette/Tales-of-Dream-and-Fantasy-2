@@ -53,6 +53,7 @@ public class Character {
     int tempLvl = lvl;
     int kills = 0;
     int sectPoints = 0;
+    int exhaustionPenalty = 0;
     double cultivationBase = 0;
     double cultivationBaseMax = Math.pow(lvl, 3) * (((70.+1./3.) + ((11./6.) * lvl)) / 25.);
     int professionLvl = 1;
@@ -960,14 +961,63 @@ public class Character {
             }
         }
 
-        // Sect Raid: masters and elders attack enemy sect location when at war
-        if (sect != null && sect.isAtWar() && sect.warTarget != null
-                && (sect.isMaster(this) || sect.getRank(this) == Organization.SectRank.ELDER)
+        // Sect Raid: masters and elders attack enemy sect location when at war; also opportunistic raids on crisis sects
+        if (sect != null && (sect.isMaster(this) || sect.getRank(this) == Organization.SectRank.ELDER)
                 && targetQuests.stream().noneMatch(q -> "Sect Raid".equals(q.name))
                 && (currentQuest == null || !"Sect Raid".equals(currentQuest.name))) {
-            Area enemyLoc = sect.warTarget.location;
+            Area enemyLoc = null;
+            if (sect.isAtWar() && sect.warTarget != null) {
+                enemyLoc = sect.warTarget.location;
+            } else {
+                // Opportunistic: raid a known sect in succession crisis (1% chance/turn)
+                if (rand.nextInt(100) == 0) {
+                    for (Area area : knownLocations) {
+                        if (area != null && area.sect != null && area.sect != sect && area.sect.inCrisis()) {
+                            enemyLoc = area;
+                            break;
+                        }
+                    }
+                }
+            }
             if (enemyLoc != null)
                 targetQuests.add(new Quest("Sect Raid", true, 65, 5, 85, enemyLoc));
+        }
+
+        // Propose Alliance: sect masters seek alliances with other non-enemy sects (5% chance/turn)
+        if (sect != null && sect.isMaster(this) && !sect.isAtWar() && rand.nextInt(20) == 0
+                && targetQuests.stream().noneMatch(q -> "Propose Alliance".equals(q.name))) {
+            for (Character c : new ArrayList<>(location.characters)) {
+                if (c == null || c.dead || c.sect == null || c.sect == sect || sect.isAlly(c.sect)) continue;
+                if (c.sect.isMaster(c)) {
+                    targetQuests.add(new Quest("Propose Alliance", true, 30, 5, 50, c));
+                    break;
+                }
+            }
+        }
+
+        // Demand Tribute: powerful sect masters extract tribute from weaker rival sects (2% chance/turn)
+        if (sect != null && sect.isMaster(this) && !sect.isAtWar() && rand.nextInt(50) == 0
+                && targetQuests.stream().noneMatch(q -> "Demand Tribute".equals(q.name))) {
+            for (Character c : new ArrayList<>(location.characters)) {
+                if (c == null || c.dead || c.sect == null || c.sect == sect || sect.isAlly(c.sect)) continue;
+                if (c.sect.isMaster(c) && lvl - c.lvl >= 20) {
+                    targetQuests.add(new Quest("Demand Tribute", true, 40, 5, 60, c));
+                    break;
+                }
+            }
+        }
+
+        // Recruit Defector: sect masters at war poach enemy Elders (1% chance/turn)
+        if (sect != null && sect.isMaster(this) && sect.isAtWar() && rand.nextInt(100) == 0
+                && targetQuests.stream().noneMatch(q -> "Recruit Defector".equals(q.name))) {
+            for (Character c : new ArrayList<>(location.characters)) {
+                if (c == null || c.dead || c.sect == null || c.sect == sect) continue;
+                if (sect.warTarget != null && c.sect == sect.warTarget
+                        && sect.warTarget.getRank(c) == Organization.SectRank.ELDER) {
+                    targetQuests.add(new Quest("Recruit Defector", true, 45, 5, 65, c));
+                    break;
+                }
+            }
         }
 
         // Restock Trip: Merchant with shops seeks best city for arbitrage restocking (10% chance/turn)
@@ -1067,15 +1117,19 @@ public class Character {
                 return 0;
             case Character:
                 Character character = characters.get(quest.targetCharacter);
-                if (character == null){
-                    return 0;
+                if (character == null || character.dead) return 0;
+                if ("Propose Alliance".equals(quest.name)) {
+                    return (sect != null && !sect.isAtWar() && character.sect != null && !sect.isAlly(character.sect)) ? 1 : 0;
                 }
-                else if (character.dead == true) {
-                    return 0;
+                if ("Demand Tribute".equals(quest.name)) {
+                    return (sect != null && !sect.isAtWar() && character.sect != null && lvl - character.lvl >= 20) ? 1 : 0;
                 }
-                else {
-                    return 1;
+                if ("Recruit Defector".equals(quest.name)) {
+                    return (sect != null && sect.isAtWar() && character.sect != null && character.sect != sect
+                            && sect.warTarget != null && character.sect == sect.warTarget
+                            && sect.warTarget.getRank(character) == Organization.SectRank.ELDER) ? 1 : 0;
                 }
+                return 1;
             case Area:
                 if ("Go Sell".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.city && quest.targetArea.cityOwner != null) ? 1 : 0;
@@ -1097,8 +1151,10 @@ public class Character {
                     return (quest.targetArea != null && quest.targetArea.dungeonType != null) ? 1 : 0;
                 }
                 if ("Sect Raid".equals(quest.name)) {
-                    return (sect != null && sect.isAtWar() && quest.targetArea != null
-                            && quest.targetArea.sect != null && quest.targetArea.sect == sect.warTarget) ? 1 : 0;
+                    if (sect == null || quest.targetArea == null || quest.targetArea.sect == null) return 0;
+                    // During a target sect's succession crisis, any sect can raid (no war required)
+                    if (quest.targetArea.sect.inCrisis()) return 1;
+                    return (sect.isAtWar() && quest.targetArea.sect == sect.warTarget) ? 1 : 0;
                 }
                 if ("Seek Potential".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.city
@@ -1200,7 +1256,54 @@ public class Character {
             case "Bounty Hunt": {
                 Character enemy = characters.get(quest.targetCharacter);
                 if (enemy != null && !enemy.dead) {
-                    battleCheck(enemy);
+                    partyBattleCheck(enemy);
+                }
+                return 1;
+            }
+            case "Propose Alliance": {
+                Character target = characters.get(quest.targetCharacter);
+                if (target != null && !target.dead && target.sect != null && sect != null
+                        && !sect.isAlly(target.sect) && !sect.isAtWar()) {
+                    sect.proposeAlliance(target.sect);
+                    if (player || target.player)
+                        System.out.println(sect + " and " + target.sect + " have formed an alliance!");
+                }
+                return 1;
+            }
+            case "Demand Tribute": {
+                Character target = characters.get(quest.targetCharacter);
+                if (target != null && !target.dead && target.sect != null && sect != null
+                        && lvl - target.lvl >= 20) {
+                    long tribute = 10000000L;
+                    if (target.canAfford(tribute)) {
+                        target.deductSs(tribute);
+                        ss += tribute;
+                        convertCurrency();
+                        if (player || target.player)
+                            System.out.println(this + " demands tribute from " + target.sect);
+                    } else {
+                        if (!sect.isAtWar()) {
+                            sect.declareWar(target.sect);
+                            if (player || target.player)
+                                System.out.println(sect + " declared war on " + target.sect + " over unpaid tribute!");
+                        }
+                    }
+                }
+                return 1;
+            }
+            case "Recruit Defector": {
+                Character target = characters.get(quest.targetCharacter);
+                if (target != null && !target.dead && target.sect != null && sect != null && target.sect != sect) {
+                    Organization oldSect = target.sect;
+                    boolean accepts = rand.nextInt(100) < 40; // 40% base defection chance
+                    if (accepts) {
+                        oldSect.resign(target);
+                        target.sectPoints = 0;
+                        sect.join(target);
+                        if (oldSect.warTarget == null) oldSect.declareWar(sect);
+                        if (player || target.player)
+                            System.out.println(target + " has defected from " + oldSect + " to " + sect + "!");
+                    }
                 }
                 return 1;
             }
@@ -2596,6 +2699,35 @@ public class Character {
             }
         }
     }
+
+    // Sequential tag-team: this character leads; positive-relationship allies step in if the previous fighter loses.
+    // Enemy accumulates exhaustion after each fight.
+    public void partyBattleCheck(Character opponent) {
+        if (opponent == null || opponent.dead || this == opponent) return;
+        if (age < 8 && !sparring) return;
+
+        // Build party: lead attacker + nearby allies with positive relationship
+        ArrayList<Character> party = new ArrayList<>();
+        party.add(this);
+        for (Character c : new ArrayList<>(location.characters)) {
+            if (c == null || c.dead || c == this || c == opponent || c.trait == Traits.Beast) continue;
+            Relationship r = relationshipList.contains(c.id);
+            if (r != null && r.value >= 1) party.add(c);
+        }
+        // Strongest ally leads
+        for (Character p : party) p.tempLvlCheck();
+        party.sort((a, b) -> Integer.compare(b.tempLvl, a.tempLvl));
+
+        for (int i = 0; i < party.size(); i++) {
+            if (opponent.dead) break;
+            Character fighter = party.get(i);
+            if (fighter.dead || (fighter.age < 8 && !fighter.sparring)) continue;
+            opponent.exhaustionPenalty = i * 2; // enemy tires from consecutive fights
+            fighter.battleCheck(opponent);
+        }
+        opponent.exhaustionPenalty = 0;
+    }
+
     public boolean beastBattleCheck() {
         if (age < 8 || location.monsters <= 0 || lvl < (location.lvl + location.highestLvl) / 2) {
             return false;
@@ -2655,9 +2787,6 @@ public class Character {
             opponent.tempLvl += bestArrayLvl / 10 + 1;
         }
 
-        System.out.println("TempLvl of " + this + " is " + tempLvl);
-        System.out.println("TempLvl of " + opponent + " is " + opponent.tempLvl);
-
         // Death Chance and Forbidden Init
         boolean deathChance = deathCheck(opponent);
         boolean forbiddenUsed = false;
@@ -2671,8 +2800,6 @@ public class Character {
         if (opponent.trait == Traits.Lucky) {
             winChance -= 45;
         }
-
-        System.out.println(this + "'s chance of winning is " + winChance);
 
         if (winChance < caution) {
             if (fleeCheck(opponent)) {
@@ -2852,6 +2979,10 @@ public class Character {
 
         if (this.trait == Traits.Cheater) {
             tempLvl += 5;
+        }
+
+        if (exhaustionPenalty > 0) {
+            tempLvl = Math.max(1, tempLvl - exhaustionPenalty);
         }
 
     }

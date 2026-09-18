@@ -28,6 +28,7 @@ public class Organization {
     int squabbles = 0;              // accumulated cross-sect fight count
     Organization warTarget = null;
     ArrayList<Organization> allies = new ArrayList<>();
+    int crisisTimer = 0;            // succession crisis ticks remaining (inCrisis when > 0)
 
     public Organization(Character founder) {
         this.founder = founder;
@@ -71,7 +72,10 @@ public class Organization {
     public void promote() {
         if (members != null && !members.isEmpty()) {
             Character temp = null;
+            boolean hasElder = false;
             for (Character character : members) {
+                SectRank r = memberRanks.getOrDefault(character.id, SectRank.OUTER_DISCIPLE);
+                if (r == SectRank.ELDER || r == SectRank.FOUNDER) hasElder = true;
                 if (temp == null) {
                     temp = character;
                 } else if (temp.lvl < character.lvl) {
@@ -82,6 +86,7 @@ public class Organization {
             }
             master = temp;
             if (master != null) memberRanks.put(master.id, SectRank.MASTER);
+            if (!hasElder) crisisTimer = 52; // no proper heir — succession crisis for 1 year
         } else {
             master = null;
             if (warTarget != null) endWar(warTarget);
@@ -110,10 +115,34 @@ public class Organization {
 
     public boolean isAtWar() { return warTarget != null; }
 
+    public boolean inCrisis() { return crisisTimer > 0; }
+
+    public boolean isAlly(Organization other) { return other != null && allies.contains(other); }
+
+    public void proposeAlliance(Organization other) {
+        if (other == null || other == this || isAlly(other)) return;
+        allies.add(other);
+        other.allies.add(this);
+        // End any existing war between them
+        if (warTarget == other) endWar(other);
+    }
+
+    public void dissolveAlliance(Organization other) {
+        if (other == null) return;
+        allies.remove(other);
+        other.allies.remove(this);
+    }
+
     public void declareWar(Organization enemy) {
+        if (enemy == null || enemy == this) return;
         this.warTarget = enemy;
         if (enemy.warTarget == null) enemy.warTarget = this;
-        squabbles = 0; // reset after war declared
+        squabbles = 0;
+        dissolveAlliance(enemy); // can't be both allied and at war
+        // Allies of the defender automatically oppose the attacker
+        for (Organization ally : new ArrayList<>(enemy.allies)) {
+            if (ally != this && ally.warTarget == null) ally.warTarget = this;
+        }
     }
 
     public void endWar(Organization enemy) {

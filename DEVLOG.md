@@ -1,5 +1,16 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-17 (8)
+- Added: Sequential tag-team party battle — `partyBattleCheck(Character opponent)` in Character.java; positive-relationship allies at same location join in sequence; enemy accumulates `exhaustionPenalty` (+2 per fighter) applied at end of `tempLvlCheck()`; "Battle Rival", "Battle Arch-Enemy", "Revenge", "Bounty Hunt" in `targetQuests()` now call `partyBattleCheck()` instead of `battleCheck()`
+- Added: `int exhaustionPenalty` field on Character; applied in `tempLvlCheck()` after base calculation
+- Removed: 3 residual debug prints from `battle()` — TempLvl and win-chance lines
+- Added: Alliance system — `isAlly()`, `proposeAlliance()`, `dissolveAlliance()` on Organization; `declareWar()` now auto-notifies allies of the defender and dissolves alliances between combatants; "Propose Alliance" quest: sect masters seek non-enemy sect masters (5% chance/turn)
+- Added: Resource disputes — yearly check in GameDriver.java; pairs of sects whose masters share a dungeon/hotspot `knownLocation` earn +1 squabble; at 5 squabbles war is declared
+- Added: Tribute system — "Demand Tribute" Character quest (2%/turn) for sect masters with 20+ level lead over a rival master; target pays 10M ss or war is declared
+- Added: Succession crisis — `crisisTimer` field on Organization; `promote()` sets crisisTimer=52 when no Elder exists; crisis sects can be opportunistically raided by any sect master/elder without requiring war; GameDriver ticks crisis timer down each year
+- Added: Defection — "Recruit Defector" Character quest (1%/turn) for sect masters at war; 40% chance a target Elder defects, joining the recruiting sect and triggering war with their original sect
+- Added: `inCrisis()`, `isAlly()`, `proposeAlliance()`, `dissolveAlliance()` methods to Organization.java
+
 ## 2026-09-17 (7)
 - Fixed: Crafting level cap formula — `Math.min((majorLvl + 1) * 10, 100)` hard-caps at 100; majorLvl 10 crafters still cap at lvl 100 items
 - Removed: Debug print noise — removed "One Time Target/Spot Quest finished", "spotQuests queue empty", pathfinder reach-target, "has found", "Weird Case?" prints from Character.java

@@ -81,6 +81,31 @@ public class GameDriver {
                     pick.hotspot = true;
                     hotspotAreas.add(pick);
                 }
+                // Resource disputes: sects competing for the same dungeon/hotspot areas escalate squabbles
+                ArrayList<Organization> sectList = new ArrayList<>();
+                for (Area area : createdAreas) {
+                    if (area.sect != null && !sectList.contains(area.sect)) sectList.add(area.sect);
+                }
+                for (int _s1 = 0; _s1 < sectList.size(); _s1++) {
+                    for (int _s2 = _s1 + 1; _s2 < sectList.size(); _s2++) {
+                        Organization s1 = sectList.get(_s1);
+                        Organization s2 = sectList.get(_s2);
+                        if (s1.isAlly(s2) || s1.isAtWar() || s2.isAtWar()) continue;
+                        if (s1.master == null || s2.master == null) continue;
+                        for (Area a : s1.master.knownLocations) {
+                            if (a == null || (!a.hotspot && a.dungeonType == null)) continue;
+                            if (s2.master.knownLocations.contains(a)) {
+                                s1.squabbles++;
+                                if (s1.squabbles >= 5) s1.declareWar(s2);
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Succession crisis: tick down crisis timers
+                for (Organization s : sectList) {
+                    if (s.crisisTimer > 0) s.crisisTimer--;
+                }
                 //scan.nextLine();
             }
 

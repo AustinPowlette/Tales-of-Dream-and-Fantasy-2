@@ -60,7 +60,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Cheater trait (+5 tempLvl)
 - ✅ Lucky trait (±45 win chance)
 - 🟡 Sparring (`sparring` boolean exists, no dedicated sparring quest/event path)
-- ❌ Group/party battle algorithm
+- ✅ Group/party battle — sequential tag-team; `partyBattleCheck()` collects positive-relationship allies, strongest leads, enemy accumulates +2 exhaustionPenalty per successive fight
 - ✅ Bounty system (wanted flag, bounty board in cities)
 - ❌ Arena/tournament combat
 - ✅ Combat system complete — current `battle()` IS the revamped design; tile-based push mechanic was intentionally dropped as too complex
@@ -131,7 +131,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Beast autonomous movement + attacking characters in tile
 - ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
 - 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
-- 🟡 **Sect NPC decision engine** — Join Sect (with canJoin() criteria), Recruit Member, Sect Raid war quests implemented; cross-sect squabble tracking → war declaration; sect ranks (Outer/Inner Disciple, Elder, Master, Founder); internal politics, alliances, tribute still deferred
+- 🟡 **Sect NPC decision engine** — Join Sect (canJoin() criteria), Recruit Member, Sect Raid, Propose Alliance, Demand Tribute, Recruit Defector implemented; squabble→war escalation; sect ranks (Outer/Inner Disciple, Elder, Master, Founder); succession crisis (crisisTimer, opportunistic raids); resource disputes (yearly dungeon/hotspot overlap check); internal rank promotion, sect contribution points earning still deferred
 - 🟡 **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel via Restock Trip quest (combines pool-size scan, own-shop bonus, circuit distance); full NPC buy/sell trees deferred
 - ❌ Higher-level characters avoiding weaker targets (design doc note)
 - ✅ Affiliation-based aggression rules — Good won't attack non-Evil unless arch-enemy; Neutral won't attack non-Evil unless rival or worse
