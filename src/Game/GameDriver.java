@@ -25,13 +25,39 @@ public class GameDriver {
         char input = scan.next().charAt(0);
 
         if (input == 'Y' || input == 'y') {
+            System.out.println("Character setup: (C)ustomize, (F)ollow mode, Enter for default Alchemist");
+            char mcOpt = scan.next().charAt(0);
             Character bete = new Character(tiles[range / 2][range / 2]);
             currentCharacter = bete;
             characters.add(bete);
             population++; // Don't forget to add player characters to population
             bete.player = true;
-            bete.potential = 100;
-            bete.trait = Character.Traits.Alchemist;
+            if (mcOpt == 'C' || mcOpt == 'c') {
+                System.out.println("Trait: A=Alchemist B=Blacksmith T=Tailor S=Scribe I=Innovative L=Leader M=Merchant R=Runner");
+                char tc = scan.next().charAt(0);
+                switch (tc) {
+                    case 'A': case 'a': bete.trait = Character.Traits.Alchemist;   break;
+                    case 'B': case 'b': bete.trait = Character.Traits.Blacksmith;  break;
+                    case 'T': case 't': bete.trait = Character.Traits.Tailor;      break;
+                    case 'S': case 's': bete.trait = Character.Traits.Scribe;      break;
+                    case 'I': case 'i': bete.trait = Character.Traits.Innovative;  break;
+                    case 'L': case 'l': bete.trait = Character.Traits.Leader;      break;
+                    case 'M': case 'm': bete.trait = Character.Traits.Merchant;    break;
+                    case 'R': case 'r': bete.trait = Character.Traits.Runner;      break;
+                    default:            bete.trait = Character.Traits.Innovative;  break;
+                }
+                System.out.println("Potential (1-100):");
+                try { bete.potential = Math.min(100, Math.max(1, Integer.parseInt(scan.next()))); } catch (Exception e) { bete.potential = 100; }
+                System.out.println("Affiliation: G=Good N=Neutral E=Evil");
+                char ac = scan.next().charAt(0);
+                if (ac == 'G' || ac == 'g') bete.affiliation = "Good";
+                else if (ac == 'E' || ac == 'e') bete.affiliation = "Evil";
+                else bete.affiliation = "Neutral";
+            } else if (mcOpt == 'F' || mcOpt == 'f') {
+                bete.followMode = true; bete.potential = 100; bete.trait = Character.Traits.Innovative;
+            } else {
+                bete.potential = 100; bete.trait = Character.Traits.Alchemist;
+            }
             System.out.println("" + bete + bete.location);
             System.out.println(bete + "'s Potential: " + bete.potential + " Trait: " + bete.getTrait());
 
@@ -106,7 +132,20 @@ public class GameDriver {
                 for (Organization s : sectList) {
                     if (s.crisisTimer > 0) s.crisisTimer--;
                 }
+                // Sect quest boards refresh yearly
+                for (Organization s : sectList) {
+                    s.postMissionsYearly();
+                }
                 //scan.nextLine();
+            }
+            // Tournament timer countdown and resolution (every tick)
+            for (Area area : createdAreas) {
+                if (area.tournamentTimer > 0) {
+                    area.tournamentTimer--;
+                    if (area.tournamentTimer == 0) {
+                        area.runTournament();
+                    }
+                }
             }
 
             // Ages and Cultivates Players
@@ -131,6 +170,10 @@ public class GameDriver {
                 currentCharacter = character;
                 if (!character.dead && character.born) {
                     if (character.player == true && character.age >= 8) {
+                        if (character.followMode) {
+                            character.movement();
+                            System.out.println("[Follow] " + character + character.location);
+                        } else {
                         //character.movement(scan.next().charAt(0));
                         if (character.skipping <= 0) {
                             System.out.println(character.backpack + "\n" + character.materialBag + "\n" + character.pillBag); // Change .backpack to just character
@@ -264,9 +307,10 @@ public class GameDriver {
                                 character.movement(character.movement);
                             }
                         }
-                        if (character.skipping <= 0) {
-                            System.out.println("" + character + character.location);
-                        }
+                            if (character.skipping <= 0) {
+                                System.out.println("" + character + character.location);
+                            }
+                        } // end else (non-followMode)
                         //System.out.println(character + " is doing their quest!");
                         character.quest();
                     }

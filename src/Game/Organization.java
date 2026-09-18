@@ -32,6 +32,8 @@ public class Organization {
 
     // Sect treasury and advancement
     ArrayList<Item> treasury = new ArrayList<>();
+    // Quest board: each entry is "type|itemType|minLvl|qty|bonusPoints"
+    ArrayList<String> questBoard = new ArrayList<>();
 
     public Organization(Character founder) {
         this.founder = founder;
@@ -142,6 +144,47 @@ public class Organization {
 
     public int buyingCost(Item item, int qty) {
         return donationPoints(item, qty);
+    }
+
+    public void postMissionsYearly() {
+        questBoard.clear();
+        int sl = sectLvl();
+        long herbWeight = 0, metalWeight = 0;
+        int[] herbByLvl = new int[101], metalByLvl = new int[101];
+        for (Item item : treasury) {
+            if (item.itemType == Item.ItemType.Herb) {
+                herbWeight += (long) item.quantity * item.lvl;
+                if (item.lvl <= 100) herbByLvl[item.lvl] += item.quantity;
+            } else if (item.itemType == Item.ItemType.Metal) {
+                metalWeight += (long) item.quantity * item.lvl;
+                if (item.lvl <= 100) metalByLvl[item.lvl] += item.quantity;
+            }
+        }
+        long targetWeight = (long)(sl + 1) * 10000;
+        if (herbWeight < targetWeight) {
+            int neededLvl = Math.max(1, sl);
+            int neededQty = (int) Math.min(5000, (targetWeight - herbWeight) / Math.max(1, neededLvl));
+            int bonus = Math.max(10, neededQty * neededLvl / 500);
+            questBoard.add("Forage|Herb|" + neededLvl + "|" + neededQty + "|" + bonus);
+        }
+        if (metalWeight < targetWeight / 2) {
+            int neededLvl = Math.max(1, sl);
+            int neededQty = (int) Math.min(2000, (targetWeight / 2 - metalWeight) / Math.max(1, neededLvl));
+            int bonus = Math.max(10, neededQty * neededLvl / 200);
+            questBoard.add("Mine|Metal|" + neededLvl + "|" + neededQty + "|" + bonus);
+        }
+        // Check for low-level resource gaps (useful for crafters)
+        for (int lvlBracket = 10; lvlBracket <= 100; lvlBracket += 10) {
+            int lo = lvlBracket - 9;
+            int herbSum = 0, metalSum = 0;
+            for (int lv = lo; lv <= lvlBracket; lv++) { herbSum += herbByLvl[lv]; metalSum += metalByLvl[lv]; }
+            if (herbSum < 500 && questBoard.size() < 5) {
+                questBoard.add("Forage|Herb|" + lo + "|500|" + (lvlBracket / 2));
+            }
+            if (metalSum < 200 && questBoard.size() < 5) {
+                questBoard.add("Mine|Metal|" + lo + "|200|" + (lvlBracket));
+            }
+        }
     }
 
     public void proposeAlliance(Organization other) {

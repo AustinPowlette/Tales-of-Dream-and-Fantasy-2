@@ -1,5 +1,18 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-18 (11)
+- Added: Sect quest board — `ArrayList<String> questBoard` on Organization; `postMissionsYearly()` posts up to 5 herb/metal shortage missions ("Forage|Herb|lvl|qty|bonus" format); "Accept Sect Mission" spot quest (15%/turn at sect); Forage/Mine cases check active mission and award bonus sectPoints on delivery; called yearly from GameDriver
+- Added: Tournament advance registration — "Hold Tournament" revamped to set 8-week `tournamentTimer` + store prize/organizer/registrants on Area; "Register Tournament" spot quest (5%/turn for eligible realm members); "Spectate Tournament" spot quest (10%/turn for non-registrants); `Area.runTournament()` runs bracket when timer hits 0; GameDriver ticks timer every week
+- Added: MC creation options — on game start, player now picks (C)ustomize (trait, potential 1-100, affiliation), (F)ollow mode (auto-plays with prints, no scanner), or Enter (default Alchemist 100 potential)
+- Added: Follow mode game loop — `followMode` field on Character; when set, player character auto-moves and quests without waiting for input; prints `[Follow] <char><loc>` each turn
+- Added: Merchant equips from own stock — after `restockFromCity()`, merchant scans own shop inventory and equips better weapons/clothing into their own gear slots, returning old gear to shelf
+- Added: Technique gifting — parent characters gift their best technique to children (5%/turn); "Gift Technique" targetQuests case delivers a copy to child at their location; `Technique(Technique)` copy constructor used
+- Added: Get Pregnant quest — married female characters generate "Get Pregnant" targetQuest (2%/turn); handled in targetQuests(); added 10% probability gate to `checkBirth()` so NPC births aren't instant every encounter
+- Added: Find Parent's Body quest — both `dead()` overloads now notify all born living children; "Find Parent's Body" targetQuests case awards +1 potential on 20% chance
+- Changed: "Hold Tournament" case — now sets 8-week registration window instead of running immediately
+- Changed: winCheck() — sparring win now gives +1 relationship to both parties; non-sparring win now has 20% chance to upgrade winner's martial technique
+- Fixed: `sell()` cultivation pill level check — `item.lvl <= majorLvl` → `item.lvl <= majorLvl * 10` (item levels are 1-100, not 0-10)
+
 ## 2026-09-18 (10)
 - Added: Sect treasury system — `ArrayList<Item> treasury` on Organization stores donated weapons/clothing/herbs/metals/pills; `sectLvl()` computes sect advancement level as `sum(herb+metal qty×lvl) / 10000` capped at 100; `donationPoints()`/`buyingCost()` use proportional formula (herbs/metals: qty×lvl/1000, pills: qty×lvl×2, gear: lvl)
 - Added: "Donate to Sect" spot quest — triggers at sect home location when member has spare backpack items or surplus materials/pills (10%/turn); donates all non-equipped backpack items + herb/metal surplus above 2000 + pill surplus above 5 reserve; awards proportional sectPoints

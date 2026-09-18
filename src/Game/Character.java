@@ -53,6 +53,9 @@ public class Character {
     int tempLvl = lvl;
     int kills = 0;
     int sectPoints = 0;
+    String sectMission = null;
+    int sectMissionBonus = 0;
+    boolean followMode = false;
     int exhaustionPenalty = 0;
     int autoX = -1;
     int autoY = -1;
@@ -729,6 +732,12 @@ public class Character {
             Character friend = characters.get(rel.friendID);
             if (friend != null && !friend.dead) friend.relationshipList.remove(this.id);
         }
+        // Notify children so they can find parent's body
+        for (Character child : children) {
+            if (child != null && !child.dead && child.born) {
+                child.targetQuests.add(new Quest("Find Parent's Body", false, 25, 0, 45, location));
+            }
+        }
         remCharacters.add(this);
         location.characters.remove(this);
         location.deadCharacters.add(this);
@@ -768,6 +777,12 @@ public class Character {
             targetQuests.clear();
             spotQuests.clear();
             currentQuest = null;
+            // Notify children so they can find parent's body
+            for (Character child : children) {
+                if (child != null && !child.dead && child.born) {
+                    child.targetQuests.add(new Quest("Find Parent's Body", false, 25, 0, 45, location));
+                }
+            }
             remCharacters.add(this); //Removes a cultivator from the characters Array after the round is done
             location.characters.remove(this); //Removes a cultivator from the location
         }
@@ -1032,6 +1047,26 @@ public class Character {
             }
         }
 
+        // Gift Technique: parents give their best technique to born children (5% chance/turn)
+        if (!techniqueList.isEmpty() && !children.isEmpty() && rand.nextInt(20) == 0
+                && targetQuests.stream().noneMatch(q -> "Gift Technique".equals(q.name))) {
+            Technique bestTech = null;
+            for (Technique t : techniqueList) {
+                if (bestTech == null || t.potential > bestTech.potential) bestTech = t;
+            }
+            if (bestTech != null) {
+                final String techName = bestTech.name;
+                for (Character child : new ArrayList<>(children)) {
+                    if (child != null && !child.dead && child.born
+                            && child.techniqueList.stream().noneMatch(t -> t.name.equals(techName))
+                            && targetQuests.stream().noneMatch(q -> "Gift Technique".equals(q.name) && q.targetCharacter == child.id)) {
+                        targetQuests.add(new Quest("Gift Technique", true, 30, 2, 50, child));
+                        break;
+                    }
+                }
+            }
+        }
+
         // Restock Trip: Merchant with shops seeks best city for arbitrage restocking (10% chance/turn)
         if (trait == Traits.Merchant && !ownedShops.isEmpty() && rand.nextInt(10) == 0
                 && targetQuests.stream().noneMatch(q -> "Restock Trip".equals(q.name))
@@ -1103,6 +1138,35 @@ public class Character {
             if ((needsHerb && hasHerb) || (needsMetal && hasMetal) || wantsGear) {
                 spotQuests.add(new Quest("Buy from Sect", true, 45, 0, 65));
             }
+        }
+
+        // Accept Sect Mission: sect members pick up a board mission (15% chance/turn when at sect)
+        if (sect != null && location == sect.location && sectMission == null
+                && !sect.questBoard.isEmpty() && rand.nextInt(7) == 0
+                && spotQuests.stream().noneMatch(q -> "Accept Sect Mission".equals(q.name))) {
+            spotQuests.add(new Quest("Accept Sect Mission", true, 50, 0, 70));
+        }
+
+        // Tournament Registration: eligible cultivators sign up during registration window (5% chance)
+        if (location.tournamentTimer > 0 && majorLvl >= location.tournamentMinMajor
+                && majorLvl <= location.tournamentMaxMajor
+                && !location.tournamentRegistrants.contains(this)
+                && rand.nextInt(20) == 0
+                && spotQuests.stream().noneMatch(q -> "Register Tournament".equals(q.name))) {
+            spotQuests.add(new Quest("Register Tournament", true, 60, 0, 80));
+        }
+
+        // Spectate Tournament: any character nearby can watch (10% chance during registration)
+        if (location.tournamentTimer > 0 && !location.tournamentRegistrants.contains(this)
+                && rand.nextInt(10) == 0
+                && spotQuests.stream().noneMatch(q -> "Spectate Tournament".equals(q.name))) {
+            spotQuests.add(new Quest("Spectate Tournament", true, 20, 0, 40));
+        }
+
+        // Get Pregnant: married females with a spouse present (2% chance/turn)
+        if (gender.equals("Female") && spouse != null && !pregnant && rand.nextInt(50) == 0
+                && targetQuests.stream().noneMatch(q -> "Get Pregnant".equals(q.name))) {
+            targetQuests.add(new Quest("Get Pregnant", true, 25, 0, 45, spouse));
         }
 
         Quest tempQuest = this.spotQuests.peek();
@@ -1276,12 +1340,38 @@ public class Character {
             case "Forage":
                 forage();
                 if (sect != null) sectPoints += 2;
+                if (sectMission != null) {
+                    String[] mp = sectMission.split("\\|");
+                    if (mp.length >= 4 && "Forage".equals(mp[0]) && "Herb".equals(mp[1])) {
+                        int missionLv = Integer.parseInt(mp[2]);
+                        boolean hasEnough = materialBag.stream().anyMatch(m ->
+                            m.itemType == Item.ItemType.Herb && m.lvl >= missionLv && m.quantity >= Integer.parseInt(mp[3]));
+                        if (hasEnough && sect != null) {
+                            sectPoints += sectMissionBonus;
+                            if (player && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
+                            sectMission = null; sectMissionBonus = 0;
+                        }
+                    }
+                }
                 questSuccess = 2;
                 break;
 
             case "Mine":
                 mine();
                 if (sect != null) sectPoints += 2;
+                if (sectMission != null) {
+                    String[] mp = sectMission.split("\\|");
+                    if (mp.length >= 4 && "Mine".equals(mp[0]) && "Metal".equals(mp[1])) {
+                        int missionLv = Integer.parseInt(mp[2]);
+                        boolean hasEnough = materialBag.stream().anyMatch(m ->
+                            m.itemType == Item.ItemType.Metal && m.lvl >= missionLv && m.quantity >= Integer.parseInt(mp[3]));
+                        if (hasEnough && sect != null) {
+                            sectPoints += sectMissionBonus;
+                            if (player && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
+                            sectMission = null; sectMissionBonus = 0;
+                        }
+                    }
+                }
                 questSuccess = 2;
                 break;
 
@@ -1311,42 +1401,53 @@ public class Character {
             }
 
             case "Hold Tournament": {
-                // Band: ±1 major realm around organizer's level
+                if (location.tournamentTimer > 0) { questSuccess = -2; break; }
                 int minMajor = Math.max(0, (majorLvl / 2) * 2);
                 int maxMajor = Math.min(10, minMajor + 1);
-                // Collect eligible participants
-                ArrayList<Character> pool = new ArrayList<>();
-                for (Character c : new ArrayList<>(location.characters)) {
-                    if (c == null || c.dead || c == this || c.trait == Traits.Beast) continue;
-                    if (c.majorLvl >= minMajor && c.majorLvl <= maxMajor) pool.add(c);
-                }
-                if (pool.size() < 2) { questSuccess = -2; break; }
-                // Fund the prize
                 int prizeLvl = Math.min(100, (maxMajor + 1) * 10 + rand.nextInt(11));
-                Item prize = new Item(rand.nextInt(2) == 0 ? Item.ItemType.Weapon : Item.ItemType.Clothing, prizeLvl);
+                Item prize;
+                if (rand.nextInt(2) == 0) {
+                    Item.WeaponType[] wts = Item.WeaponType.values();
+                    prize = new Item(this, wts[rand.nextInt(wts.length)], prizeLvl);
+                } else {
+                    prize = new Item(this, prizeLvl, Item.ItemType.Clothing);
+                }
                 long prizeCost = itemPrice(prize);
                 if (!canAfford(prizeCost)) { questSuccess = -2; break; }
                 deductSs(prizeCost);
-                // Shuffle seeding
-                java.util.Collections.shuffle(pool, rand);
-                // Single-elimination bracket — probability-based, no death risk
-                while (pool.size() > 1) {
-                    ArrayList<Character> next = new ArrayList<>();
-                    for (int _i = 0; _i + 1 < pool.size(); _i += 2) {
-                        Character a = pool.get(_i), b = pool.get(_i + 1);
-                        a.tempLvlCheck(); b.tempLvlCheck();
-                        int wc = Math.max(5, Math.min(95, 50 - 15 * (b.tempLvl - a.tempLvl)));
-                        if (a.trait == Traits.Lucky) wc = Math.min(95, wc + 45);
-                        if (b.trait == Traits.Lucky) wc = Math.max(5, wc - 45);
-                        next.add(rand.nextInt(100) < wc ? a : b);
-                    }
-                    if (pool.size() % 2 == 1) next.add(pool.get(pool.size() - 1));
-                    pool = next;
-                }
-                Character winner = pool.get(0);
-                winner.backpack.add(prize);
-                if (player || winner.player)
-                    System.out.println("=== Tournament: " + winner + " wins " + prize + " ===");
+                location.tournamentTimer = 8;
+                location.tournamentMinMajor = minMajor;
+                location.tournamentMaxMajor = maxMajor;
+                location.tournamentPrize = prize;
+                location.tournamentOrganizer = this;
+                location.tournamentRegistrants.clear();
+                if (player && skipping <= 0) System.out.println("=== Tournament announced at " + location.name + "! Realm " + minMajor + "-" + maxMajor + ", 8 weeks registration. Prize: " + prize + " ===");
+                questSuccess = 2;
+                break;
+            }
+
+            case "Register Tournament": {
+                if (location.tournamentTimer <= 0 || location.tournamentRegistrants.contains(this)) { questSuccess = -2; break; }
+                if (majorLvl < location.tournamentMinMajor || majorLvl > location.tournamentMaxMajor) { questSuccess = -2; break; }
+                location.tournamentRegistrants.add(this);
+                if (player && skipping <= 0) System.out.println("Registered for tournament at " + location.name);
+                questSuccess = 2;
+                break;
+            }
+
+            case "Spectate Tournament": {
+                if (location.tournamentTimer <= 0) { questSuccess = -2; break; }
+                if (player && skipping <= 0) System.out.println("Watching tournament registration at " + location.name + " — " + location.tournamentRegistrants.size() + " signed up so far.");
+                questSuccess = 2;
+                break;
+            }
+
+            case "Accept Sect Mission": {
+                if (sect == null || location != sect.location || sect.questBoard.isEmpty() || sectMission != null) { questSuccess = -2; break; }
+                sectMission = sect.questBoard.get(rand.nextInt(sect.questBoard.size()));
+                String[] parts = sectMission.split("\\|");
+                sectMissionBonus = parts.length >= 5 ? Integer.parseInt(parts[4]) : 10;
+                if (player && skipping <= 0) System.out.println("Accepted sect mission: " + parts[0] + " " + parts[1] + " (Lv." + parts[2] + "x" + parts[3] + ") for " + sectMissionBonus + " SP bonus");
                 questSuccess = 2;
                 break;
             }
@@ -1691,6 +1792,53 @@ public class Character {
                 return 1;
             }
 
+            case "Get Pregnant": {
+                Character partner = characters.get(quest.targetCharacter);
+                if (partner == null || partner.dead || partner != spouse) return -1;
+                if (location == partner.location) {
+                    if (!pregnant && rand.nextInt(10) == 0) {
+                        pregnant = true;
+                        tempCharacters.add(new Character(this));
+                        if (player && skipping <= 0) System.out.println("You are now pregnant with " + partner + "'s child!");
+                    }
+                    return 1;
+                }
+                return 0;
+            }
+
+            case "Find Parent's Body": {
+                if (location == quest.targetArea) {
+                    if (player && skipping <= 0) System.out.println("You found your parent's resting place.");
+                    if (rand.nextInt(5) == 0) {
+                        potential = Math.min(100, potential + 1);
+                        if (player && skipping <= 0) System.out.println("Your grief has strengthened your resolve. (+1 Potential)");
+                    }
+                    return 1;
+                }
+                return 0;
+            }
+
+            case "Gift Technique": {
+                Character recipient = characters.get(quest.targetCharacter);
+                if (recipient == null || recipient.dead) return -1;
+                if (location == recipient.location) {
+                    Technique bestTq = null;
+                    for (Technique t : techniqueList) {
+                        if (t.potential > (bestTq == null ? 0 : bestTq.potential)) bestTq = t;
+                    }
+                    if (bestTq != null) {
+                        final String tqName = bestTq.name;
+                        if (recipient.techniqueList.stream().noneMatch(t -> t.name.equals(tqName))) {
+                            Technique copy = new Technique(bestTq);
+                            recipient.techniqueList.add(copy);
+                            if (player && skipping <= 0) System.out.println("Gave technique " + bestTq.name + " (potential " + bestTq.potential + ") to " + recipient);
+                        }
+                    }
+                    return 1;
+                }
+                return 0;
+            }
+
         }
         return -1;
     }
@@ -1842,7 +1990,25 @@ public class Character {
                         location.shops.add(shop);
                     }
                     Shop myShop = ownedShops.stream().filter(s -> s.location == location).findFirst().orElse(null);
-                    if (myShop != null) myShop.restockFromCity(location);
+                    if (myShop != null) {
+                        myShop.restockFromCity(location);
+                        // Equip better gear from own stock instead of leaving it on a shelf
+                        for (Item item : new ArrayList<>(myShop.inventory)) {
+                            if (item.itemType == Item.ItemType.Weapon
+                                    && (equippedWeapon == null || item.lvl > equippedWeapon.lvl)) {
+                                if (equippedWeapon != null) myShop.inventory.add(equippedWeapon);
+                                myShop.inventory.remove(item);
+                                backpack.add(item);
+                                equip();
+                            } else if (item.itemType == Item.ItemType.Clothing
+                                    && (equippedClothing == null || item.lvl > equippedClothing.lvl)) {
+                                if (equippedClothing != null) myShop.inventory.add(equippedClothing);
+                                myShop.inventory.remove(item);
+                                backpack.add(item);
+                                equip();
+                            }
+                        }
+                    }
                 }
                 break;
             case Lucky:
@@ -2285,7 +2451,7 @@ public class Character {
             else {
                 temp = player;
             }
-            if (!temp.pregnant) {
+            if (!temp.pregnant && rand.nextInt(10) == 0) {
                 temp.pregnant = true;
                 tempCharacters.add(new Character(temp));
             }
@@ -2635,7 +2801,7 @@ public class Character {
             if (item.pillType == Item.PillType.Potential) {
                 if (potential >= 100) pillsToSell.add(item);
             } else if (item.pillType == Item.PillType.Cultivation) {
-                if (item.lvl <= majorLvl) pillsToSell.add(item);
+                if (item.lvl <= majorLvl * 10) pillsToSell.add(item);
             }
         }
         for (Item pill : pillsToSell) {
@@ -3211,7 +3377,11 @@ public class Character {
     }
 
     public void winCheck(Character loser) {
-        if (!sparring) {
+        if (sparring) {
+            changeRelationship(loser, 1);
+            loser.changeRelationship(this, 1);
+        } else {
+            if (martialTechnique != null && rand.nextInt(5) == 0) martialTechnique.upgrade(this);
             loser.dead(this);
         }
     }

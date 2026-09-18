@@ -41,6 +41,14 @@ public class Area {
     ArrayList<Character> characters = new ArrayList<Character>();
     ArrayList<Character> deadCharacters = new ArrayList<>();
 
+    // Tournament registration
+    ArrayList<Character> tournamentRegistrants = new ArrayList<>();
+    int tournamentTimer = 0;
+    int tournamentMinMajor = 0;
+    int tournamentMaxMajor = 0;
+    Item tournamentPrize = null;
+    Character tournamentOrganizer = null;
+
     public Area() {
         name = "Originis";
         index = uindex++;
@@ -267,6 +275,42 @@ public class Area {
         if (population > 0 && cityOwner != null) {
             cityOwner.ss += population;
         }
+    }
+
+    public void runTournament() {
+        if (tournamentRegistrants.size() < 2) {
+            if (tournamentPrize != null && tournamentOrganizer != null)
+                tournamentOrganizer.backpack.add(tournamentPrize);
+            tournamentPrize = null; tournamentOrganizer = null;
+            tournamentRegistrants.clear();
+            return;
+        }
+        java.util.Collections.shuffle(tournamentRegistrants, rand);
+        java.util.ArrayList<Character> pool = new java.util.ArrayList<>(tournamentRegistrants);
+        while (pool.size() > 1) {
+            java.util.ArrayList<Character> next = new java.util.ArrayList<>();
+            for (int _i = 0; _i + 1 < pool.size(); _i += 2) {
+                Character a = pool.get(_i), b = pool.get(_i + 1);
+                if (a.dead) { next.add(b); continue; }
+                if (b.dead) { next.add(a); continue; }
+                a.tempLvlCheck(); b.tempLvlCheck();
+                int wc = Math.max(5, Math.min(95, 50 - 15 * (b.tempLvl - a.tempLvl)));
+                if (a.trait == Character.Traits.Lucky) wc = Math.min(95, wc + 45);
+                if (b.trait == Character.Traits.Lucky) wc = Math.max(5, wc - 45);
+                next.add(rand.nextInt(100) < wc ? a : b);
+            }
+            if (pool.size() % 2 == 1) next.add(pool.get(pool.size() - 1));
+            pool = next;
+        }
+        Character winner = pool.isEmpty() ? null : pool.get(0);
+        if (winner != null && !winner.dead && tournamentPrize != null) {
+            winner.backpack.add(tournamentPrize);
+            winner.equip();
+        }
+        boolean hasPlayer = Map.characters.stream().anyMatch(c -> c != null && c.player && c.skipping <= 0);
+        if (hasPlayer && winner != null)
+            System.out.println("=== Tournament at " + name + ": " + winner + " wins " + tournamentPrize + "! ===");
+        tournamentRegistrants.clear(); tournamentPrize = null; tournamentOrganizer = null;
     }
 
     public String toString() {
