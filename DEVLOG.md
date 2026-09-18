@@ -1,5 +1,14 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-18 (12)
+- Added: Ghost physique trait — characters spawning with Ghost trait enter ghost form on death (not old age); can "Possess Womb" (take over unborn child stronger than mother) or "Ghost City Rebirth" (spawn as new NPC in a city); inherit Ghost trait in next body; `originalName` tracks name chain; permanent death if killed while already in ghost form
+- Added: IronBody, SpiritVein, HeavenlyRoot special physique traits — IronBody adds majorLvl/2+1 to tempLvl; SpiritVein gives 1.5× cultivation speed; HeavenlyRoot doubles technique upgrade chance in winCheck(); all three added to NPC trait pickers at rare physique rarity (~1% each)
+- Added: `practice()` method on Character — calls `cultivate()` + 10% chance technique upgrade in one helper; used by sparring resolution
+- Added: Sparring event — 10% chance per tick when two friends (rel >= 1) meet in `interact()`; both parties call `practice()` via winCheck(); sparring flag cleared after resolution
+- Added: City improvement quests — "Buy City Array" (3%/turn for city owners: purchase and install array); "Entice Merchant" (5%/turn: pay incentive to recruit a merchant to open a local shop)
+- Added: `sectPopulation` on Organization (starts 1000) — grows 1%/year via `growPopulation()` called in `postMissionsYearly()`; taxes sectPopulation/100 SS to sect master yearly
+- Changed: `player` field on Character — was boolean, now int (0=NPC, 1=human, 2=tracked NPC/follow mode); all `if (player && ...)` → `if (player > 0 && ...)`; `followMode` field removed, replaced by `player = 2`; fixed in Character.java, GameDriver.java, GameDriver2.java, Area.java
+
 ## 2026-09-18 (11)
 - Added: Sect quest board — `ArrayList<String> questBoard` on Organization; `postMissionsYearly()` posts up to 5 herb/metal shortage missions ("Forage|Herb|lvl|qty|bonus" format); "Accept Sect Mission" spot quest (15%/turn at sect); Forage/Mine cases check active mission and award bonus sectPoints on delivery; called yearly from GameDriver
 - Added: Tournament advance registration — "Hold Tournament" revamped to set 8-week `tournamentTimer` + store prize/organizer/registrants on Area; "Register Tournament" spot quest (5%/turn for eligible realm members); "Spectate Tournament" spot quest (10%/turn for non-registrants); `Area.runTournament()` runs bracket when timer hits 0; GameDriver ticks timer every week

@@ -35,6 +35,9 @@ public class Organization {
     // Quest board: each entry is "type|itemType|minLvl|qty|bonusPoints"
     ArrayList<String> questBoard = new ArrayList<>();
 
+    // Non-cultivating population under sect protection; grows 1%/year, taxed to master
+    long sectPopulation = 1000;
+
     public Organization(Character founder) {
         this.founder = founder;
         this.master = founder;
@@ -146,8 +149,14 @@ public class Organization {
         return donationPoints(item, qty);
     }
 
+    public void growPopulation() {
+        sectPopulation = (long)(sectPopulation * 1.01);
+        if (master != null) master.ss += sectPopulation / 100;
+    }
+
     public void postMissionsYearly() {
         questBoard.clear();
+        growPopulation();
         int sl = sectLvl();
         long herbWeight = 0, metalWeight = 0;
         int[] herbByLvl = new int[101], metalByLvl = new int[101];

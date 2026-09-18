@@ -25,6 +25,9 @@ public class Character {
         Runner,
         Cheater,
         Lucky,
+        IronBody,
+        SpiritVein,
+        HeavenlyRoot,
         Monster,
         Beast
     }
@@ -35,7 +38,7 @@ public class Character {
     boolean pregnant = false;
     boolean born = true;
     boolean dead = false;
-    boolean player = false;
+    int player = 0; // 0=NPC, 1=human controlled, 2=tracked NPC (prints like player)
     boolean sparring = false;
     char movement; // 'x' = stand still  'm' = move randomly
     int skipping = 0; // How many turns a person chooses to skip
@@ -55,7 +58,8 @@ public class Character {
     int sectPoints = 0;
     String sectMission = null;
     int sectMissionBonus = 0;
-    boolean followMode = false;
+    boolean isGhostForm = false;
+    String originalName = null; // chain of prior names for Ghost rebirths
     int exhaustionPenalty = 0;
     int autoX = -1;
     int autoY = -1;
@@ -347,10 +351,16 @@ public class Character {
             int traitNum = rand.nextInt(1000000);
             if (traitNum == 0) {
                 trait = Traits.Cheater;
-            } else if (traitNum < 10000) {
+            } else if (traitNum < 5000) {
                 trait = Traits.Lucky;
+            } else if (traitNum < 15000) {
+                trait = Traits.Ghost;         // rare physique: rebirth on death
+            } else if (traitNum < 25000) {
+                trait = Traits.IronBody;      // rare physique: natural armor
+            } else if (traitNum < 35000) {
+                trait = Traits.SpiritVein;    // rare physique: faster cultivation
             } else if (traitNum < 40000) {
-                trait = Traits.Ghost;
+                trait = Traits.HeavenlyRoot;  // rare physique: better technique learning
             } else if (traitNum < 70000) {
                 trait = Traits.Leader;
             } else if (traitNum < 100000) {
@@ -523,8 +533,14 @@ public class Character {
         }
     }
 
+    public void practice() {
+        cultivate();
+        if (martialTechnique != null && rand.nextInt(10) == 0) martialTechnique.upgrade(this);
+    }
+
     public void cultivate() {
-        cultivationBase += cultivation;
+        double spiritVeinBonus = (trait == Traits.SpiritVein) ? 1.5 : 1.0;
+        cultivationBase += cultivation * spiritVeinBonus;
         if (cultivationBase >= cultivationBaseMax) {
             cultivationBase -= cultivationBaseMax;
             lvl++;
@@ -746,9 +762,27 @@ public class Character {
 
     }
     public void dead(Character killer) {
+        // Ghost physique: enter ghost form instead of dying (only on first death, not while already a ghost)
+        if (trait == Traits.Ghost && !isGhostForm && killer.trait != Traits.Beast) {
+            isGhostForm = true;
+            if (equippedWeapon != null)  { backpack.add(equippedWeapon);  equippedWeapon  = null; }
+            if (equippedClothing != null){ backpack.add(equippedClothing); equippedClothing = null; }
+            if (sect != null) sect.resign(this);
+            targetQuests.clear(); spotQuests.clear(); currentQuest = null;
+            // Seek a city for rebirth
+            for (Area area : createdAreas) {
+                if (area.city) {
+                    targetQuests.add(new Quest("Ghost City Rebirth", false, 50, 2, 70, area));
+                    break;
+                }
+            }
+            killer.kills++;
+            if (player > 0 || killer.player > 0) System.out.println(this + " has become a Ghost!");
+            return;
+        }
         dead = true;
-        if (changeMc && player) {
-            killer.player = true;
+        if (changeMc && player == 1) {
+            killer.player = 1;
         }
 
         if (trait != Traits.Beast) {
@@ -1103,6 +1137,25 @@ public class Character {
             }
         }
 
+        // Buy City Array: city owners periodically invest in stronger defensive arrays (3% chance/turn)
+        if (location.city && location.cityOwner == this && rand.nextInt(33) == 0
+                && spotQuests.stream().noneMatch(q -> "Buy City Array".equals(q.name))) {
+            int arrayLvl = Math.min(100, (majorLvl + 1) * 10);
+            Item testArray = new Item(this, arrayLvl, Item.ItemType.Array);
+            if (canAfford(itemPrice(testArray))) {
+                spotQuests.add(new Quest("Buy City Array", true, 40, 0, 60));
+            }
+        }
+
+        // Entice Merchant: city owners recruit merchants without a local shop (5% chance/turn)
+        if (location.city && location.cityOwner == this && rand.nextInt(20) == 0
+                && spotQuests.stream().noneMatch(q -> "Entice Merchant".equals(q.name))) {
+            boolean missingMerchant = characters.stream().anyMatch(c -> c != null && !c.dead
+                    && c.trait == Traits.Merchant
+                    && c.ownedShops.stream().noneMatch(s -> s.location == location));
+            if (missingMerchant) spotQuests.add(new Quest("Entice Merchant", true, 45, 0, 65));
+        }
+
         // Donate to Sect: members at sect home donate no-longer-useful items (10% chance/turn)
         if (sect != null && location == sect.location && rand.nextInt(10) == 0
                 && spotQuests.stream().noneMatch(q -> "Donate to Sect".equals(q.name))) {
@@ -1137,6 +1190,21 @@ public class Character {
              || (t.itemType == Item.ItemType.Clothing && (equippedClothing == null || t.lvl > equippedClothing.lvl + 5)));
             if ((needsHerb && hasHerb) || (needsMetal && hasMetal) || wantsGear) {
                 spotQuests.add(new Quest("Buy from Sect", true, 45, 0, 65));
+            }
+        }
+
+        // Ghost form: seek pregnant women for possession (10% chance/turn)
+        if (isGhostForm && rand.nextInt(10) == 0
+                && targetQuests.stream().noneMatch(q -> "Possess Womb".equals(q.name))) {
+            for (Area area : knownLocations) {
+                if (area == null) continue;
+                for (Character c : new ArrayList<>(area.characters)) {
+                    if (c.pregnant && !c.dead && lvl > c.lvl) {
+                        targetQuests.add(new Quest("Possess Womb", false, 80, 3, 100, c));
+                        break;
+                    }
+                }
+                if (targetQuests.stream().anyMatch(q -> "Possess Womb".equals(q.name))) break;
             }
         }
 
@@ -1348,7 +1416,7 @@ public class Character {
                             m.itemType == Item.ItemType.Herb && m.lvl >= missionLv && m.quantity >= Integer.parseInt(mp[3]));
                         if (hasEnough && sect != null) {
                             sectPoints += sectMissionBonus;
-                            if (player && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
+                            if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
                             sectMission = null; sectMissionBonus = 0;
                         }
                     }
@@ -1367,7 +1435,7 @@ public class Character {
                             m.itemType == Item.ItemType.Metal && m.lvl >= missionLv && m.quantity >= Integer.parseInt(mp[3]));
                         if (hasEnough && sect != null) {
                             sectPoints += sectMissionBonus;
-                            if (player && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
+                            if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
                             sectMission = null; sectMissionBonus = 0;
                         }
                     }
@@ -1393,7 +1461,7 @@ public class Character {
                     }
                     if (best != null) {
                         lib.sellTechnique(this, new Technique(best));
-                        if (player && skipping <= 0) System.out.println("Sold " + best.name + " to city library");
+                        if (player > 0 && skipping <= 0) System.out.println("Sold " + best.name + " to city library");
                     }
                 }
                 questSuccess = 2;
@@ -1421,7 +1489,7 @@ public class Character {
                 location.tournamentPrize = prize;
                 location.tournamentOrganizer = this;
                 location.tournamentRegistrants.clear();
-                if (player && skipping <= 0) System.out.println("=== Tournament announced at " + location.name + "! Realm " + minMajor + "-" + maxMajor + ", 8 weeks registration. Prize: " + prize + " ===");
+                if (player > 0 && skipping <= 0) System.out.println("=== Tournament announced at " + location.name + "! Realm " + minMajor + "-" + maxMajor + ", 8 weeks registration. Prize: " + prize + " ===");
                 questSuccess = 2;
                 break;
             }
@@ -1430,14 +1498,14 @@ public class Character {
                 if (location.tournamentTimer <= 0 || location.tournamentRegistrants.contains(this)) { questSuccess = -2; break; }
                 if (majorLvl < location.tournamentMinMajor || majorLvl > location.tournamentMaxMajor) { questSuccess = -2; break; }
                 location.tournamentRegistrants.add(this);
-                if (player && skipping <= 0) System.out.println("Registered for tournament at " + location.name);
+                if (player > 0 && skipping <= 0) System.out.println("Registered for tournament at " + location.name);
                 questSuccess = 2;
                 break;
             }
 
             case "Spectate Tournament": {
                 if (location.tournamentTimer <= 0) { questSuccess = -2; break; }
-                if (player && skipping <= 0) System.out.println("Watching tournament registration at " + location.name + " — " + location.tournamentRegistrants.size() + " signed up so far.");
+                if (player > 0 && skipping <= 0) System.out.println("Watching tournament registration at " + location.name + " — " + location.tournamentRegistrants.size() + " signed up so far.");
                 questSuccess = 2;
                 break;
             }
@@ -1447,7 +1515,38 @@ public class Character {
                 sectMission = sect.questBoard.get(rand.nextInt(sect.questBoard.size()));
                 String[] parts = sectMission.split("\\|");
                 sectMissionBonus = parts.length >= 5 ? Integer.parseInt(parts[4]) : 10;
-                if (player && skipping <= 0) System.out.println("Accepted sect mission: " + parts[0] + " " + parts[1] + " (Lv." + parts[2] + "x" + parts[3] + ") for " + sectMissionBonus + " SP bonus");
+                if (player > 0 && skipping <= 0) System.out.println("Accepted sect mission: " + parts[0] + " " + parts[1] + " (Lv." + parts[2] + "x" + parts[3] + ") for " + sectMissionBonus + " SP bonus");
+                questSuccess = 2;
+                break;
+            }
+
+            case "Buy City Array": {
+                if (!location.city || location.cityOwner != this) { questSuccess = -2; break; }
+                int arrayLvl = Math.min(100, (majorLvl + 1) * 10);
+                Item array = new Item(this, arrayLvl, Item.ItemType.Array);
+                long arrayCost = itemPrice(array);
+                if (!canAfford(arrayCost)) { questSuccess = -2; break; }
+                deductSs(arrayCost);
+                location.arrayBag.add(array);
+                if (player > 0 && skipping <= 0) System.out.println("Installed " + array + " at " + location.name);
+                questSuccess = 2;
+                break;
+            }
+
+            case "Entice Merchant": {
+                if (!location.city || location.cityOwner != this) { questSuccess = -2; break; }
+                Character merchant = null;
+                for (Character c : new ArrayList<>(characters)) {
+                    if (c == null || c.dead || c.trait != Traits.Merchant) continue;
+                    if (c.ownedShops.stream().noneMatch(s -> s.location == location)) { merchant = c; break; }
+                }
+                if (merchant == null) { questSuccess = -2; break; }
+                long incentive = Math.max(10000L, (long)(majorLvl + 1) * 50000);
+                if (!canAfford(incentive)) { questSuccess = -2; break; }
+                deductSs(incentive);
+                merchant.ss += incentive;
+                merchant.targetQuests.add(new Quest("Restock Trip", true, 80, 5, 100, location));
+                if (player > 0 && skipping <= 0) System.out.println("Enticed " + merchant + " to open a shop in " + location.name);
                 questSuccess = 2;
                 break;
             }
@@ -1509,7 +1608,7 @@ public class Character {
                     earnedPoints += sect.donationPoints(pill, donate);
                 }
                 sectPoints += earnedPoints;
-                if (player && skipping <= 0) System.out.println("Donated to sect treasury — earned " + earnedPoints + " sect points.");
+                if (player > 0 && skipping <= 0) System.out.println("Donated to sect treasury — earned " + earnedPoints + " sect points.");
                 questSuccess = 2;
                 break;
             }
@@ -1539,7 +1638,7 @@ public class Character {
                                 copy.name = item.name;
                                 materialBag.add(copy);
                             }
-                            if (player && skipping <= 0) System.out.println("Bought " + buyQty + "x " + item.name + " from sect treasury for " + cost + " sect points.");
+                            if (player > 0 && skipping <= 0) System.out.println("Bought " + buyQty + "x " + item.name + " from sect treasury for " + cost + " sect points.");
                             break;
                         }
                     }
@@ -1550,7 +1649,7 @@ public class Character {
                             sect.treasury.remove(item);
                             backpack.add(item);
                             equip();
-                            if (player && skipping <= 0) System.out.println("Bought " + item + " from sect treasury for " + cost + " sect points.");
+                            if (player > 0 && skipping <= 0) System.out.println("Bought " + item + " from sect treasury for " + cost + " sect points.");
                             break;
                         }
                     }
@@ -1561,7 +1660,7 @@ public class Character {
                             sect.treasury.remove(item);
                             backpack.add(item);
                             equip();
-                            if (player && skipping <= 0) System.out.println("Bought " + item + " from sect treasury for " + cost + " sect points.");
+                            if (player > 0 && skipping <= 0) System.out.println("Bought " + item + " from sect treasury for " + cost + " sect points.");
                             break;
                         }
                     }
@@ -1612,7 +1711,7 @@ public class Character {
                     }
                     if (best != null) {
                         lib.sellTechnique(this, new Technique(best));
-                        if (player && skipping <= 0) System.out.println("Sold " + best.name + " to city library");
+                        if (player > 0 && skipping <= 0) System.out.println("Sold " + best.name + " to city library");
                     }
                 }
                 return 1;
@@ -1640,7 +1739,7 @@ public class Character {
                 if (target != null && !target.dead && target.sect != null && sect != null
                         && !sect.isAlly(target.sect) && !sect.isAtWar()) {
                     sect.proposeAlliance(target.sect);
-                    if (player || target.player)
+                    if (player > 0 || target.player > 0)
                         System.out.println(sect + " and " + target.sect + " have formed an alliance!");
                 }
                 return 1;
@@ -1654,12 +1753,12 @@ public class Character {
                         target.deductSs(tribute);
                         ss += tribute;
                         convertCurrency();
-                        if (player || target.player)
+                        if (player > 0 || target.player > 0)
                             System.out.println(this + " demands tribute from " + target.sect);
                     } else {
                         if (!sect.isAtWar()) {
                             sect.declareWar(target.sect);
-                            if (player || target.player)
+                            if (player > 0 || target.player > 0)
                                 System.out.println(sect + " declared war on " + target.sect + " over unpaid tribute!");
                         }
                     }
@@ -1676,7 +1775,7 @@ public class Character {
                         target.sectPoints = 0;
                         sect.join(target);
                         if (oldSect.warTarget == null) oldSect.declareWar(sect);
-                        if (player || target.player)
+                        if (player > 0 || target.player > 0)
                             System.out.println(target + " has defected from " + oldSect + " to " + sect + "!");
                     }
                 }
@@ -1724,7 +1823,7 @@ public class Character {
                         if (rand.nextInt(15) == 0) {
                             Technique.techniqueType tt = rand.nextInt(2) == 0 ? Technique.techniqueType.Movement : Technique.techniqueType.Martial;
                             techniqueList.add(new Technique(tt, this, Math.max(1, rand.nextInt(dungeon.lvl / 2 + 1))));
-                            if (player && skipping <= 0) System.out.println(this + " found an ancient technique in the Lost Ruins!");
+                            if (player > 0 && skipping <= 0) System.out.println(this + " found an ancient technique in the Lost Ruins!");
                         }
                         break;
                     case BEAST_LAIR:
@@ -1737,14 +1836,14 @@ public class Character {
                         if (rand.nextInt(100) < trialWin) {
                             if (martialTechnique != null) martialTechnique.upgrade(this);
                             for (int i = 0; i < 3; i++) cultivate();
-                            if (player && skipping <= 0) System.out.println(this + " passed the Martial Trial!");
+                            if (player > 0 && skipping <= 0) System.out.println(this + " passed the Martial Trial!");
                         }
                         break;
                     case HAUNTED_GROUNDS:
                         for (int i = 0; i < 5; i++) cultivate();
                         if (rand.nextInt(25) == 0 && potential < 100) {
                             potential++;
-                            if (player && skipping <= 0) System.out.println(this + " gained potential in the Haunted Grounds!");
+                            if (player > 0 && skipping <= 0) System.out.println(this + " gained potential in the Haunted Grounds!");
                         }
                         break;
                 }
@@ -1799,7 +1898,7 @@ public class Character {
                     if (!pregnant && rand.nextInt(10) == 0) {
                         pregnant = true;
                         tempCharacters.add(new Character(this));
-                        if (player && skipping <= 0) System.out.println("You are now pregnant with " + partner + "'s child!");
+                        if (player > 0 && skipping <= 0) System.out.println("You are now pregnant with " + partner + "'s child!");
                     }
                     return 1;
                 }
@@ -1808,14 +1907,50 @@ public class Character {
 
             case "Find Parent's Body": {
                 if (location == quest.targetArea) {
-                    if (player && skipping <= 0) System.out.println("You found your parent's resting place.");
+                    if (player > 0 && skipping <= 0) System.out.println("You found your parent's resting place.");
                     if (rand.nextInt(5) == 0) {
                         potential = Math.min(100, potential + 1);
-                        if (player && skipping <= 0) System.out.println("Your grief has strengthened your resolve. (+1 Potential)");
+                        if (player > 0 && skipping <= 0) System.out.println("Your grief has strengthened your resolve. (+1 Potential)");
                     }
                     return 1;
                 }
                 return 0;
+            }
+
+            case "Possess Womb": {
+                Character mother = characters.get(quest.targetCharacter);
+                if (mother == null || mother.dead || !mother.pregnant || lvl <= mother.lvl) return -1;
+                if (location == mother.location) {
+                    Character unborn = null;
+                    for (Character child : mother.children) {
+                        if (child != null && !child.born && !child.dead) { unborn = child; break; }
+                    }
+                    if (unborn == null) return -1;
+                    unborn.trait = Traits.Ghost;
+                    unborn.originalName = (originalName != null ? originalName + " → " : "") + name + " " + lastName;
+                    if (player > 0 || mother.player > 0) System.out.println(this + " possesses " + mother + "'s unborn child! (was: " + unborn.originalName + ")");
+                    // Ghost dies permanently
+                    dead = true;
+                    remCharacters.add(this);
+                    location.characters.remove(this);
+                    return 1;
+                }
+                return 0;
+            }
+
+            case "Ghost City Rebirth": {
+                if (!location.city) return 0;
+                Character rebirth = new Character(location);
+                rebirth.trait = Traits.Ghost;
+                rebirth.originalName = (originalName != null ? originalName + " → " : "") + name + " " + lastName;
+                if (player == 1) { rebirth.player = 1; player = 0; }
+                else if (player == 2) { rebirth.player = 2; player = 0; }
+                tempCharacters.add(rebirth);
+                if (player > 0 || rebirth.player > 0) System.out.println(this + " is reborn as " + rebirth + " in " + location.name + "! (was: " + rebirth.originalName + ")");
+                dead = true;
+                remCharacters.add(this);
+                location.characters.remove(this);
+                return 1;
             }
 
             case "Gift Technique": {
@@ -1831,7 +1966,7 @@ public class Character {
                         if (recipient.techniqueList.stream().noneMatch(t -> t.name.equals(tqName))) {
                             Technique copy = new Technique(bestTq);
                             recipient.techniqueList.add(copy);
-                            if (player && skipping <= 0) System.out.println("Gave technique " + bestTq.name + " (potential " + bestTq.potential + ") to " + recipient);
+                            if (player > 0 && skipping <= 0) System.out.println("Gave technique " + bestTq.name + " (potential " + bestTq.potential + ") to " + recipient);
                         }
                     }
                     return 1;
@@ -2109,7 +2244,7 @@ public class Character {
                 materialBag.add(item);
             }
             location.herbMaterials -= dropAmount; // Removes herbs from the location's herb count
-            if (player && skipping <= 0 && age >= 8) {
+            if (player > 0 && skipping <= 0 && age >= 8) {
                 System.out.println("Discovered " + dropAmount + " herbs. Quality: " + rewardLvl);
             }
         }
@@ -2134,7 +2269,7 @@ public class Character {
                 materialBag.add(item);
             }
             location.metalMaterials -= dropAmount; // Removes herbs from the location's herb count
-            if (player && skipping <= 0 && age >= 8) {
+            if (player > 0 && skipping <= 0 && age >= 8) {
                 System.out.println("Discovered " + dropAmount + " metal. Quality: " + rewardLvl);
             }
         }
@@ -2218,7 +2353,7 @@ public class Character {
                 }
             }
         }
-        if (player && skipping <= 0 && age >= 8) {
+        if (player > 0 && skipping <= 0 && age >= 8) {
             System.out.println("Created a few pills");
         }
         return success;
@@ -2232,7 +2367,7 @@ public class Character {
                     continue;
                 }
                 else if (item.pillType == Item.PillType.Cultivation && item.quantity > 0 && item.lvl == majorLvl + 1) {
-                    if (player && skipping <= 0 && age >= 8) {
+                    if (player > 0 && skipping <= 0 && age >= 8) {
                         System.out.println(this + " has consumed a(n) " + item);
                     }
                     cultivate();
@@ -2257,12 +2392,20 @@ public class Character {
                     battleCheck(player);
                 }
             }
+            // Sparring: close friends spar together (10% chance when rel >= 1)
+            Relationship relVal = relationshipList.contains(player.id);
+            if (relVal != null && relVal.value >= 1 && !sparring && !player.sparring && rand.nextInt(10) == 0) {
+                this.sparring = true;
+                player.sparring = true;
+                battleCheck(player);
+            }
+
             // Changes the Relationship Value of this Character and the targeted Player
 
             changeRelationship(player, 0);
             checkBirth(player);
 
-            if ((this.player || player.player ) && skipping <= 0 && age >= 8) {
+            if ((this.player > 0 || player.player > 0) && skipping <= 0) {
                 System.out.println(this + " talked to " + player);
             }
         }
@@ -2519,7 +2662,7 @@ public class Character {
                     }
                 }
             }
-            if (player && skipping <= 0 && age >= 8) {
+            if (player > 0 && skipping <= 0 && age >= 8) {
                 System.out.println("Created " + weapon);
             }
         }
@@ -2565,7 +2708,7 @@ public class Character {
                     professionExpMax = Math.pow(10, professionLvl / 10.);
                 }
             }
-            if (player && skipping <= 0 && age >= 8) {
+            if (player > 0 && skipping <= 0 && age >= 8) {
                 System.out.println("Created " + clothing);
             }
         }
@@ -2611,7 +2754,7 @@ public class Character {
                     professionExpMax = Math.pow(10, professionLvl / 10.);
                 }
             }
-            if (player && skipping <= 0 && age >= 8) {
+            if (player > 0 && skipping <= 0 && age >= 8) {
                 System.out.println("Created " + array);
             }
         }
@@ -2821,7 +2964,7 @@ public class Character {
         pillBag.removeAll(pillsToSell);
         ss += pillEarned;
         convertCurrency();
-        if (player && skipping <= 0 && age >= 8) {
+        if (player > 0 && skipping <= 0 && age >= 8) {
             long totalEarned = merchantEarned + poolEarned + pillEarned;
             System.out.println("Sold " + (toSell.size() + pillsToSell.size()) + " items for " + totalEarned + " ss at " + city.name);
         }
@@ -2854,7 +2997,7 @@ public class Character {
                 professionExpMax = Math.pow(10, professionLvl / 10.);
             }
         }
-        if (player && skipping <= 0 && age >= 8) {
+        if (player > 0 && skipping <= 0 && age >= 8) {
             System.out.println("Created " + technique);
         }
         // Donate a copy to sect library (earns sectPoints)
@@ -3142,7 +3285,7 @@ public class Character {
             sect.squabbles++;
             if (sect.squabbles >= 5) {
                 sect.declareWar(opponent.sect);
-                if (player || opponent.player) System.out.println(sect + " has declared war on " + opponent.sect + "!");
+                if (player > 0 || opponent.player > 0) System.out.println(sect + " has declared war on " + opponent.sect + "!");
             }
         }
 
@@ -3380,8 +3523,13 @@ public class Character {
         if (sparring) {
             changeRelationship(loser, 1);
             loser.changeRelationship(this, 1);
+            practice();
+            loser.practice();
+            this.sparring = false;
+            loser.sparring = false;
         } else {
-            if (martialTechnique != null && rand.nextInt(5) == 0) martialTechnique.upgrade(this);
+            int upgradeChance = (trait == Traits.HeavenlyRoot) ? 2 : 5;
+            if (martialTechnique != null && rand.nextInt(upgradeChance) == 0) martialTechnique.upgrade(this);
             loser.dead(this);
         }
     }
@@ -3438,6 +3586,10 @@ public class Character {
 
         if (this.trait == Traits.Cheater) {
             tempLvl += 5;
+        }
+
+        if (this.trait == Traits.IronBody) {
+            tempLvl += majorLvl / 2 + 1;
         }
 
         if (exhaustionPenalty > 0) {
@@ -3564,7 +3716,13 @@ public class Character {
             case Lucky:
                 return "Lucky";
             case Ghost:
-                return "Ghost";
+                return "Ghost" + (isGhostForm ? " (Ghost Form)" : "") + (originalName != null ? " [was: " + originalName + "]" : "");
+            case IronBody:
+                return "Iron Body";
+            case SpiritVein:
+                return "Spirit Vein";
+            case HeavenlyRoot:
+                return "Heavenly Root";
             case Tailor:
                 return "Tailor";
             case Runner:

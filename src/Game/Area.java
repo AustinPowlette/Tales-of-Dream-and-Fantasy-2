@@ -307,7 +307,7 @@ public class Area {
             winner.backpack.add(tournamentPrize);
             winner.equip();
         }
-        boolean hasPlayer = Map.characters.stream().anyMatch(c -> c != null && c.player && c.skipping <= 0);
+        boolean hasPlayer = Map.characters.stream().anyMatch(c -> c != null && c.player > 0 && c.skipping <= 0);
         if (hasPlayer && winner != null)
             System.out.println("=== Tournament at " + name + ": " + winner + " wins " + tournamentPrize + "! ===");
         tournamentRegistrants.clear(); tournamentPrize = null; tournamentOrganizer = null;

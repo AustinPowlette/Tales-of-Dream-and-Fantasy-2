@@ -31,7 +31,7 @@ public class GameDriver {
             currentCharacter = bete;
             characters.add(bete);
             population++; // Don't forget to add player characters to population
-            bete.player = true;
+            bete.player = 1;
             if (mcOpt == 'C' || mcOpt == 'c') {
                 System.out.println("Trait: A=Alchemist B=Blacksmith T=Tailor S=Scribe I=Innovative L=Leader M=Merchant R=Runner");
                 char tc = scan.next().charAt(0);
@@ -54,7 +54,7 @@ public class GameDriver {
                 else if (ac == 'E' || ac == 'e') bete.affiliation = "Evil";
                 else bete.affiliation = "Neutral";
             } else if (mcOpt == 'F' || mcOpt == 'f') {
-                bete.followMode = true; bete.potential = 100; bete.trait = Character.Traits.Innovative;
+                bete.player = 2; bete.potential = 100; bete.trait = Character.Traits.Innovative;
             } else {
                 bete.potential = 100; bete.trait = Character.Traits.Alchemist;
             }
@@ -169,8 +169,8 @@ public class GameDriver {
             for (Character character : characters) {
                 currentCharacter = character;
                 if (!character.dead && character.born) {
-                    if (character.player == true && character.age >= 8) {
-                        if (character.followMode) {
+                    if (character.player >= 1 && character.age >= 8) {
+                        if (character.player == 2) {
                             character.movement();
                             System.out.println("[Follow] " + character + character.location);
                         } else {

@@ -33,7 +33,7 @@ public class GameDriver2 {
             currentCharacter = bete;
             characters.add(bete);
             characters.add(ralph);
-            bete.player = true;
+            bete.player = 1;
             bete.potential = 100;
             bete.lvl = 60;
             ralph.potential = 100;
