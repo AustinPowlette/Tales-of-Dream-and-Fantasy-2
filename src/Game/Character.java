@@ -1068,12 +1068,22 @@ public class Character {
             }
         }
 
-        // Donate to Sect: members at sect home donate excess items periodically (10% chance/turn)
+        // Donate to Sect: members at sect home donate no-longer-useful items (10% chance/turn)
         if (sect != null && location == sect.location && rand.nextInt(10) == 0
                 && spotQuests.stream().noneMatch(q -> "Donate to Sect".equals(q.name))) {
             boolean hasExtras = backpack.stream().anyMatch(i -> i != equippedWeapon && i != equippedClothing);
-            if (!hasExtras) for (Item m : materialBag) { if (m.quantity > 2000) { hasExtras = true; break; } }
-            if (!hasExtras) for (Item p : pillBag)     { if (p.quantity > 5)    { hasExtras = true; break; } }
+            boolean usesHerbs  = trait == Traits.Alchemist || trait == Traits.Tailor || trait == Traits.Scribe;
+            boolean usesMetals = trait == Traits.Blacksmith;
+            if (!hasExtras) for (Item m : materialBag) {
+                if ((m.itemType == Item.ItemType.Herb  && (!usesHerbs  || m.quantity > 5000))
+                 || (m.itemType == Item.ItemType.Metal && (!usesMetals || m.quantity > 5000))) { hasExtras = true; break; }
+            }
+            if (!hasExtras) for (Item p : pillBag) {
+                boolean stale = p.lvl < majorLvl
+                    || (p.pillType == Item.PillType.Potential && potential >= 100)
+                    || (p.pillType == Item.PillType.Cultivation && p.quantity > 5 && p.lvl >= majorLvl);
+                if (stale) { hasExtras = true; break; }
+            }
             if (hasExtras) spotQuests.add(new Quest("Donate to Sect", true, 30, 0, 50));
         }
 
@@ -1344,14 +1354,22 @@ public class Character {
             case "Donate to Sect": {
                 if (sect == null || location != sect.location) { questSuccess = -2; break; }
                 int earnedPoints = 0;
+                boolean usesHerbs2  = trait == Traits.Alchemist || trait == Traits.Tailor || trait == Traits.Scribe;
+                boolean usesMetals2 = trait == Traits.Blacksmith;
+                // Donate all non-equipped backpack items (spare combat loot)
                 for (Item item : new ArrayList<>(backpack)) {
                     if (item == equippedWeapon || item == equippedClothing) continue;
                     sect.treasury.add(item);
                     backpack.remove(item);
                     earnedPoints += sect.donationPoints(item, 1);
                 }
+                // Herbs/metals: non-users donate ALL; users keep 5000, donate surplus
                 for (Item item : new ArrayList<>(materialBag)) {
-                    int donate = Math.max(0, item.quantity - 2000);
+                    boolean isHerb  = item.itemType == Item.ItemType.Herb;
+                    boolean isMetal = item.itemType == Item.ItemType.Metal;
+                    if (!isHerb && !isMetal) continue;
+                    int keep   = (isHerb && usesHerbs2) || (isMetal && usesMetals2) ? 5000 : 0;
+                    int donate = Math.max(0, item.quantity - keep);
                     if (donate <= 0) continue;
                     item.quantity -= donate;
                     if (item.quantity <= 0) materialBag.remove(item);
@@ -1366,8 +1384,16 @@ public class Character {
                     }
                     earnedPoints += sect.donationPoints(item, donate);
                 }
+                // Pills: donate what's no longer useful
                 for (Item pill : new ArrayList<>(pillBag)) {
-                    int donate = Math.max(0, pill.quantity - 5);
+                    int donate = 0;
+                    if (pill.lvl < majorLvl) {
+                        donate = pill.quantity; // realm already surpassed — all useless
+                    } else if (pill.pillType == Item.PillType.Potential && potential >= 100) {
+                        donate = pill.quantity; // potential maxed — potential pills useless
+                    } else if (pill.pillType == Item.PillType.Cultivation) {
+                        donate = Math.max(0, pill.quantity - 5); // keep reserve of 5 at current+ level
+                    }
                     if (donate <= 0) continue;
                     pill.quantity -= donate;
                     if (pill.quantity <= 0) pillBag.remove(pill);
