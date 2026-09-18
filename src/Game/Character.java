@@ -3605,7 +3605,7 @@ public class Character {
         else if (age + totalAgeGained/10 > maxAge) {
             tempLvl += Math.sqrt(potential);
             maxAge -= totalAgeGained / 10;
-            dead = true;
+            dead();
             return;
         }
         else {
