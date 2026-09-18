@@ -716,6 +716,9 @@ public class Character {
             backpack.add(equippedClothing);
             equippedClothing = null;
         }
+        targetQuests.clear();
+        spotQuests.clear();
+        currentQuest = null;
         remCharacters.add(this);
         location.characters.remove(this);
         location.deadCharacters.add(this);
@@ -752,6 +755,9 @@ public class Character {
                 backpack.add(equippedClothing);
                 equippedClothing = null;
             }
+            targetQuests.clear();
+            spotQuests.clear();
+            currentQuest = null;
             remCharacters.add(this); //Removes a cultivator from the characters Array after the round is done
             location.characters.remove(this); //Removes a cultivator from the location
         }
@@ -838,12 +844,52 @@ public class Character {
                 targetQuests.add(new Quest("Go Sell", true, 50, 0, 70, targetCity));
         }
 
-        // Buy Gear: missing slot, or equipped gear is a full major realm (10 levels) behind character level
-        if (location.city && !location.shops.isEmpty()
-                && (equippedWeapon == null || equippedClothing == null
-                    || (equippedWeapon != null && equippedWeapon.lvl + 10 <= lvl)
-                    || (equippedClothing != null && equippedClothing.lvl + 10 <= lvl))) {
-            buyGear();
+        // Buy Gear: in city with shops — buy immediately; otherwise queue travel to nearest known shop city
+        boolean gearNeeded = equippedWeapon == null || equippedClothing == null
+                || (equippedWeapon != null && equippedWeapon.lvl + 10 <= lvl)
+                || (equippedClothing != null && equippedClothing.lvl + 10 <= lvl);
+        if (gearNeeded) {
+            if (location.city && !location.shops.isEmpty()) {
+                buyGear();
+            } else if (targetQuests.stream().noneMatch(q -> "Buy Gear".equals(q.name))
+                    && (currentQuest == null || !"Buy Gear".equals(currentQuest.name))) {
+                for (Area area : knownLocations) {
+                    if (area != null && area.city && !area.shops.isEmpty()) {
+                        targetQuests.add(new Quest("Buy Gear", true, 30, 2, 55, area));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Seek Potential: travel to city with potential pills when potential is too low for next breakthrough
+        if (trait != Traits.Beast && majorLvl < 9) {
+            int potThreshold = 101 - (9 - majorLvl) * (9 - majorLvl);
+            if (potential < potThreshold
+                    && targetQuests.stream().noneMatch(q -> "Seek Potential".equals(q.name))
+                    && (currentQuest == null || !"Seek Potential".equals(currentQuest.name))) {
+                for (Area area : knownLocations) {
+                    if (area != null && area.city && area.pillBag != null
+                            && area.pillBag.stream().anyMatch(p ->
+                                    p.itemType == Item.ItemType.Pill && p.pillType == Item.PillType.Potential)) {
+                        targetQuests.add(new Quest("Seek Potential", true, 35, 2, 65, area));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Bully: Evil characters proactively target significantly weaker characters in same location
+        if (trait != Traits.Beast && "Evil".equals(affiliation) && rand.nextInt(10) == 0
+                && !location.characters.isEmpty()) {
+            for (Character c : location.characters) {
+                if (c == null || c.dead || c == this || c.trait == Traits.Beast) continue;
+                if (lvl - c.lvl >= 15
+                        && targetQuests.stream().noneMatch(q -> "Battle Dislike".equals(q.name) && q.targetCharacter == c.id)) {
+                    targetQuests.add(new Quest("Battle Dislike", true, 20, 3, 50, c));
+                    break;
+                }
+            }
         }
 
         // Hunt Beast: 20% chance per turn to seek combat in a known area with level-appropriate monsters
@@ -866,6 +912,18 @@ public class Character {
             for (Area area : knownLocations) {
                 if (area != null && area.sect != null) {
                     targetQuests.add(new Quest("Join Sect", true, 20, 1, 40, area));
+                    break;
+                }
+            }
+        }
+
+        // Recruit Member: sect masters actively seek eligible candidates in known locations
+        if (sect != null && sect.isMaster(this) && trait == Traits.Leader && rand.nextInt(15) == 0
+                && targetQuests.stream().noneMatch(q -> "Recruit Member".equals(q.name))
+                && (currentQuest == null || !"Recruit Member".equals(currentQuest.name))) {
+            for (Character c : location.characters) {
+                if (c != null && !c.dead && c != this && sect.canJoin(c)) {
+                    targetQuests.add(new Quest("Recruit Member", true, 25, 2, 45, c));
                     break;
                 }
             }
@@ -904,19 +962,20 @@ public class Character {
                 currentQuest = null;
             }
         }
-        // If currentQuest is null, go through queue until find viable quest or
+        // If currentQuest is null, go through queue until find viable quest or empty
         if (currentQuest == null) {
             while (questCode != -3 && questCode != 1) {
                 if (targetQuests.peek() != null) {
                     currentQuest = targetQuests.poll();
                     if (questViable(currentQuest) == 1) {
                         questCode = 1;
+                    } else {
+                        currentQuest.questDeconstructor();
+                        currentQuest = null;
                     }
                 }
                 else {
                     questCode = -3;
-                    // Testing
-                    System.out.println("Priority Queue is Null\n" + targetQuests);
                 }
             }
         }
@@ -1009,6 +1068,15 @@ public class Character {
                 if ("Restock Trip".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.city && quest.targetArea.cityOwner != null
                             && quest.targetArea.backpack != null && !quest.targetArea.backpack.isEmpty()) ? 1 : 0;
+                }
+                if ("Buy Gear".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.city && !quest.targetArea.shops.isEmpty()) ? 1 : 0;
+                }
+                if ("Seek Potential".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.city
+                            && quest.targetArea.pillBag != null
+                            && quest.targetArea.pillBag.stream().anyMatch(p ->
+                                    p.itemType == Item.ItemType.Pill && p.pillType == Item.PillType.Potential)) ? 1 : 0;
                 }
                 return 1;
 
@@ -1129,6 +1197,36 @@ public class Character {
                     }
                     for (Shop shop : ownedShops) {
                         if (shop.location == location) shop.restockFromCity(location);
+                    }
+                }
+                return 1;
+            }
+            case "Recruit Member": {
+                Character recruit = characters.get(quest.targetCharacter);
+                if (recruit != null && !recruit.dead && sect != null && sect.canJoin(recruit)) {
+                    interact(recruit);
+                    sect.join(recruit);
+                }
+                return 1;
+            }
+            case "Buy Gear":
+                if (location.city && !location.shops.isEmpty()) {
+                    buyGear();
+                }
+                return 1;
+            case "Seek Potential": {
+                if (location.city && location.pillBag != null) {
+                    Item pill = null;
+                    for (Item p : location.pillBag) {
+                        if (p.itemType == Item.ItemType.Pill && p.pillType == Item.PillType.Potential) {
+                            pill = p; break;
+                        }
+                    }
+                    if (pill != null && canAfford(itemPrice(pill))) {
+                        deductSs(itemPrice(pill));
+                        location.pillBag.remove(pill);
+                        pillBag.add(pill);
+                        consume();
                     }
                 }
                 return 1;
@@ -1777,7 +1875,8 @@ public class Character {
             }
         }
         else {
-            weapon = new Item(this, temp, rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2)));
+            int rawLvl = rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2));
+            weapon = new Item(this, temp, Math.min(rawLvl, majorLvl * 10 + 50));
             material.quantity -= 1000;
         }
 
@@ -1825,7 +1924,8 @@ public class Character {
             }
         }
         else {
-            clothing = new Item(this, rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2)), Item.ItemType.Clothing);
+            int rawLvl = rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2));
+            clothing = new Item(this, Math.min(rawLvl, majorLvl * 10 + 50), Item.ItemType.Clothing);
             material.quantity -= 1000;
         }
 
@@ -1870,7 +1970,8 @@ public class Character {
             }
         }
         else {
-            array = new Item(this, rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2)), Item.ItemType.Array);
+            int rawLvl = rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2));
+            array = new Item(this, Math.min(rawLvl, majorLvl * 10 + 50), Item.ItemType.Array);
             material.quantity -= 1000;
         }
 
@@ -1898,9 +1999,53 @@ public class Character {
         while (dc >= RATE) { ij++; dc -= RATE; }
     }
 
-    public boolean canAfford(long amount) { return ss >= amount; }
+    public boolean canAfford(long amount) {
+        if (amount <= 0) return true;
+        if (ss >= amount) return true;
+        final long RATE = 1_000_000L;
+        long remaining = amount - ss;
+        if (sc >= (remaining + RATE - 1) / RATE) return true;
+        remaining -= sc * RATE;
+        if (remaining <= 0) return true;
+        if (dc > 0 && remaining / RATE / RATE <= dc) return true;
+        return ij > 0;
+    }
 
-    public void deductSs(long amount) { ss = Math.max(0, ss - amount); }
+    public void deductSs(long amount) {
+        if (amount <= 0) return;
+        final long RATE = 1_000_000L;
+        if (ss >= amount) { ss -= amount; return; }
+        long needed = amount - ss;
+        ss = 0;
+        if (sc > 0) {
+            long scDraw = Math.min(sc, (needed + RATE - 1) / RATE);
+            sc -= scDraw;
+            ss += scDraw * RATE;
+        }
+        if (ss >= needed) { ss -= needed; return; }
+        needed -= ss; ss = 0;
+        if (dc > 0) {
+            long dcDraw = Math.min(dc, (needed + RATE - 1) / RATE);
+            dc -= dcDraw;
+            sc += dcDraw * RATE;
+            long scDraw = Math.min(sc, (needed + RATE - 1) / RATE);
+            sc -= scDraw;
+            ss += scDraw * RATE;
+        }
+        if (ss >= needed) { ss -= needed; return; }
+        needed -= ss; ss = 0;
+        if (ij > 0) {
+            ij--;
+            dc += RATE;
+            long dcDraw = Math.min(dc, (needed + RATE - 1) / RATE);
+            dc -= dcDraw;
+            sc += dcDraw * RATE;
+            long scDraw = Math.min(sc, (needed + RATE - 1) / RATE);
+            sc -= scDraw;
+            ss += scDraw * RATE;
+        }
+        ss = Math.max(0, ss - needed);
+    }
 
     public int maxShops() { return Math.max(1, majorLvl); }
 
@@ -1958,9 +2103,10 @@ public class Character {
     // TODO: price formulas are placeholders — confirm before finalising economy pass
     public static long itemPrice(Item item) {
         if (item.lvl <= 0) return 0;
-        long base = (long) Math.pow(100, item.lvl / 10.0);
+        double raw = Math.pow(100, item.lvl / 10.0);
+        long base = raw >= (double) Long.MAX_VALUE ? Long.MAX_VALUE : (long) raw;
         if (item.itemType == Item.ItemType.Pill && item.pillType == Item.PillType.Potential)
-            return base * 5; // Potential Pills require deaths (blood), more valuable
+            return base > Long.MAX_VALUE / 5 ? Long.MAX_VALUE : base * 5;
         return base;
     }
 
@@ -2324,6 +2470,14 @@ public class Character {
             if (!sparring && relationshipList.contains(opponent.id).value >= 1) {
                 return;
             }
+        }
+
+        // Affiliation rules: Good won't attack non-Evil unless arch-enemy; Neutral won't attack non-Evil unless rival or worse
+        if (!sparring && !"Evil".equals(opponent.affiliation)) {
+            Relationship rel = relationshipList.contains(opponent.id);
+            int relValue = rel != null ? rel.value : 0;
+            if ("Good".equals(affiliation) && relValue > -3) return;
+            if ("Neutral".equals(affiliation) && relValue > -2) return;
         }
 
         // Array protection: attacker must break the strongest array before engaging

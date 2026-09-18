@@ -9,6 +9,13 @@ public class Organization {
     ArrayList<Character> members;
     Area location;
 
+    // Recruitment criteria — null means no restriction
+    int minPotential = 0;          // minimum potential to join
+    int minLevel = 0;              // minimum lvl to join
+    String genderPref = null;      // "Male", "Female", or null (any)
+    String affiliationMatch = null; // "Good", "Neutral", "Evil", or null (any)
+    Character.Traits traitRequired = null; // specific trait required, or null
+
     public Organization(Character founder) {
         this.founder = founder;
         this.master = founder;
@@ -18,7 +25,19 @@ public class Organization {
         founder.sect = this;
     }
 
+    public boolean canJoin(Character c) {
+        if (c.dead) return false;
+        if (c.sect != null) return false;
+        if (c.potential < minPotential) return false;
+        if (c.lvl < minLevel) return false;
+        if (genderPref != null && !genderPref.equals(c.gender)) return false;
+        if (affiliationMatch != null && !affiliationMatch.equals(c.affiliation)) return false;
+        if (traitRequired != null && c.trait != traitRequired) return false;
+        return true;
+    }
+
     public void join(Character member) {
+        if (!canJoin(member)) return;
         members.add(member);
         member.sect = this;
     }

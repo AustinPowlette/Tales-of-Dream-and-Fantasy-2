@@ -1,5 +1,24 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-17 (6)
+- Fixed: `canAfford(long)` — now checks all currency tiers (ss + sc×1M + dc×1T + ij×1E); previously only checked `ss`
+- Fixed: `deductSs(long)` — cascades draw-down from sc→dc→ij before depleting ss; previously capped at ss only
+- Fixed: `itemPrice()` overflow — caps `(long)Math.pow(100, lvl/10)` at `Long.MAX_VALUE` for lvl > ~92; Potential Pills now safely multiply without overflow
+- Fixed: Quest queue cleanup on death — `dead()` and `dead(Character killer)` now clear `targetQuests`, `spotQuests`, and `currentQuest` to prevent dangling references after death
+- Added: Buy Gear travel quest — when gear is outdated/missing but not in a city with shops, queues "Buy Gear" Area quest to nearest known city with shops; viability check + `targetQuests()` case added
+- Added: "Seek Potential" Area quest — triggers when `potential < 101 - (9 - majorLvl)^2` (insufficient for next breakthrough); travels to city with Potential Pills in `pillBag`; buys and consumes pill on arrival
+- Added: Bully trigger in `quest()` — Evil characters with 15+ level advantage over a co-located character queue "Battle Dislike" targeting them (10% chance/turn)
+- Changed: `battleCheck()` — added affiliation rules: Good characters won't attack non-Evil unless arch-enemy (value ≤ -3); Neutral won't attack non-Evil unless rival or worse (value ≤ -2)
+- Changed: `smithing()`, `tailoring()`, `array()` — crafted item level now capped at `majorLvl * 10 + 50` (5 major realms above crafter's cultivation)
+- Added: `weaponAdjectives`, `clothingNames`, `clothingAdjectives`, `arrayTypes`, `arrayAdjectives` word lists to `Dictionary.java`
+- Changed: `Item` constructors — Weapon names now use random adjective + weapon type; Clothing uses random adjective + clothing name; Array uses random adjective + array type
+- Added: Player stat screen (`i` key) — shows level, cultivation, potential, age, affiliation, trait, profession, wealth, equipment, techniques, sect
+- Added: Known locations display (`l` key) — lists all known areas with coordinates, city/sect flags
+- Added: Relationship list (`r` key) — shows all living relationships with label and value; spouse highlighted separately
+- Added: `canJoin(Character)` method to `Organization.java` — checks `minPotential`, `minLevel`, `genderPref`, `affiliationMatch`, `traitRequired` criteria; `join()` now gates through `canJoin()`
+- Added: Recruitment criteria fields to `Organization.java` — `minPotential`, `minLevel`, `genderPref`, `affiliationMatch`, `traitRequired`
+- Added: "Recruit Member" Character quest trigger in `quest()` — sect masters (10% chance/turn) seek eligible candidates in current location using `canJoin()`; `targetQuests()` case calls `interact()` then `sect.join()`
+
 ## 2026-09-17 (5)
 - Added: `arrayBreakAttempt(Area area)` — attacker fights strongest array first; removes it on break (win OR lose); 5% death chance on loss; win chance uses `50 - 15*(arrayPower - tempLvl)` where `arrayPower = array.lvl / 5`
 - Added: `installArray(Area area)` — moves first item from `arrayBag` to `area.arrayBag`

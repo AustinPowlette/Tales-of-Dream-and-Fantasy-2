@@ -111,6 +111,50 @@ public class GameDriver {
                                 case 'd':
                                     character.movement('d');
                                     break;
+                                case 'i':
+                                    System.out.println("=== " + character.name + " " + character.lastName + " ===");
+                                    System.out.println("Level: " + character.lvl + "  (Major: " + character.majorLvl + "  Minor: " + character.minorLvl + ")");
+                                    System.out.println("Cultivation: " + (int)character.cultivation + " / " + (int)character.cultivationBaseMax);
+                                    System.out.println("Potential: " + character.potential + "  Age: " + character.age + " / " + character.maxAge);
+                                    System.out.println("Affiliation: " + character.affiliation + "  Trait: " + character.getTrait());
+                                    System.out.println("Profession Lvl: " + character.professionLvl);
+                                    System.out.println("Wealth: " + character.ss + " SS  " + character.sc + " SC  " + character.dc + " DC  " + character.ij + " IJ");
+                                    System.out.println("Weapon: " + (character.equippedWeapon != null ? character.equippedWeapon : "None"));
+                                    System.out.println("Armor:  " + (character.equippedClothing != null ? character.equippedClothing : "None"));
+                                    System.out.println("Martial Technique: " + character.martialTechnique + "  Movement Technique: " + character.movementTechnique);
+                                    if (character.sect != null) System.out.println("Sect: " + character.sect);
+                                    character.movement('x');
+                                    break;
+                                case 'l':
+                                    System.out.println("=== Known Locations (" + character.knownLocations.size() + ") ===");
+                                    for (Area area : character.knownLocations) {
+                                        if (area != null) {
+                                            String info = area.name + " [" + area.x * 100 + ", " + area.y * 100 + "]";
+                                            if (area.city) info += " (City)";
+                                            if (area.sect != null) info += " [Sect: " + area.sect.name + "]";
+                                            if (area.cityOwner != null) info += " [Owner: " + area.cityOwner.name + "]";
+                                            System.out.println(info);
+                                        }
+                                    }
+                                    character.movement('x');
+                                    break;
+                                case 'r':
+                                    System.out.println("=== Relationships ===");
+                                    for (Relationship rel : character.relationshipList.relationships) {
+                                        Character friend = characters.get(rel.friendID);
+                                        if (friend != null && !friend.dead) {
+                                            String label = rel.value >= 3 ? "Best Friend" :
+                                                           rel.value == 2 ? "Close Friend" :
+                                                           rel.value == 1 ? "Friend" :
+                                                           rel.value == 0 ? "Acquaintance" :
+                                                           rel.value == -1 ? "Dislike" :
+                                                           rel.value == -2 ? "Rival" : "Arch-Enemy";
+                                            System.out.println(friend.name + " " + friend.lastName + " — " + label + " (" + rel.value + ")");
+                                        }
+                                    }
+                                    if (character.spouse != null) System.out.println("Spouse: " + character.spouse.name + " " + character.spouse.lastName);
+                                    character.movement('x');
+                                    break;
                                 case 'o':
                                     System.out.println("Welcome to Options!\nInput 'x' to skip turns without movement!\nInput 'm' to skip turns with movement");
                                     switch (scan.next().charAt(0)) {

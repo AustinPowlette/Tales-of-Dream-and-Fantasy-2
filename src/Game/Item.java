@@ -1,5 +1,6 @@
 package Game;
 import static Game.GameDriver.*;
+import static Game.Dictionary.*;
 public class Item {
 
     enum ItemType{
@@ -58,7 +59,7 @@ public class Item {
         this.maker = maker.name + " " + maker.lastName;
         this.makerID = maker.id;
         stackable = false;
-        name = ("" + maker + "'s " + getWeaponType());
+        name = weaponAdjectives[rand.nextInt(weaponAdjectives.length)] + " " + getWeaponType();
 
     }
 
@@ -70,11 +71,11 @@ public class Item {
         stackable = false;
         if (itemType == ItemType.Array) {
             this.itemType = ItemType.Array;
-            name = ("" + maker + "'s Array");
+            name = arrayAdjectives[rand.nextInt(arrayAdjectives.length)] + " " + arrayTypes[rand.nextInt(arrayTypes.length)];
         }
         else if (itemType == ItemType.Clothing) {
             this.itemType = ItemType.Clothing;
-            name = ("" + maker + "'s Robe");
+            name = clothingAdjectives[rand.nextInt(clothingAdjectives.length)] + " " + clothingNames[rand.nextInt(clothingNames.length)];
         }
 
     }

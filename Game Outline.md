@@ -85,7 +85,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `professionPicker()` dispatch — fall-throughs fixed (Friendly/Tailor breaks added)
 - ❌ Merchant profession (stub only — no buying/selling logic)
 - ❌ Pre-req check: if profession fails due to missing materials, queue a Forage/Mine quest (design doc requirement)
-- ❌ Crafting level cap on item quality (items should be capped at crafter's level + 5 majorLvl, per design doc)
+- ✅ Crafting level cap — items capped at `majorLvl * 10 + 50` (5 major realms above crafter's cultivation) in smithing/tailoring/array
 - ❌ Selling excess items (pills, gear)
 - ❌ Technique selling (Innovative only)
 
@@ -109,17 +109,16 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ **Forage/Mine spot quests** — queued from `professionPicker()` when materials are missing; call forage()/mine() in current tile
 - ✅ **Battle Dislike / Battle Rival / Battle Arch-Enemy quests** — queued from `changeRelationship()` when value reaches -1/-2/-3; Dislike is placeholder for bullyCheck()
 - ✅ **Hunt Beast quest** — 20% chance/turn to travel to level-appropriate known area; `beastBattleCheck()` on arrival
-- 🟡 **Buy Gear quest** — fires when gear is a full major realm (10 levels) behind or slot is empty; travel-to-city quest deferred
+- ✅ **Buy Gear quest** — fires when gear is outdated/missing; calls buyGear() inline if in shop city; otherwise queues "Buy Gear" Area quest to nearest known shop city
 - ❌ **Go Sell quest** (when backpack reaches size threshold)
 - ✅ **Bounty Hunt quest** — posted by close friends too weak for Revenge; characters within 10 levels pick up from city bounty board; calls battleCheck on target
 - ✅ **Revenge quest** — queued in `dead()` when close friend (value>=2) is within 1 major realm of killer; weaker friends defer to bounty/squad (not yet implemented)
 - ❌ **Sect events** (politics, recruitment, tournaments)
-- ❌ **Potential quest** (seek potential-raising pills or events)
+- ✅ **Seek Potential quest** — triggers when `potential < 101 - (9 - majorLvl)^2`; travels to city with Potential Pills; buys and consumes on arrival
 - ✅ **Join Sect quest** — non-Leader adults with no sect seek known sect locations; calls `Organization.join()` on arrival
 - ❌ **Find Dead Parent's Body quest**
 - ❌ **Get Pregnant quest** (prerequisite check version)
-- ❌ Quest priority deconstructor on death (dead characters leave dangling quests)
-- ❌ One-time quest cleanup path is incomplete
+- ✅ Quest cleanup on death — `dead()` and `dead(Character killer)` clear targetQuests/spotQuests/currentQuest; questViable() handles stale target references lazily
 
 ---
 
@@ -131,11 +130,11 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Beast autonomous movement + attacking characters in tile
 - ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
 - 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
-- 🟡 **Sect NPC decision engine** — Join Sect implemented; sect-location preference, recruitment quests, and political events still deferred
+- 🟡 **Sect NPC decision engine** — Join Sect implemented; "Recruit Member" quest for sect masters with canJoin() criteria gating; sect politics/events still deferred
 - 🟡 **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel via Restock Trip quest (combines pool-size scan, own-shop bonus, circuit distance); full NPC buy/sell trees deferred
 - ❌ Higher-level characters avoiding weaker targets (design doc note)
-- ❌ Affiliation-based aggression rules fully enforced (Good should never attack non-Evil; Neutral should rarely attack)
-- ❌ Bully personality type
+- ✅ Affiliation-based aggression rules — Good won't attack non-Evil unless arch-enemy; Neutral won't attack non-Evil unless rival or worse
+- ✅ Bully personality type — Evil characters with 15+ level advantage queue "Battle Dislike" vs weaker co-located characters (10%/turn)
 
 ---
 
@@ -152,7 +151,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ **Shop class** — `Shop.java`; per-merchant; buyRate=0.55, sellRate=1.50, cityBuyRate=0.30; `buyFromSeller()`, `sellToBuyer()`, `restockFromCity()`
 - 🟡 **Merchant trait** — sets up shops in cities, restocks from city pool; arbitrage travel and NPC buy decision tree deferred
 - ❌ Potential pill selling restriction (only sell if potential = 100)
-- ❌ **Item pricing** confirmed (current formula is placeholder — needs economy pass)
+- 🟡 **Item pricing** — overflow fixed (capped at Long.MAX_VALUE for lvl > 92); multi-currency canAfford/deductSs fixed; formula still placeholder pending economy pass
 - ❌ 10% city tax routing (tax already collected; distribution logic not implemented)
 - ✅ Leader/city 20%/80% split — NPC Leaders: 80% skip to sect track, 20% try city first
 
@@ -186,7 +185,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Item stackability (Herb, Metal, Pill, Blood stackable; Weapon, Clothing, Array not)
 - ✅ `equip()` technique duplication fixed — `!techniqueList.contains()` guard prevents duplicate adds
 - 🟡 `transferAllItems()` doesn't merge Weapons/Arrays by name (only merges Herbs, Metals, Pills by name)
-- ❌ Random name generation for weapons, clothing, arrays, techniques (all use maker's name)
+- ✅ Random name generation for weapons, clothing, arrays — word lists in Dictionary.java; Item constructors use random adjective+type combos
 - ❌ Item counter / kill counter tracking
 - ❌ Method for removing specific quantity of stackable items from inventory
 
@@ -202,7 +201,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Birth/death announcements
 - 🟡 All NPC print statements fire (extremely noisy) — needs player-only filter
 - ❌ Full options menu
-- ❌ Player stat screen
-- ❌ Known locations display
-- ❌ Relationship list display
+- ✅ Player stat screen ('i' key) — level, cultivation, potential, age, affiliation, trait, profession, wealth, equipment, techniques, sect
+- ✅ Known locations display ('l' key) — all known areas with coordinates, city/sect flags
+- ✅ Relationship list ('r' key) — all living relationships with label and value
 - ❌ Auto-movement direction for N turns
