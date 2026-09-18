@@ -1079,9 +1079,9 @@ public class Character {
                  || (m.itemType == Item.ItemType.Metal && (!usesMetals || m.quantity > 5000))) { hasExtras = true; break; }
             }
             if (!hasExtras) for (Item p : pillBag) {
-                boolean stale = p.lvl < majorLvl
+                boolean stale = p.lvl <= majorLvl * 10
                     || (p.pillType == Item.PillType.Potential && potential >= 100)
-                    || (p.pillType == Item.PillType.Cultivation && p.quantity > 5 && p.lvl >= majorLvl);
+                    || (p.pillType == Item.PillType.Cultivation && p.quantity > 5 && p.lvl > majorLvl * 10);
                 if (stale) { hasExtras = true; break; }
             }
             if (hasExtras) spotQuests.add(new Quest("Donate to Sect", true, 30, 0, 50));
@@ -1387,7 +1387,7 @@ public class Character {
                 // Pills: donate what's no longer useful
                 for (Item pill : new ArrayList<>(pillBag)) {
                     int donate = 0;
-                    if (pill.lvl < majorLvl) {
+                    if (pill.lvl <= majorLvl * 10) {
                         donate = pill.quantity; // realm already surpassed — all useless
                     } else if (pill.pillType == Item.PillType.Potential && potential >= 100) {
                         donate = pill.quantity; // potential maxed — potential pills useless
