@@ -116,7 +116,8 @@ public class GameDriver {
                     if (character.born) {
                         character.cultivate();
                         if (character.sect != null && character.sect.founder.lvl > character.lvl) {
-                            for (int i = 0; i < character.sect.founder.majorLvl; i++) {
+                            int bonus = Math.max(character.sect.founder.majorLvl, character.sect.sectLvl() / 10);
+                            for (int i = 0; i < bonus; i++) {
                                 character.cultivate();
                             }
                         }
@@ -162,7 +163,7 @@ public class GameDriver {
                                     System.out.println("Armor:  " + (character.equippedClothing != null ? character.equippedClothing : "None"));
                                     System.out.println("Martial Technique: " + character.martialTechnique + "  Movement Technique: " + character.movementTechnique);
                                     System.out.println("Kills: " + character.kills + "  Sect Points: " + character.sectPoints);
-                                    if (character.sect != null) System.out.println("Sect: " + character.sect + " [" + character.sect.getRank(character) + "]");
+                                    if (character.sect != null) System.out.println("Sect: " + character.sect + " [" + character.sect.getRank(character) + "]  Sect Lvl: " + character.sect.sectLvl() + "  Treasury: " + character.sect.treasury.size() + " items");
                                     character.movement('x');
                                     break;
                                 case 'l':

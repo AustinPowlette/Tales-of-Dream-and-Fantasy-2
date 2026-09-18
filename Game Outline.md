@@ -131,7 +131,7 @@ Legend: âœ… Implemented | ðŸŸ¡ Partial / Skeleton | âŒ Not Started
 - âœ… Beast autonomous movement + attacking characters in tile
 - âœ… `event()` case 1 fall-through fixed â€” `break` added after beast battle
 - ðŸŸ¡ `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
-- ðŸŸ¡ **Sect NPC decision engine** â€” Join Sect (canJoin() criteria), Recruit Member, Sect Raid, Propose Alliance, Demand Tribute, Recruit Defector implemented; squabbleâ†’war escalation; sect ranks (Outer/Inner Disciple, Elder, Master, Founder); succession crisis (crisisTimer, opportunistic raids); resource disputes (yearly dungeon/hotspot overlap check); internal rank promotion, sect contribution points earning still deferred
+- ðŸŸ¡ **Sect NPC decision engine** â€” Join Sect (canJoin() criteria), Recruit Member, Sect Raid, Propose Alliance, Demand Tribute, Recruit Defector Donate to Sect, Buy from Sect implemented; treasury system with sectLvl advancement; squabbleâ†’war escalation; sect ranks; succession crisis; resource disputes; internal rank promotion, assigned mission quests deferred
 - ðŸŸ¡ **Economy/Merchant decision engine** â€” Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel via Restock Trip quest (combines pool-size scan, own-shop bonus, circuit distance); full NPC buy/sell trees deferred
 - âŒ Higher-level characters avoiding weaker targets (design doc note)
 - âœ… Affiliation-based aggression rules â€” Good won't attack non-Evil unless arch-enemy; Neutral won't attack non-Evil unless rival or worse

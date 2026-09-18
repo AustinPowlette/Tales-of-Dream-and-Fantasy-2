@@ -1068,6 +1068,33 @@ public class Character {
             }
         }
 
+        // Donate to Sect: members at sect home donate excess items periodically (10% chance/turn)
+        if (sect != null && location == sect.location && rand.nextInt(10) == 0
+                && spotQuests.stream().noneMatch(q -> "Donate to Sect".equals(q.name))) {
+            boolean hasExtras = backpack.stream().anyMatch(i -> i != equippedWeapon && i != equippedClothing);
+            if (!hasExtras) for (Item m : materialBag) { if (m.quantity > 2000) { hasExtras = true; break; } }
+            if (!hasExtras) for (Item p : pillBag)     { if (p.quantity > 5)    { hasExtras = true; break; } }
+            if (hasExtras) spotQuests.add(new Quest("Donate to Sect", true, 30, 0, 50));
+        }
+
+        // Buy from Sect: members buy needed materials or gear from treasury using sectPoints (10% chance/turn)
+        if (sect != null && location == sect.location && sectPoints >= 5 && !sect.treasury.isEmpty()
+                && rand.nextInt(10) == 0
+                && spotQuests.stream().noneMatch(q -> "Buy from Sect".equals(q.name))) {
+            boolean needsHerb  = (trait == Traits.Alchemist || trait == Traits.Tailor || trait == Traits.Scribe)
+                    && materialBag.stream().noneMatch(m -> m.itemType == Item.ItemType.Herb && m.quantity >= 1000);
+            boolean hasHerb    = sect.treasury.stream().anyMatch(t -> t.itemType == Item.ItemType.Herb && t.quantity > 0);
+            boolean needsMetal = trait == Traits.Blacksmith
+                    && materialBag.stream().noneMatch(m -> m.itemType == Item.ItemType.Metal && m.quantity >= 1000);
+            boolean hasMetal   = sect.treasury.stream().anyMatch(t -> t.itemType == Item.ItemType.Metal && t.quantity > 0);
+            boolean wantsGear  = sect.treasury.stream().anyMatch(t ->
+                (t.itemType == Item.ItemType.Weapon   && (equippedWeapon   == null || t.lvl > equippedWeapon.lvl   + 5))
+             || (t.itemType == Item.ItemType.Clothing && (equippedClothing == null || t.lvl > equippedClothing.lvl + 5)));
+            if ((needsHerb && hasHerb) || (needsMetal && hasMetal) || wantsGear) {
+                spotQuests.add(new Quest("Buy from Sect", true, 45, 0, 65));
+            }
+        }
+
         Quest tempQuest = this.spotQuests.peek();
         int questCode = -2;
 
@@ -1310,6 +1337,108 @@ public class Character {
                 winner.backpack.add(prize);
                 if (player || winner.player)
                     System.out.println("=== Tournament: " + winner + " wins " + prize + " ===");
+                questSuccess = 2;
+                break;
+            }
+
+            case "Donate to Sect": {
+                if (sect == null || location != sect.location) { questSuccess = -2; break; }
+                int earnedPoints = 0;
+                for (Item item : new ArrayList<>(backpack)) {
+                    if (item == equippedWeapon || item == equippedClothing) continue;
+                    sect.treasury.add(item);
+                    backpack.remove(item);
+                    earnedPoints += sect.donationPoints(item, 1);
+                }
+                for (Item item : new ArrayList<>(materialBag)) {
+                    int donate = Math.max(0, item.quantity - 2000);
+                    if (donate <= 0) continue;
+                    item.quantity -= donate;
+                    if (item.quantity <= 0) materialBag.remove(item);
+                    boolean merged = false;
+                    for (Item t : sect.treasury) {
+                        if (t.name.equals(item.name)) { t.quantity += donate; merged = true; break; }
+                    }
+                    if (!merged) {
+                        Item copy = new Item(item.itemType, item.lvl, donate - 1); // qty = 1+(donate-1) = donate
+                        copy.name = item.name;
+                        sect.treasury.add(copy);
+                    }
+                    earnedPoints += sect.donationPoints(item, donate);
+                }
+                for (Item pill : new ArrayList<>(pillBag)) {
+                    int donate = Math.max(0, pill.quantity - 5);
+                    if (donate <= 0) continue;
+                    pill.quantity -= donate;
+                    if (pill.quantity <= 0) pillBag.remove(pill);
+                    boolean merged = false;
+                    for (Item t : sect.treasury) {
+                        if (t.name.equals(pill.name)) { t.quantity += donate; merged = true; break; }
+                    }
+                    if (!merged) {
+                        Item copy = new Item(Item.ItemType.Pill, pill.pillType, pill.lvl, donate);
+                        sect.treasury.add(copy);
+                    }
+                    earnedPoints += sect.donationPoints(pill, donate);
+                }
+                sectPoints += earnedPoints;
+                if (player && skipping <= 0) System.out.println("Donated to sect treasury — earned " + earnedPoints + " sect points.");
+                questSuccess = 2;
+                break;
+            }
+
+            case "Buy from Sect": {
+                if (sect == null || location != sect.location || sect.treasury.isEmpty()) { questSuccess = -2; break; }
+                for (Item item : new ArrayList<>(sect.treasury)) {
+                    if (item.quantity <= 0) { sect.treasury.remove(item); continue; }
+                    boolean wantHerb  = item.itemType == Item.ItemType.Herb
+                            && (trait == Traits.Alchemist || trait == Traits.Tailor || trait == Traits.Scribe)
+                            && materialBag.stream().noneMatch(m -> m.itemType == Item.ItemType.Herb && m.quantity >= 1000);
+                    boolean wantMetal = item.itemType == Item.ItemType.Metal && trait == Traits.Blacksmith
+                            && materialBag.stream().noneMatch(m -> m.itemType == Item.ItemType.Metal && m.quantity >= 1000);
+                    if (wantHerb || wantMetal) {
+                        int buyQty = Math.min(1000, item.quantity);
+                        int cost = sect.buyingCost(item, buyQty);
+                        if (sectPoints >= cost && cost > 0) {
+                            sectPoints -= cost;
+                            item.quantity -= buyQty;
+                            if (item.quantity <= 0) sect.treasury.remove(item);
+                            boolean merged = false;
+                            for (Item m : materialBag) {
+                                if (m.name.equals(item.name)) { m.quantity += buyQty; merged = true; break; }
+                            }
+                            if (!merged) {
+                                Item copy = new Item(item.itemType, item.lvl, buyQty - 1);
+                                copy.name = item.name;
+                                materialBag.add(copy);
+                            }
+                            if (player && skipping <= 0) System.out.println("Bought " + buyQty + "x " + item.name + " from sect treasury for " + cost + " sect points.");
+                            break;
+                        }
+                    }
+                    if (item.itemType == Item.ItemType.Weapon && (equippedWeapon == null || item.lvl > equippedWeapon.lvl + 5)) {
+                        int cost = sect.buyingCost(item, 1);
+                        if (sectPoints >= cost) {
+                            sectPoints -= cost;
+                            sect.treasury.remove(item);
+                            backpack.add(item);
+                            equip();
+                            if (player && skipping <= 0) System.out.println("Bought " + item + " from sect treasury for " + cost + " sect points.");
+                            break;
+                        }
+                    }
+                    if (item.itemType == Item.ItemType.Clothing && (equippedClothing == null || item.lvl > equippedClothing.lvl + 5)) {
+                        int cost = sect.buyingCost(item, 1);
+                        if (sectPoints >= cost) {
+                            sectPoints -= cost;
+                            sect.treasury.remove(item);
+                            backpack.add(item);
+                            equip();
+                            if (player && skipping <= 0) System.out.println("Bought " + item + " from sect treasury for " + cost + " sect points.");
+                            break;
+                        }
+                    }
+                }
                 questSuccess = 2;
                 break;
             }

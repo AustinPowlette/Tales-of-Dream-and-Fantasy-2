@@ -1,5 +1,12 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-18 (10)
+- Added: Sect treasury system — `ArrayList<Item> treasury` on Organization stores donated weapons/clothing/herbs/metals/pills; `sectLvl()` computes sect advancement level as `sum(herb+metal qty×lvl) / 10000` capped at 100; `donationPoints()`/`buyingCost()` use proportional formula (herbs/metals: qty×lvl/1000, pills: qty×lvl×2, gear: lvl)
+- Added: "Donate to Sect" spot quest — triggers at sect home location when member has spare backpack items or surplus materials/pills (10%/turn); donates all non-equipped backpack items + herb/metal surplus above 2000 + pill surplus above 5 reserve; awards proportional sectPoints
+- Added: "Buy from Sect" spot quest — triggers when member has sectPoints, treasury has items, and member needs materials (by profession) or better gear (10%/turn); deducts sectPoints equal to donation value (fair exchange)
+- Changed: Sect cultivation bonus in GameDriver — now `Math.max(founder.majorLvl, sect.sectLvl() / 10)` so treasury accumulation also boosts members' cultivation speed
+- Changed: 'i' stat screen — sect line now shows sect level and treasury item count
+
 ## 2026-09-18 (9)
 - Added: Tournament quest — "Hold Tournament" spot quest for city owners and sect masters (2%/turn); single-elimination bracket with probability-based outcomes (no death risk); major-realm band ±1 around organizer's level; organizer funds prize at `(maxBand+1)*10 + rand(11)` level; winner receives weapon or clothing prize
 - Added: Sect contribution points earning — Hunt Beast (+5), Explore Dungeon (+10), Sect Raid (+20), Forage/Mine while in sect (+2), donating unique technique to sect library (+10 in `technique()`)

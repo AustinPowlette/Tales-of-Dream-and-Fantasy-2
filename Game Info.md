@@ -285,6 +285,10 @@ GameDriver.main()
 ### Organization
 - Tracks founder, master, members list, location.
 - `resign()` triggers `promote()` — next member in list becomes master.
+- `ArrayList<Item> treasury` — stores donated items from all members.
+- `sectLvl()` — `sum(herb+metal qty×lvl) / 10000`, capped at 100. Used as cultivation bonus multiplier.
+- `donationPoints(Item, qty)` / `buyingCost(Item, qty)` — proportional: herbs/metals: `qty×lvl/1000`; pills: `qty×lvl×2`; gear: `item.lvl`. Buying cost equals donation value (fair exchange).
+- Cultivation bonus in GameDriver: `Math.max(founder.majorLvl, sect.sectLvl() / 10)` extra cultivate() calls per tick for members below founder's level.
 
 ---
 

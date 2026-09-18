@@ -30,6 +30,9 @@ public class Organization {
     ArrayList<Organization> allies = new ArrayList<>();
     int crisisTimer = 0;            // succession crisis ticks remaining (inCrisis when > 0)
 
+    // Sect treasury and advancement
+    ArrayList<Item> treasury = new ArrayList<>();
+
     public Organization(Character founder) {
         this.founder = founder;
         this.master = founder;
@@ -118,6 +121,28 @@ public class Organization {
     public boolean inCrisis() { return crisisTimer > 0; }
 
     public boolean isAlly(Organization other) { return other != null && allies.contains(other); }
+
+    public int sectLvl() {
+        long weight = 0;
+        for (Item item : treasury) {
+            if (item.itemType == Item.ItemType.Herb || item.itemType == Item.ItemType.Metal) {
+                weight += (long) item.quantity * item.lvl;
+            }
+        }
+        return (int) Math.min(100, weight / 10000);
+    }
+
+    public int donationPoints(Item item, int qty) {
+        switch (item.itemType) {
+            case Herb: case Metal: return Math.max(1, qty * item.lvl / 1000);
+            case Pill:             return Math.max(1, qty * item.lvl * 2);
+            default:               return Math.max(1, item.lvl);
+        }
+    }
+
+    public int buyingCost(Item item, int qty) {
+        return donationPoints(item, qty);
+    }
 
     public void proposeAlliance(Organization other) {
         if (other == null || other == this || isAlly(other)) return;
