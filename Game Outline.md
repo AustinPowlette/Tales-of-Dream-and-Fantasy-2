@@ -15,9 +15,9 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Area resources (herbMaterials, metalMaterials, monsters, population)
 - ✅ Area aging (+1%/tick on all resources)
 - ✅ NPC auto-spawning from populated areas
-- ❌ Hotspot generation (special high-difficulty areas)
+- ✅ Hotspot generation — yearly: 3-5 random non-city areas get +10 to +30 level spike; reset at next year start
 - ❌ Difficulty scaling further from Originis (area level currently = explorer's level)
-- ❌ Dungeon/structure types (Chambers, Catacombs, Labyrinths, etc. from design doc)
+- ✅ Dungeon types — LOST_RUINS (treasure+technique), BEAST_LAIR (3× beasts), MARTIAL_TRIAL (technique upgrade), HAUNTED_GROUNDS (potential gain); 5% spawn chance per area
 
 ### Character Creation
 - ✅ NPC constructor (`Character(Area)`)
@@ -84,8 +84,9 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Profession exp + level cap at 100
 - ✅ `professionPicker()` dispatch — fall-throughs fixed (Friendly/Tailor breaks added)
 - ❌ Merchant profession (stub only — no buying/selling logic)
+- 🟡 Library/Technique selling — `Library.java` skeleton; city libraries sell technique copies for ss; sect libraries gate on sectPoints; Innovative can sell; family inheritance, mastery levelling, rarity tiers deferred (TODO in Library.java)
 - ❌ Pre-req check: if profession fails due to missing materials, queue a Forage/Mine quest (design doc requirement)
-- ✅ Crafting level cap — items capped at `majorLvl * 10 + 50` (5 major realms above crafter's cultivation) in smithing/tailoring/array
+- ✅ Crafting level cap — items capped at `(majorLvl + 1) * 10` capped at 100 max; crafter can make 1 realm above their cultivation
 - ❌ Selling excess items (pills, gear)
 - ❌ Technique selling (Innovative only)
 
@@ -130,7 +131,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Beast autonomous movement + attacking characters in tile
 - ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
 - 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
-- 🟡 **Sect NPC decision engine** — Join Sect implemented; "Recruit Member" quest for sect masters with canJoin() criteria gating; sect politics/events still deferred
+- 🟡 **Sect NPC decision engine** — Join Sect (with canJoin() criteria), Recruit Member, Sect Raid war quests implemented; cross-sect squabble tracking → war declaration; sect ranks (Outer/Inner Disciple, Elder, Master, Founder); internal politics, alliances, tribute still deferred
 - 🟡 **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel via Restock Trip quest (combines pool-size scan, own-shop bonus, circuit distance); full NPC buy/sell trees deferred
 - ❌ Higher-level characters avoiding weaker targets (design doc note)
 - ✅ Affiliation-based aggression rules — Good won't attack non-Evil unless arch-enemy; Neutral won't attack non-Evil unless rival or worse

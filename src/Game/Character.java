@@ -51,6 +51,8 @@ public class Character {
     int minorLvl = 1; // Numbers 1-10: 1-3 = Low, 4-6 = Mid, 7-9 = High, 10 = Peak
     int lvl = 1;
     int tempLvl = lvl;
+    int kills = 0;
+    int sectPoints = 0;
     double cultivationBase = 0;
     double cultivationBaseMax = Math.pow(lvl, 3) * (((70.+1./3.) + ((11./6.) * lvl)) / 25.);
     int professionLvl = 1;
@@ -767,6 +769,7 @@ public class Character {
                 monstersList.add(killer);
             }
             location.deadCharacters.add(this);
+            killer.kills++;
             for (int i = 0; i < lvl; i++) {
                 killer.cultivate();
             }
@@ -774,6 +777,7 @@ public class Character {
         }
 
         if (trait == Traits.Beast) {
+            killer.kills++;
             killer.ss += this.ss;
             this.ss = 0;
             if (monstersList.contains(this)) {
@@ -812,6 +816,7 @@ public class Character {
                 }
             }
 
+            killer.kills++;
             // Transers all items to the killer
             transferAllItems(killer);
 
@@ -942,6 +947,29 @@ public class Character {
             }
         }
 
+        // Explore Dungeon: 16% chance per turn to seek a known dungeon area at appropriate level
+        if (trait != Traits.Beast && age >= 8 && rand.nextInt(6) == 0
+                && targetQuests.stream().noneMatch(q -> "Explore Dungeon".equals(q.name))
+                && (currentQuest == null || !"Explore Dungeon".equals(currentQuest.name))) {
+            for (Area area : knownLocations) {
+                if (area != null && area.dungeonType != null
+                        && area.lvl >= lvl - 15 && area.lvl <= lvl + 20) {
+                    targetQuests.add(new Quest("Explore Dungeon", true, 35, 2, 60, area));
+                    break;
+                }
+            }
+        }
+
+        // Sect Raid: masters and elders attack enemy sect location when at war
+        if (sect != null && sect.isAtWar() && sect.warTarget != null
+                && (sect.isMaster(this) || sect.getRank(this) == Organization.SectRank.ELDER)
+                && targetQuests.stream().noneMatch(q -> "Sect Raid".equals(q.name))
+                && (currentQuest == null || !"Sect Raid".equals(currentQuest.name))) {
+            Area enemyLoc = sect.warTarget.location;
+            if (enemyLoc != null)
+                targetQuests.add(new Quest("Sect Raid", true, 65, 5, 85, enemyLoc));
+        }
+
         // Restock Trip: Merchant with shops seeks best city for arbitrage restocking (10% chance/turn)
         if (trait == Traits.Merchant && !ownedShops.isEmpty() && rand.nextInt(10) == 0
                 && targetQuests.stream().noneMatch(q -> "Restock Trip".equals(q.name))
@@ -1003,30 +1031,23 @@ public class Character {
                 questCode = spotQuests(tempQuest);
             }
             else {
-                System.out.println("We got a problem with the spotQuests queue... It's empty");
+                // spotQuests queue exhausted
             }
         }
 
         if (questCode == 1 && currentQuest.oneTime) {
-            //Testing
             currentQuest.questDeconstructor();
             currentQuest = null;
-            // Increase target quests if target quest completed
             targetQuests.forEach(q -> q.priority += q.priorityDiff);
-            System.out.println("One Time Target Quest finished");
         }
         else if (questCode == 1 || questCode == -1) {
-            //Testing
-            // Increase target quests if target quest completed
             targetQuests.forEach(q -> q.priority += q.priorityDiff);
             currentQuest.priority = 0;
             targetQuests.add(currentQuest);
         }
         else if (questCode == 2 && tempQuest.oneTime) {
-            //Testing
             tempQuest.questDeconstructor();
             tempQuest = null;
-            System.out.println("One Time Spot Quest finished!?");
         }
         else if (questCode == 2 || questCode == -2) {
             tempQuest.priority = 0;
@@ -1071,6 +1092,13 @@ public class Character {
                 }
                 if ("Buy Gear".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.city && !quest.targetArea.shops.isEmpty()) ? 1 : 0;
+                }
+                if ("Explore Dungeon".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.dungeonType != null) ? 1 : 0;
+                }
+                if ("Sect Raid".equals(quest.name)) {
+                    return (sect != null && sect.isAtWar() && quest.targetArea != null
+                            && quest.targetArea.sect != null && quest.targetArea.sect == sect.warTarget) ? 1 : 0;
                 }
                 if ("Seek Potential".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.city
@@ -1138,8 +1166,6 @@ public class Character {
         switch (quest.name) {
             case "Find Person":
                 Character person = characters.get(quest.targetCharacter);
-                // Testing
-                System.out.println(this + " has found " + person);
                 if (relationshipList.contains(person.id) != null) {
                     if (relationshipList.contains(person.id).value > 0) {
                         interact(person);
@@ -1152,7 +1178,6 @@ public class Character {
                     return 1;
                 }
                 else {
-                    System.out.println("Weird Case?");
                     return -1;
                 }
 
@@ -1183,7 +1208,7 @@ public class Character {
                 beastBattleCheck();
                 return 1;
             case "Join Sect":
-                if (location.sect != null && sect == null) {
+                if (location.sect != null && sect == null && location.sect.canJoin(this)) {
                     location.sect.join(this);
                 }
                 return 1;
@@ -1206,6 +1231,58 @@ public class Character {
                 if (recruit != null && !recruit.dead && sect != null && sect.canJoin(recruit)) {
                     interact(recruit);
                     sect.join(recruit);
+                }
+                return 1;
+            }
+            case "Explore Dungeon": {
+                Area dungeon = quest.targetArea;
+                if (dungeon == null || dungeon.dungeonType == null) return 1;
+                switch (dungeon.dungeonType) {
+                    case LOST_RUINS:
+                        if (dungeon.monsters > 0) beastBattleCheck();
+                        long treasure = (long)(dungeon.lvl) * dungeon.lvl * 100L;
+                        ss += treasure; convertCurrency();
+                        if (rand.nextInt(15) == 0) {
+                            Technique.techniqueType tt = rand.nextInt(2) == 0 ? Technique.techniqueType.Movement : Technique.techniqueType.Martial;
+                            techniqueList.add(new Technique(tt, this, Math.max(1, rand.nextInt(dungeon.lvl / 2 + 1))));
+                            if (player && skipping <= 0) System.out.println(this + " found an ancient technique in the Lost Ruins!");
+                        }
+                        break;
+                    case BEAST_LAIR:
+                        for (int i = 0; i < 3 && dungeon.monsters > 0; i++) beastBattleCheck();
+                        break;
+                    case MARTIAL_TRIAL:
+                        tempLvlCheck();
+                        int trialPower = Math.max(1, dungeon.lvl / 5);
+                        int trialWin = Math.max(5, Math.min(95, 50 + 5 * (tempLvl - trialPower)));
+                        if (rand.nextInt(100) < trialWin) {
+                            if (martialTechnique != null) martialTechnique.upgrade(this);
+                            for (int i = 0; i < 3; i++) cultivate();
+                            if (player && skipping <= 0) System.out.println(this + " passed the Martial Trial!");
+                        }
+                        break;
+                    case HAUNTED_GROUNDS:
+                        for (int i = 0; i < 5; i++) cultivate();
+                        if (rand.nextInt(25) == 0 && potential < 100) {
+                            potential++;
+                            if (player && skipping <= 0) System.out.println(this + " gained potential in the Haunted Grounds!");
+                        }
+                        break;
+                }
+                return 1;
+            }
+            case "Sect Raid": {
+                if (location.sect != null && sect != null && sect.isAtWar() && location.sect == sect.warTarget) {
+                    for (Character c : new ArrayList<>(location.characters)) {
+                        if (c == null || c.dead || c == this || c.sect != sect.warTarget) continue;
+                        battleCheck(c);
+                        // War ends if enemy sect master is dead or sect dissolved
+                        if (sect.warTarget == null || sect.warTarget.master == null || sect.warTarget.master.dead
+                                || location.sect == null) {
+                            sect.endWar(quest.targetArea.sect != null ? quest.targetArea.sect : sect.warTarget);
+                        }
+                        break;
+                    }
                 }
                 return 1;
             }
@@ -1267,7 +1344,6 @@ public class Character {
         }
 
         if (location == destination) {
-            System.out.println(this + " has reached their target: " + destination);
             return 1;
         }
         else {
@@ -1876,7 +1952,7 @@ public class Character {
         }
         else {
             int rawLvl = rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2));
-            weapon = new Item(this, temp, Math.min(rawLvl, majorLvl * 10 + 50));
+            weapon = new Item(this, temp, Math.min(rawLvl, Math.min((majorLvl + 1) * 10, 100)));
             material.quantity -= 1000;
         }
 
@@ -1925,7 +2001,7 @@ public class Character {
         }
         else {
             int rawLvl = rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2));
-            clothing = new Item(this, Math.min(rawLvl, majorLvl * 10 + 50), Item.ItemType.Clothing);
+            clothing = new Item(this, Math.min(rawLvl, Math.min((majorLvl + 1) * 10, 100)), Item.ItemType.Clothing);
             material.quantity -= 1000;
         }
 
@@ -1971,7 +2047,7 @@ public class Character {
         }
         else {
             int rawLvl = rand.nextInt(material.lvl * 5) + (1 + ((material.lvl * 10) / 2));
-            array = new Item(this, Math.min(rawLvl, majorLvl * 10 + 50), Item.ItemType.Array);
+            array = new Item(this, Math.min(rawLvl, Math.min((majorLvl + 1) * 10, 100)), Item.ItemType.Array);
             material.quantity -= 1000;
         }
 
@@ -2502,6 +2578,15 @@ public class Character {
 
         // Decreases Relationship
         changeRelationship(opponent, 0);
+
+        // Sect squabble escalation: repeated cross-sect fights lead to war
+        if (sect != null && opponent.sect != null && sect != opponent.sect && !sect.isAtWar()) {
+            sect.squabbles++;
+            if (sect.squabbles >= 5) {
+                sect.declareWar(opponent.sect);
+                if (player || opponent.player) System.out.println(sect + " has declared war on " + opponent.sect + "!");
+            }
+        }
 
         if (this != opponent && !opponent.dead && opponent.time >= 0) {
             if (opponent.age < 8 && opponent.mother != null && !opponent.mother.dead) {

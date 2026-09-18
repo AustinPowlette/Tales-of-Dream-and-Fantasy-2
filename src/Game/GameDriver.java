@@ -67,6 +67,20 @@ public class GameDriver {
             //System.out.println("It's day: " + (time/24 + 1));
             if ((time) % 52 == 0) {
                 System.out.println("It's year: " + (((time / 52)) + 1) + " Population: " + population + " " + monstersList);
+                // Reset previous hotspots
+                for (Area area : hotspotAreas) { area.lvl = area.baseLvl; area.hotspot = false; }
+                hotspotAreas.clear();
+                // Pick 3-5 new hotspot areas (non-city, not Originis)
+                ArrayList<Area> eligible = new ArrayList<>();
+                for (Area area : createdAreas) { if (!area.city && area.lvl > 0) eligible.add(area); }
+                int hotCount = rand.nextInt(3) + 3;
+                for (int _h = 0; _h < hotCount && !eligible.isEmpty(); _h++) {
+                    Area pick = eligible.remove(rand.nextInt(eligible.size()));
+                    pick.baseLvl = pick.lvl;
+                    pick.lvl += rand.nextInt(20) + 10;
+                    pick.hotspot = true;
+                    hotspotAreas.add(pick);
+                }
                 //scan.nextLine();
             }
 

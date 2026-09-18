@@ -8,6 +8,8 @@ import static Game.Map.*;
 
 public class Area {
 
+    enum DungeonType { LOST_RUINS, BEAST_LAIR, MARTIAL_TRIAL, HAUNTED_GROUNDS }
+
     static int uindex = 1;
     int index;
     String name = "";
@@ -19,10 +21,14 @@ public class Area {
     ArrayList<Item> materialBag;
     ArrayList<Item> pillBag;
     ArrayList<Item> arrayBag;
+    ArrayList<Library> libraries = new ArrayList<>();
     Organization sect;
     String biomeM = "";
     String biomem = "";
     int lvl;
+    int baseLvl = 0;
+    boolean hotspot = false;
+    DungeonType dungeonType = null;
     int highestLvl = 1;
     int population;
     int monsters;
@@ -44,6 +50,7 @@ public class Area {
         biomeM = "Forest";
         biomem = "Forest";
         lvl = 1;
+        baseLvl = lvl;
         monsters = rand.nextInt(10000000);
         herbMaterials = rand.nextInt(1000000000);
         metalMaterials = rand.nextInt(1000000000);
@@ -234,6 +241,10 @@ public class Area {
             name = name.concat(" of " + adjectiveOf[rand.nextInt(adjectiveOf.length)]);
         }
         lvl = currentCharacter.lvl;
+        baseLvl = lvl;
+        if (rand.nextInt(20) == 0) {
+            dungeonType = DungeonType.values()[rand.nextInt(DungeonType.values().length)];
+        }
         monsters = rand.nextInt((startingPopulation * 10) - startingPopulation + 1) + startingPopulation;
         herbMaterials = rand.nextInt((startingPopulation * 10000) - startingPopulation + 1) + startingPopulation;
         metalMaterials = rand.nextInt((startingPopulation * 1000) - startingPopulation + 1) + startingPopulation;

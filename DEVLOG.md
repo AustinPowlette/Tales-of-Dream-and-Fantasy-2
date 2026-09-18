@@ -1,5 +1,26 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-17 (7)
+- Fixed: Crafting level cap formula — `Math.min((majorLvl + 1) * 10, 100)` hard-caps at 100; majorLvl 10 crafters still cap at lvl 100 items
+- Removed: Debug print noise — removed "One Time Target/Spot Quest finished", "spotQuests queue empty", pathfinder reach-target, "has found", "Weird Case?" prints from Character.java
+- Fixed: Join Sect quest now gates through `canJoin()` so sect criteria (potential, level, gender, affiliation, trait) are respected
+- Added: Kill counter — `int kills` field on Character; incremented for beast-kills-cultivator, cultivator-kills-beast, and cultivator-kills-cultivator in `dead()`
+- Added: `int sectPoints` field on Character for future sect contribution point use
+- Added: Sect squabble tracking in `battleCheck()` — cross-sect fights increment `sect.squabbles`; at 5 squabbles, `declareWar()` is called and both sects enter war state
+- Added: `DungeonType` enum to Area — LOST_RUINS, BEAST_LAIR, MARTIAL_TRIAL, HAUNTED_GROUNDS; 5% chance per newly-created area
+- Added: `baseLvl` and `hotspot` fields to Area for hotspot spike/reset
+- Added: `ArrayList<Library> libraries` field to Area
+- Added: Yearly hotspot generation in GameDriver.java — at year start, reset previous hotspots (restore baseLvl) then spike 3-5 random non-city areas by +10 to +30 levels
+- Added: `hotspotAreas` tracking list to Map.java
+- Added: `SectRank` enum to Organization (OUTER_DISCIPLE, INNER_DISCIPLE, ELDER, MASTER, FOUNDER)
+- Added: `memberRanks` HashMap, `squabbles`, `warTarget`, `allies` fields to Organization
+- Added: `canJoin()`, `getRank()`, `promoteRank()`, `declareWar()`, `endWar()`, `isAtWar()` methods to Organization
+- Changed: `join()` now assigns OUTER_DISCIPLE rank; `resign()` removes rank; `promote()` dissolves sect and ends war if last member leaves
+- Added: `sectLibrary` field to Organization (initialized in constructor)
+- Added: "Explore Dungeon" Area quest — 16% chance/turn for adult non-beasts to seek a level-appropriate dungeon; LOST_RUINS (treasure + technique find), BEAST_LAIR (3× beastBattleCheck), MARTIAL_TRIAL (tempLvl vs trial power, technique upgrade on win), HAUNTED_GROUNDS (cultivation + rare potential gain)
+- Added: "Sect Raid" Area quest — sect masters and elders travel to enemy sect location and attack; war ends when enemy sect master dies or sect dissolves
+- Created: `src/Game/Library.java` — technique library class; city libraries sell technique copies for ss; sect libraries require sectPoints; Innovative sellers can contribute techniques; includes TODO note to flesh out family techniques, mastery levelling, and rarity tiers
+
 ## 2026-09-17 (6)
 - Fixed: `canAfford(long)` — now checks all currency tiers (ss + sc×1M + dc×1T + ij×1E); previously only checked `ss`
 - Fixed: `deductSs(long)` — cascades draw-down from sc→dc→ij before depleting ss; previously capped at ss only
