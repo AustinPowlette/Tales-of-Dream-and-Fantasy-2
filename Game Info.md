@@ -55,6 +55,7 @@ GameDriver.main()
        4. CLEANUP PHASE
           └─ Add tempCharacters to characters list
           └─ Null out remCharacters slots (dead/removed)
+          └─ Move awakenedMonsters → characters (direct); remove from monstersList
           └─ Clear temp lists
 ```
 
@@ -105,7 +106,7 @@ GameDriver.main()
 | Friendly | 1 in 100,000 | Social interaction profession |
 | Tailor | 1 in 100,000 | Clothing crafting |
 | Runner | 1 in 100,000 | Guaranteed flee if opponent is ≤10 levels higher |
-| Monster | Beast → kill → awaken | Planned upgrade from Beast: after killing a cultivator, Beast trait flips to Monster; gains NPC-like behavior (movement, quests, relationships). Not yet implemented. |
+| Monster | Beast → kill → awaken | 10% chance when a Beast kills a cultivator in `winCheck()`: flips trait to Monster, gains a legendary title prefix (Ancient/Dread/Elder/etc.), enters the main NPC loop (movement + quests + relationships). Evil-aligned, hunts beasts and cultivators. Earns legendary title suffixes on kill milestones (Legend@10, Tyrant@20, Dread Lord@30, Immortal Terror@50). |
 | Beast | Beast constructor | Combat-only NPC, no inventory/quests |
 
 ---
@@ -257,6 +258,14 @@ GameDriver.main()
 | Hunt | 30 | 5 | 50 |
 | Test | 45 | 5 | 10 |
 
+### Monster Spot Quests (from `monsterQuestInitializer()`)
+Monsters get a separate initializer — no Profession/Test, high-priority Hunt:
+
+| Name | Priority | PriorityDiff | MaxPriority |
+|---|---|---|---|
+| Hunt | 60 | 5 | 80 |
+| Random | 25 | 2 | 50 |
+
 ### Target Quests (selected)
 | Name | Trigger | On Success |
 |---|---|---|
@@ -383,9 +392,6 @@ GameDriver.main()
 
 ### Active
 None as of 2026-09-19.
-
-### Unimplemented Feature Note
-- **Monster NPC awakening** — `Traits.Monster` is reserved for Beasts that kill a cultivator and awaken into NPC-like entities (movement, quests, relationships). The trait and enum entry exist; the awakening trigger in `winCheck()` is not yet implemented.
 
 ### Design Notes
 - `movementTechnique2` / `martialTechnique2` secondary slots are temporary holders used during `equip()` to merge a newly-learned technique into the primary slot. They are nulled after processing; they do not need to be included in `tempLvlCheck()` separately since `equip()` is always called first.

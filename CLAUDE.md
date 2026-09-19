@@ -25,13 +25,13 @@ None as of 2026-09-19. (Items 1–4 — herb/metal off-by-one, Quest.targetArea 
 - `Map.characters` is an ArrayList where dead characters are nulled out by index (`characters.set(id, null)`). Always null-check before use: `Map.characters.get(someId)`.
 - `Map.tempCharacters` accumulates new births; added to `characters` at end of tick.
 - `Map.remCharacters` accumulates death removals; processed at end of tick.
+- `Map.awakenedMonsters` accumulates Beasts that awakened to Monster NPCs this tick; removed from `monstersList` (but NOT nulled from `characters`) at end of tick. Direct `characters.add()` is used instead of tempCharacters to avoid inflating population count.
 - `currentCharacter` (static on Map) is set per-character during the action loop. Some methods rely on it (notably `Area` constructor uses it for level seeding).
 - `character.id == index into Map.characters` — this identity is load-bearing for quests, relationships, and death removal. Do not change.
 
 ## Priorities for Next Development
 
-### Unimplemented features
-- **Monster NPC awakening** — `Traits.Monster` is the planned upgrade for a Beast that kills a cultivator: it gains a proper name, trait flips from Beast → Monster, and begins behaving like an NPC (movement, quests, relationships). Not yet implemented; the `Monster` enum entry is reserved for this path.
+All planned features from the design documents are now implemented. The simulation is functionally complete. Potential next improvements are polish/depth items (see "what could be better fleshed out" in session history).
 
 ## Coding Conventions (this codebase)
 - Java, package `Game`. Static imports from `GameDriver`, `Map`, `Dictionary`.

@@ -153,8 +153,11 @@ is reactive and per-corpse, not a permanent state change.
 True Immortal rebirth: moved from toString() side-effect to proper dead(killer) early-return
 guard. Rebirth resets dead=false, time=0, age=0; killer still gets kill credit.
 
-Monster NPC awakening (not yet implemented): Traits.Beast is the starting trait for all
-beast spawns. Traits.Monster is the upgrade when a Beast kills a cultivator — it should
-gain a proper NPC name, flip trait to Monster, and begin using the normal NPC AI (movement,
-quests, relationships). The enum entry is reserved; trigger belongs in winCheck() after
-loser.dead(this) when this.trait == Traits.Beast.
+Monster NPC awakening (IMPLEMENTED 2026-09-19): 10% chance in winCheck() when Beast kills
+a cultivator (loser.dead==true, loser.trait!=Beast). awakenMonster() flips trait to Monster,
+sets affiliation=Evil, assigns legendary title prefix (Ancient/Dread/Elder/Primordial/Titan/
+Sovereign/Infernal), gets id=UID++, age=8, enters characters[] via direct add + awakenedMonsters
+list (removed from monstersList at end of tick without population count impact). Initializes
+with monsterQuestInitializer(): Hunt(priority 60) + Random(priority 25) — no profession/gear
+economy. Earns kill-milestone title suffixes in dead(): Legend@10, Tyrant@20, Dread Lord@30,
+Immortal Terror@50. Monsters are excluded from gearNeeded/Seek Potential/Buy Pills triggers.

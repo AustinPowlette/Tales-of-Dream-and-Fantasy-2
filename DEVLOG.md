@@ -1,5 +1,14 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (Batch 15)
+- Added: Monster NPC awakening — `awakenMonster()` in `Character.java`; triggered from `winCheck()` at 10% when a Beast kills a cultivator; flips `trait=Monster`, `affiliation=Evil`, assigns legendary title prefix, sets `id=UID++`, adds to `characters` and `awakenedMonsters` (`Character.java`)
+- Added: `monsterQuestInitializer()` — Monster spot quests: Hunt (priority 60) + Random (priority 25); no Profession/Test quests; battle quests accumulate via relationship system (`Character.java`)
+- Added: Legendary milestone titles in `dead()` — Monster killing cultivators earns suffix at every 10 kills: Legend@10, Tyrant@20, Dread Lord@30, Immortal Terror@50; replaces existing suffix (`Character.java:dead()`)
+- Added: `Map.awakenedMonsters` list — holds freshly-awakened Monsters for end-of-tick removal from `monstersList` without incorrectly decrementing population (`Map.java`, `GameDriver.java`)
+- Changed: `quest()` — Monsters skip `gearNeeded` (buy-gear), `Seek Potential`, and `Buy Cultivation Pills` triggers; Monsters are predators and use no economy features (`Character.java`)
+- Updated: `Game Info.md` — Monster trait entry updated; Monster quest initializer table added; cleaned Unimplemented Feature Note; Architecture section updated
+- Updated: `Game Outline.md` — Monster NPC awakening flipped ❌→✅
+
 ## 2026-09-19 (6)
 - Fixed: `Item` herb/metal constructor off-by-one — `this.quantity += quantity` → `this.quantity = quantity` (`Item.java:50`)
 - Fixed: `toString()` True Immortal dead-flag side effect — moved rebirth logic to `dead(Character killer)` as an early-return guard; `toString()` no longer mutates state (`Character.java`)

@@ -375,6 +375,8 @@ public class GameDriver {
                 }
             }
             monstersList.removeAll(remCharacters);
+            monstersList.removeAll(awakenedMonsters);
+            awakenedMonsters.clear();
             tempCharacters.clear();
             remCharacters.clear();
             Thread.sleep(10000);

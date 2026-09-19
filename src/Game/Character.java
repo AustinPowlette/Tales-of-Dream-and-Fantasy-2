@@ -444,6 +444,30 @@ public class Character {
         spotQuests.add(test);
     }
 
+    // Monster NPCs: primarily hunt, occasionally explore via Random events
+    public void monsterQuestInitializer() {
+        spotQuests.add(new Quest("Hunt", false, 60, 5, 80));
+        spotQuests.add(new Quest("Random", false, 25, 2, 50));
+    }
+
+    // Called from winCheck() when a Beast kills a cultivator — 10% chance
+    public void awakenMonster() {
+        trait = Traits.Monster;
+        affiliation = "Evil";
+        affiliationNum = -1;
+        String[] titles = {"Ancient", "Dread", "Elder", "Primordial", "Titan", "Sovereign", "Infernal"};
+        name = titles[rand.nextInt(titles.length)] + " " + name;
+        id = UID++;
+        age = 8;
+        time = 0;
+        location.characters.add(this);
+        if (!knownLocations.contains(location)) knownLocations.add(location);
+        monsterQuestInitializer();
+        characters.add(this);
+        awakenedMonsters.add(this);
+        System.out.println(name + " " + lastName + " has awakened as a Monster! The wilds tremble.");
+    }
+
     public void movement() { // 0 = west, 1 = east, 2 = north, 3 = south
         int temp = rand.nextInt(5);
         char move = 'x';
@@ -892,6 +916,14 @@ public class Character {
                 if (friend != null && !friend.dead) friend.relationshipList.remove(this.id);
             }
             killer.kills++;
+            // Legendary milestone for Monster NPCs
+            if (killer.trait == Traits.Monster && killer.kills % 10 == 0) {
+                String title = killer.kills >= 50 ? "Immortal Terror" : killer.kills >= 30 ? "Dread Lord" : killer.kills >= 20 ? "Tyrant" : "Legend";
+                int idx = killer.lastName.indexOf(" the ");
+                if (idx >= 0) killer.lastName = killer.lastName.substring(0, idx) + " the " + title;
+                else killer.lastName = killer.lastName + " the " + title;
+                System.out.println(killer.name + " " + killer.lastName + " has earned the title: " + title + " (" + killer.kills + " kills)");
+            }
             // Transers all items to the killer
             transferAllItems(killer);
 
@@ -925,9 +957,10 @@ public class Character {
         }
 
         // Buy Gear: in city with shops — buy immediately; otherwise queue travel to nearest known shop city
-        boolean gearNeeded = equippedWeapon == null || equippedClothing == null
+        // Monsters are predators and never buy gear
+        boolean gearNeeded = trait != Traits.Monster && (equippedWeapon == null || equippedClothing == null
                 || (equippedWeapon != null && equippedWeapon.lvl + 10 <= lvl)
-                || (equippedClothing != null && equippedClothing.lvl + 10 <= lvl);
+                || (equippedClothing != null && equippedClothing.lvl + 10 <= lvl));
         if (gearNeeded) {
             if (location.city && !location.shops.isEmpty()) {
                 buyGear();
@@ -955,7 +988,7 @@ public class Character {
         }
 
         // Seek Potential: travel to city with potential pills when potential is too low for next breakthrough
-        if (trait != Traits.Beast && majorLvl < 9) {
+        if (trait != Traits.Beast && trait != Traits.Monster && majorLvl < 9) {
             int potThreshold = 101 - (9 - majorLvl) * (9 - majorLvl);
             if (potential < potThreshold
                     && targetQuests.stream().noneMatch(q -> "Seek Potential".equals(q.name))
@@ -972,7 +1005,7 @@ public class Character {
         }
 
         // Buy Cultivation Pills: pick up next-realm pills when in a city (10% chance)
-        if (location.city && location.pillBag != null && rand.nextInt(10) == 0) {
+        if (trait != Traits.Monster && location.city && location.pillBag != null && rand.nextInt(10) == 0) {
             for (int pi = 0; pi < location.pillBag.size(); pi++) {
                 Item pill = location.pillBag.get(pi);
                 if (pill.itemType == Item.ItemType.Pill && pill.pillType == Item.PillType.Cultivation
@@ -3712,6 +3745,10 @@ public class Character {
             if (martialTechnique != null && rand.nextInt(upgradeChance) == 0) martialTechnique.upgrade(this);
             Area lostAt = loser.location;
             loser.dead(this);
+            // Beast awakening: killing a cultivator may trigger Monster NPC awakening (10% chance)
+            if (trait == Traits.Beast && loser.trait != Traits.Beast && loser.dead && rand.nextInt(10) == 0) {
+                awakenMonster();
+            }
             // Evil or Beast destroys undefended city/sect (20% chance per eligible kill)
             if ((affiliationNum == -1 || trait == Traits.Beast)
                     && lostAt != null && !"Originis".equals(lostAt.name)

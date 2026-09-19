@@ -56,7 +56,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `forbiddenCheck()` — forbidden technique (tempLvl boost at lifespan cost)
 - ✅ `durabilityCheck()` — equipment breaking during combat
 - ✅ Beast combat (`beastBattleCheck()`)
-- ❌ Monster NPC awakening — when a Beast kills a cultivator, chance to flip trait Beast→Monster, gain a proper name, and begin behaving as an NPC (movement, quests, relationships); `Traits.Monster` enum entry is reserved
+- ✅ Monster NPC awakening — Beast that kills a cultivator has 10% chance to flip trait Beast→Monster; gains a legendary title prefix (Ancient/Dread/Elder/etc.), becomes Evil-aligned, enters main NPC loop (movement + quests + relationships) via `awakenMonster()`; earns kill-milestone title suffixes (Legend@10, Tyrant@20, Dread Lord@30, Immortal Terror@50)
 - ✅ Cheater trait (+5 tempLvl)
 - ✅ Lucky trait (Â±45 win chance)
 - ✅ Sparring — 10% chance/tick when rel ≥ 1; both call `practice()` (cultivate + technique upgrade) via `winCheck()` sparring branch; +1 relationship to both parties

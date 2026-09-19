@@ -17,6 +17,7 @@ public class Map {
     public static ArrayList<Character> tempCharacters = new ArrayList<>();
     public static ArrayList<Character> remCharacters = new ArrayList<>();
     public static ArrayList<Character> monstersList = new ArrayList<>();
+    public static ArrayList<Character> awakenedMonsters = new ArrayList<>();
     public static ArrayList<Area> hotspotAreas = new ArrayList<>();
     public static Character currentCharacter;
 
