@@ -1,5 +1,9 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (4)
+- Updated: `Game Info.md` — comprehensive rewrite: fixed 10 stale bug entries (all resolved in prior sessions), added Library.java/Shop.java to file map, corrected Character.java line count (~3,900), added Ghost/IronBody/SpiritVein/HeavenlyRoot trait descriptions, corrected Merchant/Ghost traits from "stub/not implemented" to fully implemented, added Dungeon table, Sect Mission System, Library section, Shop pricing, itemPrice formula, potential gain events; reduced active bug list to 5 real remaining issues
+- Updated: `Game Outline.md` — fixed "cityOwner is never set" stale bug note; fixed tax timing description from "per tick" to "per year"
+
 ## 2026-09-19 (3)
 - Added: Sect mission delivery — Forage/Mine completion now checks location; if at sect, transfers materials to treasury immediately; if away, queues "Deliver Materials" target quest to return and deliver; materials actually leave character's bag on delivery (`Character.java:spotQuests()`, `targetQuests()`, `questViable()`)
 - Added: City taxation — cityOwner collects `population / 100` ss per year in GameDriver's yearly tick (`GameDriver.java`)

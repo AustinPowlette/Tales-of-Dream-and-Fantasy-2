@@ -142,7 +142,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 
 - ✅ Spirit stones (ss) tracked on characters
 - ✅ City initialization creates area inventory bags
-- ✅ Tax collection stub (cityOwner.ss += population per tick — but `cityOwner` is never set)
+- ✅ Tax collection — `cityOwner.ss += population / 100` once per year (GameDriver yearly tick)
 - ✅ Area inventory bags — city `backpack`/`pillBag`/`arrayBag` used as market pools; sell() fills them; buyGear()/restockFromCity()/sellStock() drain them; Merchants do arbitrage between pools
 - ✅ `cityLeadership()` now sets `cityOwner` — unblocks tax collection
 - ✅ `sell(Area city)` — transfers non-spare backpack items to city pool; pays `100^(lvl/10)` ss (placeholder pricing); pill selling deferred
@@ -153,7 +153,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ **Merchant trait** — sets up shops, restocks from city pool, self-equips from stock, city-to-city arbitrage via Sell Stock quest
 - ✅ Potential pill selling restriction — sell() only adds Potential pills to sell list when potential >= 100
 - ✅ **Item pricing** — formula: `lvl^2.5 * 10` (lvl 1=10ss, lvl 10=3162ss, lvl 100=10M ss); Potential pills 5× base; multi-currency canAfford/deductSs correct
-- ✅ City tax routing — `cityOwner` set by `cityLeadership()`; `Area.age()` pays `cityOwner.ss += population` each tick; sect population also taxed via `Organization.growPopulation()`
+- ✅ City tax routing — `cityOwner` set by `cityLeadership()`; GameDriver yearly loop pays `cityOwner.ss += population / 100`; sect population also taxed via `Organization.growPopulation()`
 - ✅ Leader/city 20%/80% split — NPC Leaders: 80% skip to sect track, 20% try city first
 
 ---

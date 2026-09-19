@@ -13,13 +13,15 @@ Language: Java. Entry point: `src/Game/GameDriver.java`.
 |---|---|
 | `GameDriver.java` | Main loop, player I/O, tick ordering |
 | `GameDriver2.java` | Simplified test harness |
-| `Character.java` | Core class — all character logic (2,333 lines) |
+| `Character.java` | Core class — all character logic (~3,900 lines) |
 | `Area.java` | World tile — biome, resources, spawning |
 | `Map.java` | Static world container (tile grid + global lists) |
 | `Item.java` | All item types (Weapon, Clothing, Herb, Metal, Pill, Array, Blood) |
 | `Technique.java` | Movement and Martial techniques |
 | `Quest.java` | Quest data + priority queue ordering |
 | `Organization.java` | Sect/city faction object |
+| `Library.java` | City and sect technique libraries |
+| `Shop.java` | Merchant-owned shop for buying/selling items |
 | `Relationship.java` | Single relationship record |
 | `RelationshipList.java` | ArrayList wrapper for relationships |
 | `Dictionary.java` | Static name/biome/creature data arrays |
@@ -47,7 +49,8 @@ GameDriver.main()
           └─ NPC:    movement() → quest()
           └─ Child follow-mother logic (age < 8)
        3. AREA AGING PHASE
-          └─ area.age() → +1% resources/monsters/population, NPC spawns, tax
+          └─ area.age() → +1% resources/monsters/population per tick
+          └─ City taxation: cityOwner.ss += population/100 once per year
           └─ Monsters roam and battleCheck() against characters in their tile
        4. CLEANUP PHASE
           └─ Add tempCharacters to characters list
@@ -62,7 +65,7 @@ GameDriver.main()
 ### Attributes
 - `id` — unique index into `Map.characters` ArrayList (used for all cross-references)
 - `lvl` / `majorLvl` / `minorLvl` — total level, realm tier (0–10), sub-level (1–10)
-- `tempLvl` — combat power = `(lvl + weapon.lvl + armor.lvl + martial.lvl + movement.lvl) / 5`
+- `tempLvl` — combat power = `(lvl + weapon.lvl + armor.lvl + martial.lvl + movement.lvl) / 5`; IronBody adds `majorLvl/2+1`; Cheater adds `5`
 - `potential` — 1–100, generated via `101 - sqrt(rand.nextInt(10000)+1)`; limits breakthrough success
 - `cultivation` / `cultivationBase` / `cultivationBaseMax` — accumulated xp toward next level
 - `inhibitor` — grows on each failed breakthrough, slows cultivation speed
@@ -71,6 +74,9 @@ GameDriver.main()
 - `affiliation` / `affiliationNum` — "Good"(+1) / "Neutral"(0) / "Evil"(-1)
 - `professionLvl` / `professionExp` / `professionExpMax` — profession skill (1–100)
 - `maxAge` / `totalAgeGained` — lifespan; each breakthrough adds age
+- `sectPoints` — contribution points for a sect; earned via missions and donations
+- `sectMission` — String encoding active mission: `"Type|SubType|lvl|qty|bonus"`
+- `isGhostForm` / `originalName` — Ghost physique rebirth state
 
 ### Constructors
 | Constructor | Use |
@@ -84,19 +90,22 @@ GameDriver.main()
 |---|---|---|
 | Cheater | 1 in 1,000,000 | +5 tempLvl in combat |
 | Lucky | 1 in 10,000 | +45 win chance; loots dead as profession |
-| Ghost | ~1 in 33,000 | Defined but **not implemented** |
+| Ghost | ~1 in 33,000 | On death (non-Beast killer): enters ghost form, seeks a city, reborns as a new character; items dropped, sect resigned |
+| IronBody | ~1 in 33,000 | `+majorLvl/2+1` to tempLvl in combat (natural armor) |
+| SpiritVein | ~1 in 33,000 | 1.5× cultivation speed |
+| HeavenlyRoot | ~1 in 33,000 | 2× technique upgrade chance on kill (1 in 2 vs 1 in 5) |
 | Leader | ~1 in 33,000 | Creates cities (profLvl=1) and sects (profLvl=50+) |
-| Innovative | ~1 in 33,000 | Creates techniques; sells techniques |
+| Innovative | ~1 in 33,000 | Creates techniques; sells techniques to city libraries |
 | Blacksmith | 1 in 100,000 | Smithing profession |
 | Alchemist | 1 in 100,000 | Alchemy profession; forages if missing materials |
 | Scribe | 1 in 100,000 | Array crafting |
-| Merchant | 1 in 100,000 | **Decision engine not implemented** |
+| Merchant | 1 in 100,000 | Runs a Shop; buys from sellers, sells to buyers, arbitrages between cities |
 | Gatherer | 1 in 100,000 | Foraging profession |
 | Miner | 1 in 100,000 | Mining profession |
 | Friendly | 1 in 100,000 | Social interaction profession |
 | Tailor | 1 in 100,000 | Clothing crafting |
-| Runner | 1 in 100,000 | Guaranteed flee if opp is ≤10 levels higher |
-| Monster | Enum entry only | Not assigned in constructors |
+| Runner | 1 in 100,000 | Guaranteed flee if opponent is ≤10 levels higher |
+| Monster | Enum entry | Not assigned in any constructor |
 | Beast | Beast constructor | Combat-only NPC, no inventory/quests |
 
 ---
@@ -122,15 +131,21 @@ GameDriver.main()
 - If potential is below the threshold AND a random check fails (1 in 15 or 1 in 10 at higher realms), the character drops back one level and `inhibitor++`.
 - `inhibitor` penalizes future cultivation speed by a factor of `2^inhibitor`.
 
+### Potential Gain Events
+- 1 in 100 chance on any major realm breakthrough.
+- 1 in 50 chance on surviving a `forbiddenCheck()` during combat.
+- 4% chance on entering a HAUNTED_GROUNDS dungeon (plus 5 extra `cultivate()` calls).
+- Via Potential Pills (crafted by Alchemists, sold at city pill markets).
+
 ### Sect Bonus
-- If a character belongs to a sect, the game loop grants them `founder.majorLvl` extra `cultivate()` calls per tick.
+- If a character belongs to a sect, the game loop grants them `Math.max(founder.majorLvl, sect.sectLvl()/10)` extra `cultivate()` calls per tick.
 
 ---
 
 ## Combat System
 
 ### Battle Flow (`battle()`)
-1. `tempLvlCheck()` — runs `equip()`, then computes tempLvl for both fighters.
+1. `tempLvlCheck()` — calls `equip()`, then computes tempLvl for both fighters.
 2. `deathCheck()` — determines if the fight is a deathmatch based on relationship value.
 3. Win chance: `50 - (15 * (opponent.tempLvl - this.tempLvl))` ± Lucky trait (±45).
 4. If win chance < caution → attempt `fleeCheck()`.
@@ -140,7 +155,7 @@ GameDriver.main()
 8. Final roll: `rand.nextInt(100)+1 <= winChance` → winner calls `winCheck(loser)`.
 
 ### Flee Logic (`fleeCheck()`)
-- Runner trait: flee if opp is ≤10 levels higher → always true.
+- Runner trait: flee if opp is ≤10 levels higher → always flee.
 - Both lvl and movementTechnique.lvl are higher → always flee.
 - Partial advantage → 4 in 5 chance.
 - Equal → 1 in 2 chance.
@@ -158,6 +173,7 @@ GameDriver.main()
 | Beast involved | Always deathmatch |
 
 ### On Death (`dead(killer)`)
+- Ghost physique: enters ghost form instead of dying (once only; beast kills are final).
 - Transfers all items to killer.
 - Creates Blood item for killer's materialBag (quantity = potential + lvl).
 - Friends (relationship ≥ 2) of the deceased lose relationship with killer by `-(value-1)`.
@@ -177,8 +193,8 @@ GameDriver.main()
 | Tailor | `tailoring()` |
 | Scribe | `array()` |
 | Leader | `cityLeadership()` at profLvl=1, `sectLeadership()` at profLvl=50 |
-| Innovative | 1 in 100 chance → `technique()` |
-| Merchant | **Empty stub** |
+| Innovative | 1 in 100 chance → `technique()`; otherwise sells to city library |
+| Merchant | Buys from city pool, sells to nearby characters via Shop |
 | Lucky | `eventLootDead()` |
 
 ### Resource Requirements
@@ -230,10 +246,24 @@ GameDriver.main()
 | Hunt | 30 | 5 | 50 |
 | Test | 45 | 5 | 10 |
 
-### Target Quest: Find Person
-- Created whenever `changeRelationship()` adds a new relationship.
-- Priority scales with relationship value: `priorityDiff = abs(value)`, `maxPriority = 20 * abs(value)`.
-- On arrival: positive relationship → `interact()`; negative → `battleCheck()`.
+### Target Quests (selected)
+| Name | Trigger | On Success |
+|---|---|---|
+| Find Person | New relationship formed | `interact()` or `battleCheck()` depending on relationship value |
+| Hunt Beast | Area has no beasts at appropriate level | `beastBattleCheck()` |
+| Battle Rival | Dislike/Rival/Arch-Enemy relationship exists | `battleCheck()` with target |
+| Revenge | Close friend (value ≥ 2) dies | `battleCheck()` with killer |
+| Bounty Hunt | Can't afford revenge target | Post or accept bounty on Area.bounties |
+| Return to Sect | Member is not at sect location (5%/turn) | Sect arrival grants +2 sectPoints |
+| Deliver Materials | Sect mission complete but away from sect | Transfer materials to treasury, gain sectPoints |
+| Ghost City Rebirth | Ghost physique: seeking a city | Rebirth as new character at city |
+| Buy Gear | Equipment slots empty or gear outgrown | Purchase from city market |
+| Sell Stock | Backpack over threshold (Merchant) | Travel to destination city, sell cargo |
+
+### Sect Mission System
+- Sect masters post missions to members via `postMissionsYearly()` (yearly).
+- Mission format: `"Forage|Herb|lvl|qty|bonus"` or `"Mine|Metal|lvl|qty|bonus"`.
+- Two-phase delivery: if mission completed away from sect, a Deliver Materials quest queues; if at sect, materials transfer to `sect.treasury` immediately.
 
 ### Pathfinder (`pathfinder()`)
 - Moves diagonally toward destination using wrap-around world logic.
@@ -274,21 +304,40 @@ GameDriver.main()
 ## Economy & Organization
 
 ### Spirit Stones (ss)
-- Generated by: killing beasts, city taxes (population per tick to `cityOwner.ss`).
+- Generated by: killing beasts, city population tax (cityOwner.ss += population/100 once per year), Merchant shop profit, technique sales to libraries.
 - Required by: `cityLeadership()` (1,000,000 ss), `sectLeadership()` (1,000,000,000 ss).
 
+### Item Pricing (`itemPrice()`)
+- Herb/Metal: `lvl^2.5 × 10`
+- Pills: `lvl^2.5 × 100`
+- Weapons/Clothing: `lvl^2.5 × 1000`
+- Arrays: `lvl^2.5 × 500`
+
 ### City / Sect Creation
-- City: Leader at profLvl=1, ss ≥ 1M, 1 in 100 chance → sets `area.city = true`, initializes area inventory bags.
+- City: Leader at profLvl=1, ss ≥ 1M, 1 in 100 chance → sets `area.city = true`, initializes area inventory bags, sets `area.cityOwner`.
 - Sect: Leader at profLvl=50+, ss ≥ 1B, area has city OR 1 in 100 chance → creates `Organization`.
-- **No Shop class exists yet.** Area inventory bags (`backpack`, `materialBag`, `pillBag`, `arrayBag`) are initialized but never populated.
+
+### Shop (Merchant trait)
+- `Shop` class with `buyRate=0.55`, `sellRate=1.50`, `cityBuyRate=0.30`.
+- `buyFromSeller()` — buys items from sellers at 55% of `itemPrice`.
+- `sellToBuyer()` — sells to buyers at 150% of `itemPrice`.
+- `restockFromCity()` — buys from city pool at 30% of `itemPrice`.
+- Merchant arbitrage: Buy Gear quest (travel to city A for cheap goods) → Sell Stock quest (travel to city B to sell at profit).
+
+### Library
+- `Library(Area)` — city library; buy techniques with ss (`potential^2 × 1000`); sell techniques for ss.
+- `Library(Organization)` — sect library; access costs sectPoints.
+- `learnTechnique()`: learned copy starts at `technique.lvl / 5` mastery.
+- `learnSectTechnique()`: learned copy starts at `technique.lvl / 3` mastery.
 
 ### Organization
-- Tracks founder, master, members list, location.
+- Tracks founder, master, members list, location, treasury.
 - `resign()` triggers `promote()` — next member in list becomes master.
 - `ArrayList<Item> treasury` — stores donated items from all members.
 - `sectLvl()` — `sum(herb+metal qty×lvl) / 10000`, capped at 100. Used as cultivation bonus multiplier.
-- `donationPoints(Item, qty)` / `buyingCost(Item, qty)` — proportional: herbs/metals: `qty×lvl/1000`; pills: `qty×lvl×2`; gear: `item.lvl`. Buying cost equals donation value (fair exchange).
-- Cultivation bonus in GameDriver: `Math.max(founder.majorLvl, sect.sectLvl() / 10)` extra cultivate() calls per tick for members below founder's level.
+- `donationPoints(Item, qty)` / `buyingCost(Item, qty)` — proportional: herbs/metals: `qty×lvl/1000`; pills: `qty×lvl×2`; gear: `item.lvl`.
+- `postMissionsYearly()` — assigns Forage/Mine missions to members.
+- Master promotes Outer Disciples to Inner Disciples (5%/turn, level threshold check) and Inner Disciples to Elders.
 
 ---
 
@@ -307,40 +356,34 @@ GameDriver.main()
 ### Area Aging (`area.age()`)
 - All resources/monsters/population multiply by 1.01 per tick.
 - 1 in 10 population tick → spawn new Character (possibly joining sect).
-- City owner receives population-amount ss per tick.
+- `Area.bounties` — `ArrayList<Quest>` for posted bounties on this area.
+
+### Dungeons
+| Type | Effect |
+|---|---|
+| LOST_RUINS | Treasure chest + random technique |
+| BEAST_LAIR | 3 forced beast battles |
+| MARTIAL_TRIAL | tempLvlCheck + technique upgrade if won |
+| HAUNTED_GROUNDS | 4% potential gain; 5 extra cultivate() calls |
 
 ---
 
 ## Known Bugs & Issues
 
-### Critical
-1. **`changeRelationship()` NullPointerException risk** — Lines 1366 and 1369 directly access `this.currentQuest.targetCharacter` and `player.currentQuest.targetCharacter` without null-checking `currentQuest`. If `currentQuest` is null at that point, the game crashes.
+### Active
+1. **`Item` herb/metal constructor off-by-one** — `quantity` field initializes to 1; constructor does `this.quantity += quantity` so every herb/metal stack has +1 extra item. Fix: change to `this.quantity = quantity`.
 
-2. **`spotQuests()` always returns 0** — Line 944 hard-codes `return 0` regardless of `questSuccess`. No spot quest ever correctly reports success or failure, breaking priority accumulation.
+2. **`Quest.targetArea` not updated** — Character-category quests store `targetArea = targetCharacter.location` at creation time. Never updated as the target moves, so pathfinding chases a stale location.
 
-3. **`event()` case 1 missing `break`** — The beast battle case (case 1) falls through into the interact case (case 2) every time. Beast battles also trigger an interaction with a random character.
+3. **`Map.characters.get(id)` null slots** — `Quest.targetCharacter` stores an int id. `Map.characters` is an ArrayList where dead characters are nulled out by index. Callers of `characters.get(quest.targetCharacter)` can receive null and must null-check before use.
 
-4. **Equipment duplication in `equip()`** — When a better weapon is found in `backpack`, the code sets `equippedWeapon` to the new item and puts the old one in `tempAddWeapon`, then calls `backpack.remove(equippedWeapon)` — removing the *new* item from the backpack (correct), but if multiple better items exist in backpack, the loop continues replacing `equippedWeapon` without adding intermediate items back, potentially losing items. Additionally, `transferAllItems()` blindly copies `equippedWeapon`/`equippedClothing` — but `dead()` moves them to `backpack` before transfer — if the timing is off (e.g., `equip()` is called during combat before death), equipment could be duplicated.
+4. **`Character.toString()` True Immortal rebirth side effect** — If `dead == true && majorLvl == 10`, `toString()` silently sets `dead = false`, `time = 0`, `age = 0`. Called implicitly by any print that includes a True Immortal, this can clear the death flag outside of the normal death flow.
 
-5. **`forbiddenCheck()` sets `dead = true` without full death handling** — Line 2190 sets `dead = true` directly but does not call `dead()` or `dead(killer)`, so the character is never removed from `characters`, never transferred items, and never added to `remCharacters`. This creates a zombie character.
+5. **`Monster` trait unassigned** — The `Monster` enum entry exists but is never set in any constructor. Only `Beast` is used for creature characters.
 
-6. **Relationship removal at value 0** — `changeRelationship()` removes the relationship object when value == 0, but `checkRelationship()` still tries to read it via `relationshipList.contains()`, and the quest search uses `q.name == "Find Person"` (reference equality, not `.equals()`), which will never match.
-
-7. **`Quest.targetArea` not updated** — A `Character`-category quest stores `targetArea = targetCharacter.location` at creation time. It is never updated as the target character moves, so pathfinding chases a stale location.
-
-8. **`Area.age()` NPC spawning ignores `cityOwner`** — `cityOwner` field is never set anywhere in the codebase; it is always null, so no city tax is ever collected.
-
-9. **`professionPicker()` missing `break` statements** — Friendly case falls through into Tailor, Tailor falls through into Scribe.
-
-10. **`Item` herb/metal constructor off-by-one** — `this.quantity += quantity` starts at `quantity = 1` (field default) then adds the passed quantity, so every herb/metal item has +1 extra.
-
-### Minor / Design Debt
-- All `System.out.println` calls run for every NPC, not just the player. Extremely noisy output.
-- `Monster` trait exists in enum but is never assigned in any constructor.
-- `movementTechnique2` / `martialTechnique2` secondary slots exist but `tempLvlCheck()` does not include them in combat power.
-- `Character.toString()` has True Immortal rebirth logic that resets `dead` and `age` to zero — this means a True Immortal character's `dead` flag is cleared silently during printing, which could interfere with the removal loop.
-- The `int skipping` decrement in the skip-turn branch only decrements by 1 per turn but the comment implies it should skip exactly N turns.
-- `Quest.targetCharacter` stores an `int` (the id), but `Map.characters` is an ArrayList that can have null slots after death removal. `characters.get(quest.targetCharacter)` can return null and cause NPE.
+### Design Notes
+- `movementTechnique2` / `martialTechnique2` secondary slots are temporary holders used during `equip()` to merge a newly-learned technique into the primary slot. They are nulled after processing; they do not need to be included in `tempLvlCheck()` separately since `equip()` is always called first.
+- Technique rarity is implicit via `potential` value — high-potential techniques are rarer and stronger by construction. No separate rarity tier system is needed.
 
 ---
 
