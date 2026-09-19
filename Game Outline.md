@@ -45,7 +45,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Sect cultivation bonus (sect founder's majorLvl extra ticks)
 - ✅ Pill consumption (`consume()`) for both Cultivation and Potential pills
 - ❌ Rebirth mechanic for killed original NPCs (new family lines)
-- ❌ Potential increase/decrease events (pills only raise, no events yet)
+- 🟡 Potential increase events — HAUNTED_GROUNDS dungeon gives rare potential gain; pills via Seek Potential quest; random decrease events not yet implemented
 
 ### Combat
 - ✅ `battle()` full resolution
@@ -61,7 +61,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Sparring — 10% chance/tick when rel ≥ 1; both call `practice()` (cultivate + technique upgrade) via `winCheck()` sparring branch; +1 relationship to both parties
 - ✅ Group/party battle — sequential tag-team; `partyBattleCheck()` collects positive-relationship allies, strongest leads, enemy accumulates +2 exhaustionPenalty per successive fight
 - ✅ Bounty system (wanted flag, bounty board in cities)
-- 🟡 Arena/tournament combat — "Hold Tournament" spot quest for city owners/sect masters; single-elimination bracket (probability-based, no death); major-realm band prizes; advance registration and spectator systems deferred
+- ✅ Arena/tournament combat — "Hold Tournament" spot quest; 8-week advance registration window; single-elimination bracket (probability-based, no death); major-realm band prizes; Register/Spectate spot quests; `Area.runTournament()` runs bracket at timer end
 - ✅ Combat system complete — current `battle()` IS the revamped design; tile-based push mechanic was intentionally dropped as too complex
 - ✅ Second technique slot (slot 2) is a training slot — holds highest-potential technique, does NOT contribute to combat power by design; children inherit it as their starting technique
 
@@ -82,12 +82,12 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `sectLeadership()` — Leader creates sect (1B ss)
 - ✅ Profession exp + level cap at 100
 - ✅ `professionPicker()` dispatch — fall-throughs fixed (Friendly/Tailor breaks added)
-- ❌ Merchant profession (stub only — no buying/selling logic)
+- 🟡 Merchant profession — Shop.java; sets up shops in cities, restocks from city pool, equips from own stock; full arbitrage NPC buy/sell decision tree deferred
 - 🟡 Library/Technique selling — `Library.java` skeleton; city libraries sell technique copies for ss; sect libraries gate on sectPoints; Innovative can sell; family inheritance, mastery levelling, rarity tiers deferred (TODO in Library.java)
 - ✅ Pre-req check — Forage/Mine queued from `professionPicker()` when materials missing (Alchemist, Blacksmith, Tailor, Scribe branches)
 - ✅ Crafting level cap — items capped at `(majorLvl + 1) * 10` capped at 100 max; crafter can make 1 realm above their cultivation
 - ✅ Selling excess items — Go Sell quest at backpack > 20; `sell()` transfers surplus to city pool
-- 🟡 Technique selling (Innovative only — Library skeleton exists, full selling deferred)
+- ✅ Technique selling (Innovative only) — "Sell Technique" spot/area quest; travels to city library; `Library.sellTechnique()` pays seller; auto-donates copy to sect library 20% chance
 
 ---
 
@@ -113,7 +113,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ **Go Sell quest** — triggers at backpack.size() > 20; Area quest to nearest known city; calls sell() on arrival
 - ✅ **Bounty Hunt quest** — posted by close friends too weak for Revenge; characters within 10 levels pick up from city bounty board; calls battleCheck on target
 - ✅ **Revenge quest** — queued in `dead()` when close friend (value>=2) is within 1 major realm of killer; weaker friends defer to bounty/squad (not yet implemented)
-- ❌ **Sect events** (politics, recruitment, tournaments)
+- ✅ **Sect events** — tournaments (advance registration, brackets, prizes), politics (war/alliance/tribute/defection/resource disputes/succession crisis), recruitment quests, sect missions/quest board
 - ✅ **Seek Potential quest** — triggers when `potential < 101 - (9 - majorLvl)^2`; travels to city with Potential Pills; buys and consumes on arrival
 - ✅ **Join Sect quest** — non-Leader adults with no sect seek known sect locations; calls `Organization.join()` on arrival
 - ✅ **Find Parent's Body quest** — queued in both `dead()` overloads; awards +1 potential on 20% chance on arrival
@@ -152,7 +152,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - 🟡 **Merchant trait** — sets up shops in cities, restocks from city pool; arbitrage travel and NPC buy decision tree deferred
 - ✅ Potential pill selling restriction — sell() only adds Potential pills to sell list when potential >= 100
 - 🟡 **Item pricing** — overflow fixed (capped at Long.MAX_VALUE for lvl > 92); multi-currency canAfford/deductSs fixed; formula still placeholder pending economy pass
-- ❌ 10% city tax routing (tax already collected; distribution logic not implemented)
+- ✅ City tax routing — `cityOwner` set by `cityLeadership()`; `Area.age()` pays `cityOwner.ss += population` each tick; sect population also taxed via `Organization.growPopulation()`
 - ✅ Leader/city 20%/80% split — NPC Leaders: 80% skip to sect track, 20% try city first
 
 ---
@@ -167,9 +167,9 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Sibling detection
 - ✅ `checkBirth()` — pregnancy trigger from spouse interaction
 - ✅ Relationship removal string comparison fixed — `==` → `.equals()`; NPE guard added
-- ❌ Relationship recycling on death (design doc: don't hate killer, just give revenge quest)
+- ✅ Relationship recycling on death — deceased removed from all living friends' RelationshipLists in `dead()`; Revenge quest queued for close friends (value ≥ 2) within 1 major realm of killer
 - ✅ Kill counter — `kills` field on Character; incremented on combat death, beast kill, and Ghost form entry
-- ❌ Appropriate relationship gain/loss from fighting (design doc requirement)
+- ✅ Relationship change from fighting — `changeRelationship()` fires in `battleCheck()` before combat; same thematic effect as post-fight
 
 ---
 
@@ -186,7 +186,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `equip()` technique duplication fixed — `!techniqueList.contains()` guard prevents duplicate adds
 - 🟡 `transferAllItems()` doesn't merge Weapons/Arrays by name (only merges Herbs, Metals, Pills by name)
 - ✅ Random name generation for weapons, clothing, arrays — word lists in Dictionary.java; Item constructors use random adjective+type combos
-- ❌ Item counter / kill counter tracking
+- ✅ Kill counter — `kills` field; shown on 'i' stat screen
+- ❌ Item counter tracking (crafted/looted totals)
 - ❌ Method for removing specific quantity of stackable items from inventory
 
 ---
@@ -200,8 +201,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Breakthrough announcements (behind `printBreakthroughs` flag)
 - ✅ Birth/death announcements
 - ✅ NPC print noise fixed — `player` changed to int (0=NPC, 1=human, 2=follow); all print guards use `player > 0`; NPCs are silent
-- ❌ Full options menu
+- ✅ Options menu — 'o' key opens auto-move submenu (wait/directional/coordinate/random N turns); 'i' stat screen; 'l' locations; 'r' relationships
 - ✅ Player stat screen ('i' key) — level, cultivation, potential, age, affiliation, trait, profession, wealth, equipment, techniques, sect
 - ✅ Known locations display ('l' key) — all known areas with coordinates, city/sect flags
 - ✅ Relationship list ('r' key) — all living relationships with label and value
-- ❌ Auto-movement direction for N turns
+- ✅ Auto-movement — 'o' menu: wait N turns, directional N turns, coordinate pathfind (X Y then N turns), random N turns; `autoX`/`autoY` fields track coordinate target
