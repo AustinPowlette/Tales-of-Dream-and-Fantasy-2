@@ -1352,6 +1352,14 @@ public class Character {
                     return (quest.targetArea != null && quest.targetArea.city && quest.targetArea.cityOwner != null
                             && quest.targetArea.backpack != null && !quest.targetArea.backpack.isEmpty()) ? 1 : 0;
                 }
+                if ("Sell Stock".equals(quest.name)) {
+                    // Cancel if we have nothing left to sell or destination city is gone
+                    boolean hasCargoToSell = backpack.stream().anyMatch(
+                        i -> i.itemType != Item.ItemType.Weapon && i.itemType != Item.ItemType.Clothing
+                             || (i != equippedWeapon && i != equippedClothing));
+                    return (quest.targetArea != null && quest.targetArea.city
+                            && quest.targetArea.cityOwner != null && hasCargoToSell) ? 1 : 0;
+                }
                 if ("Buy Gear".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.city && !quest.targetArea.shops.isEmpty()) ? 1 : 0;
                 }
@@ -1805,6 +1813,37 @@ public class Character {
                 }
                 return 1;
             }
+            case "Sell Stock": {
+                if (!location.city || location.cityOwner == null) return 0;
+                // Sell all non-equipped, non-spare backpack items into this city's pool at full price
+                Item spareW = null, spareA = null;
+                for (Item i : backpack) {
+                    if (i.itemType == Item.ItemType.Weapon && i != equippedWeapon)
+                        if (spareW == null || i.lvl > spareW.lvl) spareW = i;
+                    if (i.itemType == Item.ItemType.Clothing && i != equippedClothing)
+                        if (spareA == null || i.lvl > spareA.lvl) spareA = i;
+                }
+                ArrayList<Item> cargo = new ArrayList<>();
+                for (Item i : backpack) {
+                    if (i == equippedWeapon || i == equippedClothing || i == spareW || i == spareA) continue;
+                    cargo.add(i);
+                }
+                long earned = 0;
+                for (Item item : cargo) {
+                    long price = itemPrice(item);
+                    earned += price;
+                    boolean merged = false;
+                    for (Item ci : location.backpack) {
+                        if (ci.name.equals(item.name) && ci.lvl == item.lvl) { ci.quantity += item.quantity; merged = true; break; }
+                    }
+                    if (!merged) location.backpack.add(item);
+                }
+                backpack.removeAll(cargo);
+                ss += earned;
+                convertCurrency();
+                if (player > 0 && skipping <= 0) System.out.println(this + " sold cargo at " + location.name + " for " + earned + " ss");
+                return 1;
+            }
             case "Recruit Member": {
                 Character recruit = characters.get(quest.targetCharacter);
                 if (recruit != null && !recruit.dead && sect != null && sect.canJoin(recruit)) {
@@ -2128,6 +2167,28 @@ public class Character {
                     Shop myShop = ownedShops.stream().filter(s -> s.location == location).findFirst().orElse(null);
                     if (myShop != null) {
                         myShop.restockFromCity(location);
+                        // Cargo pickup: buy from city pool into backpack for inter-city transport
+                        if (backpack.size() < 15 && location.backpack != null && !location.backpack.isEmpty()
+                                && targetQuests.stream().noneMatch(q -> "Sell Stock".equals(q.name))
+                                && (currentQuest == null || !"Sell Stock".equals(currentQuest.name))) {
+                            boolean pickedUp = false;
+                            for (Item item : new ArrayList<>(location.backpack)) {
+                                if (backpack.size() >= 15) break;
+                                long cost = Math.max(1, (long)(itemPrice(item) * 0.30));
+                                if (canAfford(cost)) {
+                                    deductSs(cost);
+                                    if (location.cityOwner != null) location.cityOwner.ss += cost;
+                                    location.backpack.remove(item);
+                                    backpack.add(item);
+                                    pickedUp = true;
+                                }
+                            }
+                            if (pickedUp) {
+                                Area sellCity = findBestSellCity();
+                                if (sellCity != null)
+                                    targetQuests.add(new Quest("Sell Stock", true, 40, 3, 70, sellCity));
+                            }
+                        }
                         // Equip better gear from own stock instead of leaving it on a shelf
                         for (Item item : new ArrayList<>(myShop.inventory)) {
                             if (item.itemType == Item.ItemType.Weapon
@@ -2820,6 +2881,21 @@ public class Character {
     }
 
     public int maxShops() { return Math.max(1, majorLvl); }
+
+    // Scores known cities by inverse pool size (scarcity = demand) and proximity; excludes current city.
+    private Area findBestSellCity() {
+        Area best = null;
+        int bestScore = -1;
+        for (Area area : knownLocations) {
+            if (area == null || !area.city || area.cityOwner == null || area == location) continue;
+            int poolSize = (area.backpack != null) ? area.backpack.size() : 0;
+            int score = Math.max(0, 50 - poolSize);  // empty pool = max demand
+            int dist = Math.abs(area.x - location.x) + Math.abs(area.y - location.y);
+            score += Math.max(0, 20 - dist);          // closer = easier to reach
+            if (score > bestScore) { bestScore = score; best = area; }
+        }
+        return best;
+    }
 
     // Scores known cities by pool size (A), own shop presence (B), and proximity (C).
     private Area findBestRestockCity() {
