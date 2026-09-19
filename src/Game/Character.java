@@ -595,7 +595,7 @@ public class Character {
                         }
                         maxAge += 400;
                         totalAgeGained += 400;
-                        System.out.println(this + " has broken through to Soul Wandering");
+                        if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has broken through to Soul Wandering");
                         break;
                     case 4:
                         if (potential < 65) {
@@ -609,7 +609,7 @@ public class Character {
                         }
                         maxAge += 1900;
                         totalAgeGained += 1900;
-                        System.out.println(this + " has broken through to Nascent Soul");
+                        if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has broken through to Nascent Soul");
                         break;
                     case 5:
                         if (potential < 76) {
@@ -623,7 +623,7 @@ public class Character {
                         }
                         maxAge += 3700;
                         totalAgeGained += 3700;
-                        System.out.println(this + " has broken through to Ensoulment");
+                        if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has broken through to Ensoulment");
                         break;
                     case 6:
                         if (potential < 85) {
@@ -637,7 +637,7 @@ public class Character {
                         }
                         maxAge += 6100;
                         totalAgeGained += 6100;
-                        System.out.println(this + " has broken through to Nihility");
+                        if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has broken through to Nihility");
                         break;
                     case 7:
                         if (potential < 92) {
@@ -651,7 +651,7 @@ public class Character {
                         }
                         maxAge += 9100;
                         totalAgeGained += 9100;
-                        System.out.println(this + " has broken through to Ascension");
+                        if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has broken through to Ascension");
                         break;
                     case 8:
                         if (potential < 97) {
@@ -665,7 +665,7 @@ public class Character {
                         }
                         maxAge += 13700;
                         totalAgeGained += 13700;
-                        System.out.println(this + " has broken through to Half-Immortal");
+                        if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has broken through to Half-Immortal");
                         break;
                     case 9:
                         if (potential < 100) {
@@ -679,7 +679,7 @@ public class Character {
                         }
                         maxAge += 16900;
                         totalAgeGained += 16900;
-                        System.out.println(this + " has broken through to Pseudo Immortal");
+                        if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has broken through to Pseudo Immortal");
                         break;
                     case 10:
                         if (rand.nextInt(5) != 0) {
@@ -691,7 +691,7 @@ public class Character {
                         }
                         maxAge += 2140000000;
                         totalAgeGained += 2140000000;
-                        System.out.println(this + " has broken through to True Immortal");
+                        if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has broken through to True Immortal");
                         break;
                 }
                 // Rare potential gain on successful breakthrough (1% chance)
@@ -713,7 +713,7 @@ public class Character {
         if (time >= 0 && !born) {
             born = true;
             mother.pregnant = false;
-            System.out.println(this + " has been born to " + mother + " and " + father);
+            if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has been born to " + mother + " and " + father);
         }
         if (age > maxAge) {
             dead();
@@ -762,7 +762,7 @@ public class Character {
         location.characters.remove(this);
         location.deadCharacters.add(this);
 
-        System.out.println(this + "has died"); // Print Statement That Can Be Removed Later
+        if (printBreakthroughs || player > 0) System.out.println(this + " has died");
 
     }
     public void dead(Character killer) {
@@ -950,6 +950,31 @@ public class Character {
             }
         }
 
+        // Buy Cultivation Pills: pick up next-realm pills when in a city (10% chance)
+        if (location.city && location.pillBag != null && rand.nextInt(10) == 0) {
+            for (int pi = 0; pi < location.pillBag.size(); pi++) {
+                Item pill = location.pillBag.get(pi);
+                if (pill.itemType == Item.ItemType.Pill && pill.pillType == Item.PillType.Cultivation
+                        && pill.lvl == majorLvl + 1 && pill.quantity > 0) {
+                    long price = itemPrice(pill);
+                    if (canAfford(price)) {
+                        deductSs(price);
+                        if (location.cityOwner != null) {
+                            location.cityOwner.ss += price;
+                            location.cityOwner.convertCurrency();
+                        }
+                        boolean found = false;
+                        for (Item p : pillBag) {
+                            if (p.name.equals(pill.name)) { p.quantity++; found = true; break; }
+                        }
+                        if (!found) pillBag.add(new Item(Item.ItemType.Pill, pill.pillType, pill.lvl, 1));
+                        if (--pill.quantity <= 0) location.pillBag.remove(pill);
+                    }
+                    break;
+                }
+            }
+        }
+
         // Bully: Evil characters proactively target significantly weaker characters in same location
         if (trait != Traits.Beast && "Evil".equals(affiliation) && rand.nextInt(10) == 0
                 && !location.characters.isEmpty()) {
@@ -986,6 +1011,13 @@ public class Character {
                     break;
                 }
             }
+        }
+
+        // Return to Sect: sect members who drift away periodically head back (5% chance/turn)
+        if (sect != null && !sect.isMaster(this) && location != sect.location && rand.nextInt(20) == 0
+                && targetQuests.stream().noneMatch(q -> "Return to Sect".equals(q.name))
+                && (currentQuest == null || !"Return to Sect".equals(currentQuest.name))) {
+            targetQuests.add(new Quest("Return to Sect", false, 25, 1, 40, sect.location));
         }
 
         // Recruit Member: sect masters actively seek eligible candidates in known locations
@@ -1400,6 +1432,9 @@ public class Character {
                             && quest.targetArea.pillBag != null
                             && quest.targetArea.pillBag.stream().anyMatch(p ->
                                     p.itemType == Item.ItemType.Pill && p.pillType == Item.PillType.Potential)) ? 1 : 0;
+                }
+                if ("Return to Sect".equals(quest.name)) {
+                    return (sect != null && quest.targetArea != null && quest.targetArea == sect.location) ? 1 : 0;
                 }
                 return 1;
 
@@ -1818,6 +1853,9 @@ public class Character {
                 if (location.sect != null && sect == null && location.sect.canJoin(this)) {
                     location.sect.join(this);
                 }
+                return 1;
+            case "Return to Sect":
+                if (sect != null) sectPoints += 2;
                 return 1;
             case "Restock Trip": {
                 if (location.city && location.cityOwner != null) {
@@ -2616,7 +2654,7 @@ public class Character {
         if (this.age >= 18 && player.age >= 18 && spouse == null && player.spouse == null && relationship >= 3 && this.gender != player.gender && this.mother != player && player.mother != this && this.father != player && player.father != this && !siblings.contains(player) && !this.dead && !player.dead) {
             spouse = player;
             player.spouse = this;
-            System.out.println(this + " and " + player + " are now married! Congratulations!");
+            if (printBreakthroughs || this.player > 0 || player.player > 0) System.out.println(this + " and " + player + " are now married! Congratulations!");
             if (gender.equals("Female")) {
                 this.lastName = player.lastName;
             }
@@ -2742,7 +2780,7 @@ public class Character {
                     professionLvl++;
                     professionExp -= professionExpMax;
                     professionExpMax = Math.pow(10, professionLvl / 10.);
-                    if (professionLvl == 100) {
+                    if (professionLvl == 100 && (player > 0 && skipping <= 0)) {
                         System.out.println(this + " reached max blacksmithingLvl");
                     }
                 }
@@ -3516,7 +3554,6 @@ public class Character {
 
         if (winChance < caution) {
             if (fleeCheck(opponent)) {
-                System.out.println("Fleed Fight");
                 return;
             }
             else if (deathChance) {
@@ -3546,8 +3583,6 @@ public class Character {
                 winChance -= 45;
             }
 
-            System.out.println(this + "/'s chance of winning is " + winChance);
-
             if (winChance < caution && oppForbiddenUsed) {
                 if (fleeCheck(opponent)) {
                     return;
@@ -3573,16 +3608,14 @@ public class Character {
             winChance -= 45;
         }
 
-        System.out.println(this + "'s chance of winning is " + winChance);
-
         durabilityCheck(opponent);
 
         if ((rand.nextInt(100) + 1) <= winChance) {
-            System.out.println(this + " won the fight!");
+            if (player > 0 || opponent.player > 0) System.out.println(this + " won the fight!");
             winCheck(opponent);
         }
         else {
-            System.out.println(opponent + " won the fight!");
+            if (player > 0 || opponent.player > 0) System.out.println(opponent + " won the fight!");
             opponent.winCheck(this);
         }
 
@@ -3593,7 +3626,6 @@ public class Character {
         int deathChance = 1;
 
         if (opponent.trait == Traits.Beast || this.trait == Traits.Beast) {
-            System.out.println("Fighting Beast, No Relation");
             return true;
         }
 
@@ -3620,13 +3652,7 @@ public class Character {
                     break;
             }
         }
-        else {
-            System.out.println(this + " and " + opponent + " fighting with no relation!");
-        }
-
-
         if (deathChance >= (rand.nextInt(100) + 1)){
-            System.out.println("DEATH MATCH");
             return true;
         }
         else {

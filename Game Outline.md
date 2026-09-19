@@ -130,8 +130,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Beast autonomous movement + attacking characters in tile
 - ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
 - 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
-- 🟡 **Sect NPC decision engine** — Join Sect (canJoin() criteria), Recruit Member, Sect Raid, Propose Alliance, Demand Tribute, Recruit Defector, Donate to Sect, Buy from Sect, Promote Disciples implemented; treasury system with sectLvl advancement; squabble→war escalation; sect ranks; succession crisis; resource disputes; assigned mission quests deferred
-- ✅ **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; all NPCs buy gear via buyGear(); arbitrage via Restock Trip (buy cheap) + Sell Stock (sell at destination); `findBestRestockCity()` and `findBestSellCity()` scorers
+- 🟡 **Sect NPC decision engine** — Join Sect, Recruit Member, Sect Raid, Propose Alliance, Demand Tribute, Recruit Defector, Donate to Sect, Buy from Sect, Promote Disciples, Return to Sect implemented; treasury system with sectLvl advancement; squabble→war escalation; sect ranks; succession crisis; resource disputes; assigned mission quests deferred
+- ✅ **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; all NPCs buy gear via buyGear() and cultivation pills inline; arbitrage via Restock Trip + Sell Stock; `findBestRestockCity()` and `findBestSellCity()` scorers; cityOwner receives all shop revenue
 - ✅ Higher-level characters avoiding weaker targets — affiliation guards in `battleCheck()` prevent unprovoked attacks (Good won't attack non-Evil unless arch-enemy; Neutral unless rival); `bullyCheck()` replaces combat with intimidation/theft when 15+ level advantage; arch-enemy fights regardless of level (correct behavior)
 - ✅ Affiliation-based aggression rules — Good won't attack non-Evil unless arch-enemy; Neutral won't attack non-Evil unless rival or worse
 - ✅ Bully personality type — Evil characters with 15+ level advantage queue "Battle Dislike" vs weaker co-located characters (10%/turn)

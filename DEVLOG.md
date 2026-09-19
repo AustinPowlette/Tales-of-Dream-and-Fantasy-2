@@ -1,5 +1,16 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (2)
+- Added: "Return to Sect" quest — sect non-masters drift back to sect location (5%/turn when away); queued in dynamic triggers; awards 2 sectPoints on arrival; viability check cancels if sect dissolved (`Character.java:quest()`, `questViable()`, `targetQuests()`)
+- Added: NPC buy cultivation pills — when at a city with pills for the next major realm, NPCs purchase one (10% chance/turn); price paid to cityOwner; economy circulation (`Character.java:quest()`)
+- Fixed: `cultivate()` cases 3–10 breakthrough prints unguarded — now wrapped with `if (printBreakthroughs || (player > 0 && skipping <= 0))` to match cases 1–2 (`Character.java`)
+- Fixed: `dead()` no-killer overload "has died" print unguarded — now wrapped (`Character.java:765`)
+- Fixed: `battle()` debug win-chance prints (two instances) removed entirely — were always firing for every NPC fight (`Character.java`)
+- Fixed: `battle()` win/lose prints — guarded with `if (player > 0 || opponent.player > 0)` (`Character.java`)
+- Fixed: `deathCheck()` beast/no-relation/DEATH MATCH prints — removed (debug noise; no player-relevant info lost) (`Character.java`)
+- Fixed: Marriage print, birth print, blacksmith max-level print — all now guarded with player/printBreakthroughs check (`Character.java`)
+- Fixed: "Fleed Fight" debug print removed from `battle()` (`Character.java`)
+
 ## 2026-09-19
 - Added: Potential gain on major realm breakthrough (`Character.java:cultivate()`) — 1% chance when `majorLvl` advances; capped at 101; prints message to player
 - Added: Potential gain on surviving forbidden technique (`Character.java:forbiddenCheck()`) — 2% chance in surviving `else` branch; caps at 101
