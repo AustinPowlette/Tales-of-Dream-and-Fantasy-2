@@ -1,5 +1,10 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (1000-Year Run / Bug Fix Session)
+- Fixed: `Area(Area, char)` constructor never initialized `backpack`, `materialBag`, `pillBag`, `arrayBag` — all null for every area except Originis; added 4 initializations (`Area.java:~263`)
+- Fixed: `dead(Character killer)` NPE when `killer` is null — `arrayBreakAttempt` calls `dead(null)` for trap deaths; added null-guard redirecting to no-arg `dead()` (`Character.java:839`)
+- Verified: 1000-year autonomous run completes clean (500 starting pop → 6,395 at year 1000; beast tide collapses pop to 140 at year 10 then steady recovery; no crashes)
+
 ## 2026-09-19 (NPC Audit / Bug Fix Session)
 - Fixed: NPE in `quest()` after mid-quest death — added `if (dead) return;` guard and `currentQuest != null` checks before resolution block (`Character.java:~880`)
 - Fixed: NPE/CME in GameDriver main loops — both character loops now iterate snapshot (`new ArrayList<>(characters)`) with null+dead guard (`GameDriver.java:~350`)

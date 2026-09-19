@@ -260,6 +260,10 @@ public class Area {
         herbMaterials = rand.nextInt((startingPopulation * 10000) - startingPopulation + 1) + startingPopulation;
         metalMaterials = rand.nextInt((startingPopulation * 1000) - startingPopulation + 1) + startingPopulation;
         if (rand.nextInt(100) == 0) spiritualVein = true;
+        backpack = new ArrayList<>();
+        materialBag = new ArrayList<>();
+        pillBag = new ArrayList<>();
+        arrayBag = new ArrayList<>();
         createdAreas.add(this);
     }
 

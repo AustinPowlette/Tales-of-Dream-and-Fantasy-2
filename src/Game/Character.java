@@ -842,6 +842,7 @@ public class Character {
     }
     public void dead(Character killer) {
         if (dead) return; // already dead this tick; prevent duplicate remCharacters entry
+        if (killer == null) { dead(); return; } // array/trap death: no killer to credit
         // True Immortal rebirth — cycles through death rather than truly dying
         if (majorLvl == 10) {
             dead = false;
