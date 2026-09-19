@@ -1,5 +1,8 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (5)
+- Updated: `CLAUDE.md` — rewrote Current State (2026-05-28→2026-09-19), replaced 8-item stale bug list with 5 real active bugs, replaced all-done Priorities section with actual remaining work (3 unimplemented temp-doc items + 4 bug fixes); corrected `player` guard note from `if (player && ...)` to `if (player > 0 && ...)`
+
 ## 2026-09-19 (4)
 - Updated: `Game Info.md` — comprehensive rewrite: fixed 10 stale bug entries (all resolved in prior sessions), added Library.java/Shop.java to file map, corrected Character.java line count (~3,900), added Ghost/IronBody/SpiritVein/HeavenlyRoot trait descriptions, corrected Merchant/Ghost traits from "stub/not implemented" to fully implemented, added Dungeon table, Sect Mission System, Library section, Shop pricing, itemPrice formula, potential gain events; reduced active bug list to 5 real remaining issues
 - Updated: `Game Outline.md` — fixed "cityOwner is never set" stale bug note; fixed tax timing description from "per tick" to "per year"

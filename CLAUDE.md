@@ -8,22 +8,19 @@ Java xianxia cultivation simulation. 100K+ NPC world, turn-based (weekly ticks),
 - [Game Outline.md](Game Outline.md) — ✅/🟡/❌ checklist of every feature (implemented / partial / not started)
 - Design docs: `src/Game/CultivationGame2.txt`, `src/Game/CultivationGame2Recent.txt`, `src/Game/Cultivation Game 2 Temp.txt`
 
-## Current State (as of 2026-05-28)
-Solid foundation implemented: world generation, cultivation, combat, all crafting professions, relationship/marriage/birth, quest pathfinding infrastructure. Three major systems are blocked or unfinished:
+## Current State (as of 2026-09-19)
+All three previously-blocked systems are now implemented. The simulation runs a full autonomous loop with quests, economy, and sect AI. Remaining work is polish and minor bugs.
 
-1. **Quest system** — infrastructure exists (`Quest.java`, `quest()`, `pathfinder()`, `spotQuests()`, `targetQuests()`) but only "Find Person" and 4 generic spot quests work. All quest types from the design docs (Bounty, Revenge, Buy Gear, Sell, Forage/Mine prereq, Sect, Battle, etc.) are not implemented.
-2. **Economy/Shops** — no Shop class. City area inventory bags exist but are empty and unused. Merchant trait is a stub. `cityOwner` is never set so no tax is collected.
-3. **Sect/Organization AI** — Organization class exists and members are tracked, but sect members have no sect-specific behavior (no recruitment quests, no sect politics, no sect events).
+- **Quest system** — complete. All quest types from design docs implemented: Forage/Mine prereq, Hunt Beast, Buy Gear, Go Sell, Battle Rival/Revenge/Bounty, Join Sect, Seek Potential, Return to Sect, Deliver Materials, sect missions, tournaments, arena registration, Ghost City Rebirth, Get Pregnant, Find Parent's Body, Sell Technique, and more.
+- **Economy/Shops** — complete. `Shop.java` exists. `cityOwner` set by `cityLeadership()`. Tax collected yearly (`population/100` to cityOwner). Merchant arbitrage (buy cheap → carry → sell dear). NPC pill buying. Library buy/sell. Item pricing formula: `lvl^2.5 × 10`.
+- **Sect/Organization AI** — complete. Sect missions (Forage/Mine + Deliver Materials two-phase). Promotions (Outer→Inner→Elder). Tournaments. Politics (war/alliance/tribute/defection/succession). Return to Sect drift. Sect cultivation bonus.
 
-## Known Bugs (Critical)
-1. **`changeRelationship()` NPE** — Lines 1366/1369 access `this.currentQuest.targetCharacter` without null-checking `currentQuest`. Crashes when any character has no active quest.
-2. **`spotQuests()` always returns 0** — Line 944: `return 0` is hardcoded; the `questSuccess` variable computed inside the switch is never returned.
-3. **`event()` case 1 fall-through** — No `break` after beast battle case; always falls into interact case 2.
-4. **Equipment duplication** — `equip()` can duplicate items when multiple upgrades exist in backpack simultaneously. Also: `transferAllItems()` runs after `dead()` moves equipped items into backpack — if `equip()` is called between these two (e.g., inside `tempLvlCheck()` during combat), items can be double-counted.
-5. **`forbiddenCheck()` zombie characters** — Sets `dead = true` without calling `dead()` or `dead(killer)`, so characters are never removed from `Map.characters`.
-6. **`professionPicker()` fall-through** — Missing `break` after Friendly case (falls into Tailor) and after Tailor (falls into Scribe).
-7. **Relationship string comparison** — `q.name == "Find Person"` uses reference equality instead of `.equals()`, so the remove condition never fires.
-8. **Quest target area is stale** — Character-category quests store `targetArea` at creation time; it is never updated when the target character moves.
+## Known Bugs (Active)
+1. **`Item` herb/metal constructor off-by-one** — `quantity` field initializes to 1; constructor does `this.quantity += quantity` so every herb/metal stack has +1 extra. Fix: `this.quantity = quantity` (`Item.java:50`).
+2. **`Quest.targetArea` not updated** — Character-category quests store `targetArea` at creation time; never refreshed when the target moves, so pathfinding chases a stale location.
+3. **`Map.characters.get(id)` null slots** — Dead characters are nulled by index. Any code that does `characters.get(quest.targetCharacter)` without a null-check can NPE. Always null-check before use.
+4. **`Character.toString()` True Immortal dead-flag side effect** — If `dead == true && majorLvl == 10`, `toString()` silently sets `dead = false`, `time = 0`, `age = 0`. Any print containing a True Immortal clears the death flag outside the normal death flow.
+5. **`Monster` trait unassigned** — Enum entry exists but is never set in any constructor. Only `Beast` is used for creature characters.
 
 ## Design Notes
 - **Arrays** protect area features (Shops, Dungeons/Tombs, Sects, Cities). Attackers must break the array AND defeat any defending cultivators to take the area. Arrays give defenders a temporary level boost during the fight. Multiple arrays can be installed in one area but they do not buff each other — only the array being broken at that moment matters.
@@ -36,38 +33,17 @@ Solid foundation implemented: world generation, cultivation, combat, all craftin
 - `character.id == index into Map.characters` — this identity is load-bearing for quests, relationships, and death removal. Do not change.
 
 ## Priorities for Next Development
-In rough dependency order:
 
-### Fix existing bugs first
-- Fix `changeRelationship()` NPE (null-check `currentQuest`)
-- Fix `spotQuests()` return value
-- Fix `event()` case 1 fall-through
-- Fix `professionPicker()` fall-through
-- Fix `forbiddenCheck()` zombie (call `dead(killer)` properly)
-- Fix quest string comparison (`==` → `.equals()`)
+### Fix active bugs
+- Fix `Item` herb/metal off-by-one: `this.quantity += quantity` → `this.quantity = quantity` (`Item.java:50`)
+- Fix `toString()` True Immortal side effect: guard the dead-reset block so it only fires in the dedicated rebirth path, not inside printing
+- Audit `Quest.targetArea` staleness: consider refreshing `targetArea` from the target character's live location before each `pathfinder()` call
+- Audit `Map.characters.get(id)` null-check coverage — ensure all callers guard against nulled slots
 
-### Quest system completion
-Add the following quest types to `spotQuests()` and `targetQuests()`:
-- Forage/Mine (spot) — triggered when profession fails due to missing materials
-- Hunt Beast (area) — find an area with monsters at appropriate level
-- Buy Gear (area) — travel to city market when slots empty or gear outgrown
-- Go Sell (area) — travel to city when backpack over threshold
-- Battle Rival / Dislike / Arch-Enemy (character target)
-- Revenge (character target) — triggered when close friend (value ≥ 2) dies
-- Bounty Hunt (character/area) — if too weak for revenge, post bounty; others pick it up
-- Join Sect (area) — Leader characters recruit
-
-### Economy / Shop system
-- Create `Shop` class (or use city's existing area bags as the market pool)
-- Set `area.cityOwner` when `cityLeadership()` succeeds
-- Implement Merchant decision engine: buy at 1/100 price, sell at normal price
-- Wire Buy Gear and Sell quests to city locations
-- Implement `vendorID` tracking on items
-
-### Sect & Organization AI
-- Give Leader-trait characters sect recruitment quests
-- Implement sect events (tournaments, political events)
-- Sect members should prefer staying near sect location
+### Unimplemented design doc items (from temp doc)
+- **City destruction events** — random events that damage or destroy cities (except Originis); not started
+- **Can't-afford-gear hunt trigger** — when an NPC can't buy gear, queue a "Hunt for money" quest instead of giving up; not started
+- **Lucky one-time loot** — Lucky trait's `eventLootDead()` is a recurring profession; the design doc intended a one-time free loot move when a corpse appears nearby; partially implemented, may just need the one-time gate
 
 ## Coding Conventions (this codebase)
 - Java, package `Game`. Static imports from `GameDriver`, `Map`, `Dictionary`.
@@ -75,7 +51,7 @@ Add the following quest types to `spotQuests()` and `targetQuests()`:
 - Quest success codes: -3 (null), -2 (spot fail), -1 (target fail), 0 (progressed), 1 (target success), 2 (spot success).
 - Item level is major cultivation level (1–10 = Qi to Pseudo Immortal realms).
 - All cross-character references use integer id (index into `Map.characters`).
-- Print statements should be wrapped in `if (player && skipping <= 0 && age >= 8)` — many are not yet.
+- Print statements should be wrapped in `if (player > 0 && skipping <= 0)` — `player` is an `int` (0=NPC, 1=human, 2=follow), not boolean. Most prints are now guarded; check new code.
 
 ## Development Workflow
 
