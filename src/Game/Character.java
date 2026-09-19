@@ -762,6 +762,12 @@ public class Character {
                             System.out.println(this + " failed the realm tribulation! Cultivation regressed.");
                     }
                 }
+                // Hero threshold: first cultivator of any kind to reach each apex realm
+                if (majorLvl == preMajor + 1) {
+                    if (majorLvl == 5 && !heroEnsoulment) { heroEnsoulment = true; System.out.println("[HERO] " + this + " is the first to reach Ensoulment! The heavens take notice."); }
+                    if (majorLvl == 7 && !heroAscension) { heroAscension = true; System.out.println("[HERO] " + this + " is the first to reach Ascension! An era-defining cultivator has emerged."); }
+                    if (majorLvl == 9 && !heroPseudoImmortal) { heroPseudoImmortal = true; System.out.println("[HERO] " + this + " is the first to reach Pseudo Immortal! Immortality approaches."); }
+                }
             }
         }
     }
@@ -789,7 +795,8 @@ public class Character {
             dead = true;
             location.characters.remove(this);
             location.deadCharacters.add(this);
-            return; // beasts/monsters not in population; skip remCharacters
+            remCharacters.add(this); // null out characters slot; GameDriver skips population-- for monsters
+            return;
         }
         dead = true;
         if (majorLvl >= 7) {

@@ -23,6 +23,11 @@ public class Map {
     public static ArrayList<String> legacyTitles = new ArrayList<>();
     public static ArrayList<Integer> legacyLvls = new ArrayList<>();
 
+    // Hero threshold flags: fire once when the first NPC reaches each key realm
+    public static boolean heroEnsoulment = false;    // majorLvl 5
+    public static boolean heroAscension = false;     // majorLvl 7
+    public static boolean heroPseudoImmortal = false; // majorLvl 9
+
     public Map(){
         tiles[range / 2][range / 2] = new Area(); // Starting Point of the World
     }

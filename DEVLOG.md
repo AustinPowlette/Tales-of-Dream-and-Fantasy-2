@@ -1,5 +1,14 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (Features: Hero Threshold, Event Observation, Plague, Beast Tide Defense, City Succession)
+- Fixed: Monster mortality restored — `dead()` no-arg now adds monsters to `remCharacters` (nulls `characters` slot); GameDriver already skips `population--` for them (`Character.java:788`)
+- Added: Hero threshold — first cultivator to reach Ensoulment/Ascension/Pseudo Immortal prints a `[HERO]` world event; flags on `Map.java` (`Character.java:765`, `Map.java`)
+- Added: `[WORLD]` summary line each year — areas, sects, cities, legacy count for system verification (`GameDriver.java`)
+- Added: City succession tracking — snapshot owners at year start, print `[SUCCESSION]` on change, clean up dead owner refs (`GameDriver.java`)
+- Fixed: Plague calamity now kills ~30% of cultivators in a random populated area instead of requiring a rare city; fires reliably every time it rolls (`GameDriver.java`)
+- Added: Beast tide defense — cultivators present in a struck city reduce casualties proportional to their combined majorLvl power; prints saved count (`GameDriver.java`)
+- Verified: 1000-year run clean; plague fires ~10 times, two hero events (Ensoulment + Ascension) confirmed; no crashes
+
 ## 2026-09-19 (1000-Year Run / Bug Fix Session)
 - Fixed: `Area(Area, char)` constructor never initialized `backpack`, `materialBag`, `pillBag`, `arrayBag` — all null for every area except Originis; added 4 initializations (`Area.java:~263`)
 - Fixed: `dead(Character killer)` NPE when `killer` is null — `arrayBreakAttempt` calls `dead(null)` for trap deaths; added null-guard redirecting to no-arg `dead()` (`Character.java:839`)

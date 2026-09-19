@@ -145,7 +145,18 @@ public class GameDriver {
             }
             //System.out.println("It's day: " + (time/24 + 1));
             if ((time) % 52 == 0) {
-                System.out.println("It's year: " + (((time / 52)) + 1) + " Population: " + population + " " + monstersList);
+                int _year = (time / 52) + 1;
+                System.out.println("It's year: " + _year + " Population: " + population + " " + monstersList);
+                // World-state snapshot for verifying system activity
+                long _sectCount = createdAreas.stream().filter(a -> a.sect != null).count();
+                long _cityCount = createdAreas.stream().filter(a -> a.city).count();
+                System.out.println("[WORLD] Areas: " + createdAreas.size() + " | Sects: " + _sectCount + " | Cities: " + _cityCount + " | Legacies: " + legacyTitles.size());
+                // Snapshot city owners for succession detection this year
+                java.util.HashMap<Integer, Integer> _cityOwnerSnap = new java.util.HashMap<>();
+                for (Area area : createdAreas) {
+                    if (area.city && area.cityOwner != null && !area.cityOwner.dead)
+                        _cityOwnerSnap.put(area.index, area.cityOwner.id);
+                }
                 // Reset previous hotspots
                 for (Area area : hotspotAreas) { area.lvl = area.baseLvl; area.hotspot = false; }
                 hotspotAreas.clear();
@@ -191,9 +202,24 @@ public class GameDriver {
                 }
                 // City taxation: owners collect 1% of population as yearly ss income
                 for (Area area : createdAreas) {
-                    if (area.city && area.cityOwner != null && !area.cityOwner.dead) {
-                        area.cityOwner.ss += area.population / 100;
-                        area.cityOwner.convertCurrency();
+                    if (area.city) {
+                        if (area.cityOwner != null && area.cityOwner.dead) area.cityOwner = null; // clear dead owner ref
+                        if (area.cityOwner != null) {
+                            area.cityOwner.ss += area.population / 100;
+                            area.cityOwner.convertCurrency();
+                        }
+                    }
+                }
+                // City succession: detect and announce ownership changes
+                for (Area area : createdAreas) {
+                    if (!area.city) continue;
+                    Integer prevId = _cityOwnerSnap.get(area.index);
+                    Integer currId = (area.cityOwner != null) ? area.cityOwner.id : null;
+                    if (prevId != null && !prevId.equals(currId)) {
+                        String newName = (currId != null) ? (area.cityOwner.name + " " + area.cityOwner.lastName) : "no one";
+                        System.out.println("[SUCCESSION] " + area.name + " has changed hands! New lord: " + newName);
+                    } else if (prevId == null && currId != null) {
+                        System.out.println("[SUCCESSION] " + area.name + " has a new founding lord: " + area.cityOwner.name + " " + area.cityOwner.lastName);
                     }
                 }
                 // Beast Tide: overflow Beast Lairs spread monsters to neighbors and threaten nearby cities
@@ -209,8 +235,17 @@ public class GameDriver {
                                 nbr.monsters += spread / 4;
                                 if (nbr.city && nbr.population > 0) {
                                     long casualties = Math.min(nbr.population / 10, spread * 100L);
+                                    // Defender bonus: cultivators in the city reduce casualties
+                                    int defPower = 0;
+                                    for (Character _def : new ArrayList<>(nbr.characters)) {
+                                        if (_def != null && !_def.dead && _def.trait != Character.Traits.Beast && _def.trait != Character.Traits.Monster)
+                                            defPower += _def.majorLvl + 1;
+                                    }
+                                    long saved = Math.min(casualties, defPower * 50L);
+                                    casualties -= saved;
                                     nbr.population = (int) Math.max(1, nbr.population - casualties);
-                                    System.out.println("Beast Tide erupts from " + area.name + " and strikes " + nbr.name + "! -" + casualties + " population");
+                                    String defMsg = (saved > 0) ? " (" + saved + " saved by " + defPower + " power of defenders)" : "";
+                                    System.out.println("Beast Tide erupts from " + area.name + " and strikes " + nbr.name + "! -" + casualties + " population" + defMsg);
                                 }
                             }
                         }
@@ -275,13 +310,20 @@ public class GameDriver {
                             System.out.println("A spiritual storm ravages " + stormArea.name + "! Level surges to " + stormArea.lvl + "!");
                             break;
                         }
-                        case 1: { // Plague — random city loses 30% population
-                            Area plagueArea = null;
-                            for (Area _a : createdAreas) { if (_a.city && _a.population > 100 && _a != tiles[range/2][range/2]) { plagueArea = _a; break; } }
-                            if (plagueArea != null) {
-                                int lost = plagueArea.population / 3;
-                                plagueArea.population -= lost;
-                                System.out.println("A terrible plague strikes " + plagueArea.name + "! -" + lost + " population.");
+                        case 1: { // Plague — kills ~30% of cultivators in a random populated area
+                            ArrayList<Area> _popAreas = new ArrayList<>();
+                            for (Area _a : createdAreas) { if (!_a.characters.isEmpty()) _popAreas.add(_a); }
+                            if (!_popAreas.isEmpty()) {
+                                Area plagueArea = _popAreas.get(rand.nextInt(_popAreas.size()));
+                                int killed = 0;
+                                for (Character _c : new ArrayList<>(plagueArea.characters)) {
+                                    if (_c != null && !_c.dead && _c.trait != Character.Traits.Beast && _c.trait != Character.Traits.Monster && rand.nextInt(3) == 0) {
+                                        _c.dead();
+                                        killed++;
+                                    }
+                                }
+                                if (killed > 0)
+                                    System.out.println("A terrible plague strikes " + plagueArea.name + "! " + killed + " cultivators perish.");
                             }
                             break;
                         }
