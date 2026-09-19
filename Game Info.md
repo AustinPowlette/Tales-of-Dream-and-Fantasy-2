@@ -172,7 +172,18 @@ GameDriver.main()
 | ≥1 (Friend) | 0% |
 | Beast involved | Always deathmatch |
 
+### City/Sect Destruction (`destroyCity(area)`)
+- Triggered from `winCheck()` at 20% chance when an Evil character or Beast kills someone at an array-free city or sect area (Originis is protected).
+- Plunders all area bags (backpack, materialBag, pillBag, arrayBag) to attacker's bags.
+- Adds Blood to attacker's materialBag: `quantity = max(1, population/100)`.
+- Gives attacker 10 extra `cultivate()` calls.
+- 10% chance of +1 potential for the attacker.
+- Transfers `area.population` ss to attacker; reduces population to 10%.
+- Dissolves sect if present: all members lose their sect, treasury cleared.
+- Destroys city: `city = false`, `cityOwner = null`, shops and libraries cleared.
+
 ### On Death (`dead(killer)`)
+- True Immortal rebirth (majorLvl == 10): resets `dead=false`, `time=0`, `age=0`; killer still gets the kill credit; rebirth message printed.
 - Ghost physique: enters ghost form instead of dying (once only; beast kills are final).
 - Transfers all items to killer.
 - Creates Blood item for killer's materialBag (quantity = potential + lvl).
@@ -371,15 +382,9 @@ GameDriver.main()
 ## Known Bugs & Issues
 
 ### Active
-1. **`Item` herb/metal constructor off-by-one** — `quantity` field initializes to 1; constructor does `this.quantity += quantity` so every herb/metal stack has +1 extra item. Fix: change to `this.quantity = quantity`.
+1. **`Monster` trait unassigned** — The `Monster` enum entry exists but is never set in any constructor. Only `Beast` is used for creature characters.
 
-2. **`Quest.targetArea` not updated** — Character-category quests store `targetArea = targetCharacter.location` at creation time. Never updated as the target moves, so pathfinding chases a stale location.
-
-3. **`Map.characters.get(id)` null slots** — `Quest.targetCharacter` stores an int id. `Map.characters` is an ArrayList where dead characters are nulled out by index. Callers of `characters.get(quest.targetCharacter)` can receive null and must null-check before use.
-
-4. **`Character.toString()` True Immortal rebirth side effect** — If `dead == true && majorLvl == 10`, `toString()` silently sets `dead = false`, `time = 0`, `age = 0`. Called implicitly by any print that includes a True Immortal, this can clear the death flag outside of the normal death flow.
-
-5. **`Monster` trait unassigned** — The `Monster` enum entry exists but is never set in any constructor. Only `Beast` is used for creature characters.
+(Bugs 1–4 from prior tracking — Item off-by-one, Quest.targetArea stale, null-slot NPE, toString True Immortal — all resolved as of 2026-09-19.)
 
 ### Design Notes
 - `movementTechnique2` / `martialTechnique2` secondary slots are temporary holders used during `equip()` to merge a newly-learned technique into the primary slot. They are nulled after processing; they do not need to be included in `tempLvlCheck()` separately since `equip()` is always called first.

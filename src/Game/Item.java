@@ -47,7 +47,7 @@ public class Item {
                 break;
         }
         this.itemType = itemType;
-        this.quantity += quantity;
+        this.quantity = quantity;
         this.lvl = lvl;
         stackable = true;
     }

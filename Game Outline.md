@@ -63,6 +63,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Bounty system (wanted flag, bounty board in cities)
 - ✅ Arena/tournament combat — "Hold Tournament" spot quest; 8-week advance registration window; single-elimination bracket (probability-based, no death); major-realm band prizes; Register/Spectate spot quests; `Area.runTournament()` runs bracket at timer end
 - ✅ Combat system complete — current `battle()` IS the revamped design; tile-based push mechanic was intentionally dropped as too complex
+- ✅ City/sect destruction — Evil or Beast destroys array-free city/sect after defeating defender (20% chance); plunders bags, Blood from population, cultivation boost, potential gain, dissolves sect; Originis protected
 - ✅ Second technique slot (slot 2) is a training slot — holds highest-potential technique, does NOT contribute to combat power by design; children inherit it as their starting technique
 
 ---
@@ -108,7 +109,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `currentQuest` null-check added in `changeRelationship()`
 - ✅ **Forage/Mine spot quests** — queued from `professionPicker()` when materials are missing; call forage()/mine() in current tile
 - ✅ **Battle Dislike / Battle Rival / Battle Arch-Enemy quests** — queued from `changeRelationship()` when value reaches -1/-2/-3; Dislike is placeholder for bullyCheck()
-- ✅ **Hunt Beast quest** — 20% chance/turn to travel to level-appropriate known area; `beastBattleCheck()` on arrival
+- ✅ **Hunt Beast quest** — 20% chance/turn to travel to level-appropriate known area; `beastBattleCheck()` on arrival; also queued with priority 40 as "Hunt for Money" fallback when NPC visits a city shop but still can't afford missing gear
 - ✅ **Buy Gear quest** — fires when gear is outdated/missing; calls buyGear() inline if in shop city; otherwise queues "Buy Gear" Area quest to nearest known shop city
 - ✅ **Go Sell quest** — triggers at backpack.size() > 20; Area quest to nearest known city; calls sell() on arrival
 - ✅ **Bounty Hunt quest** — posted by close friends too weak for Revenge; characters within 10 levels pick up from city bounty board; calls battleCheck on target
@@ -181,7 +182,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Pill sub-types: Potential, Cultivation (with realm name)
 - ✅ `equip()` — auto-equip best weapon/armor + best technique slots
 - ✅ `transferAllItems()` — bulk item transfer on death/looting
-- ✅ `eventLootDead()` — loot corpses in area (within 2 majorLvl)
+- ✅ `eventLootDead()` — loot corpses in area (within 2 majorLvl); Lucky also gets a one-time priority-75 "Loot Corpse" spot quest triggered whenever a corpse within 30 levels appears in their tile
 - ✅ `durabilityCheck()` / `durabilityCheckUtil()` — equipment breaking
 - ✅ Item stackability (Herb, Metal, Pill, Blood stackable; Weapon, Clothing, Array not)
 - ✅ `equip()` technique duplication fixed — `!techniqueList.contains()` guard prevents duplicate adds

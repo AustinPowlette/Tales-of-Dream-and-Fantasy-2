@@ -136,3 +136,19 @@ to sect.location; treasury updated on arrival. Simple two-phase pattern.
 
 City taxation: 1% of city population as yearly ss income to cityOwner. Scales with city
 growth; complements shop revenue and tribute income.
+
+City/sect destruction: triggered from winCheck() when Evil or Beast kills at an array-free
+city/sect (20% chance). Attacker plunders all bags, gains Blood = population/100, +10
+cultivate() calls, 10% chance +1 potential, ss += population, population drops to 10%.
+Sect dissolved (members lose sect, treasury cleared). City cleared (city=false, shops/libs
+removed). Originis is hardcoded as indestructible. Rewards scale with city size.
+
+Hunt for Money: when NPC visits a city shop but still lacks weapon or armor slot after
+buyGear() (can't afford), queues "Hunt Beast" at priority 40 toward nearest monster area.
+
+Lucky one-time loot gate: when a corpse within 30 levels appears in Lucky's tile, a
+one-time "Loot Corpse" spot quest fires at priority 75 (overrides normal profession). This
+is reactive and per-corpse, not a permanent state change.
+
+True Immortal rebirth: moved from toString() side-effect to proper dead(killer) early-return
+guard. Rebirth resets dead=false, time=0, age=0; killer still gets kill credit.

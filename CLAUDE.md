@@ -16,11 +16,9 @@ All three previously-blocked systems are now implemented. The simulation runs a 
 - **Sect/Organization AI** — complete. Sect missions (Forage/Mine + Deliver Materials two-phase). Promotions (Outer→Inner→Elder). Tournaments. Politics (war/alliance/tribute/defection/succession). Return to Sect drift. Sect cultivation bonus.
 
 ## Known Bugs (Active)
-1. **`Item` herb/metal constructor off-by-one** — `quantity` field initializes to 1; constructor does `this.quantity += quantity` so every herb/metal stack has +1 extra. Fix: `this.quantity = quantity` (`Item.java:50`).
-2. **`Quest.targetArea` not updated** — Character-category quests store `targetArea` at creation time; never refreshed when the target moves, so pathfinding chases a stale location.
-3. **`Map.characters.get(id)` null slots** — Dead characters are nulled by index. Any code that does `characters.get(quest.targetCharacter)` without a null-check can NPE. Always null-check before use.
-4. **`Character.toString()` True Immortal dead-flag side effect** — If `dead == true && majorLvl == 10`, `toString()` silently sets `dead = false`, `time = 0`, `age = 0`. Any print containing a True Immortal clears the death flag outside the normal death flow.
-5. **`Monster` trait unassigned** — Enum entry exists but is never set in any constructor. Only `Beast` is used for creature characters.
+1. **`Monster` trait unassigned** — Enum entry exists but is never set in any constructor. Only `Beast` is used for creature characters.
+
+(Bugs 1–4 from prior tracking — Item off-by-one, Quest.targetArea stale, null-slot NPE, toString True Immortal — all resolved as of 2026-09-19.)
 
 ## Design Notes
 - **Arrays** protect area features (Shops, Dungeons/Tombs, Sects, Cities). Attackers must break the array AND defeat any defending cultivators to take the area. Arrays give defenders a temporary level boost during the fight. Multiple arrays can be installed in one area but they do not buff each other — only the array being broken at that moment matters.
@@ -34,16 +32,9 @@ All three previously-blocked systems are now implemented. The simulation runs a 
 
 ## Priorities for Next Development
 
-### Fix active bugs
-- Fix `Item` herb/metal off-by-one: `this.quantity += quantity` → `this.quantity = quantity` (`Item.java:50`)
-- Fix `toString()` True Immortal side effect: guard the dead-reset block so it only fires in the dedicated rebirth path, not inside printing
-- Audit `Quest.targetArea` staleness: consider refreshing `targetArea` from the target character's live location before each `pathfinder()` call
-- Audit `Map.characters.get(id)` null-check coverage — ensure all callers guard against nulled slots
-
-### Unimplemented design doc items (from temp doc)
-- **City destruction events** — random events that damage or destroy cities (except Originis); not started
-- **Can't-afford-gear hunt trigger** — when an NPC can't buy gear, queue a "Hunt for money" quest instead of giving up; not started
-- **Lucky one-time loot** — Lucky trait's `eventLootDead()` is a recurring profession; the design doc intended a one-time free loot move when a corpse appears nearby; partially implemented, may just need the one-time gate
+### Remaining
+- **`Monster` trait unassigned** — enum entry unused; low priority
+- No other known blocking bugs as of 2026-09-19
 
 ## Coding Conventions (this codebase)
 - Java, package `Game`. Static imports from `GameDriver`, `Map`, `Dictionary`.

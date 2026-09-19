@@ -766,6 +766,15 @@ public class Character {
 
     }
     public void dead(Character killer) {
+        // True Immortal rebirth — cycles through death rather than truly dying
+        if (majorLvl == 10) {
+            dead = false;
+            time = 0;
+            age = 0;
+            killer.kills++;
+            if (player > 0 || killer.player > 0) System.out.println(name + " completed a cycle and has rebirthed. Potential: " + potential);
+            return;
+        }
         // Ghost physique: enter ghost form instead of dying (only on first death, not while already a ghost)
         if (trait == Traits.Ghost && !isGhostForm && killer.trait != Traits.Beast) {
             isGhostForm = true;
@@ -922,6 +931,18 @@ public class Character {
         if (gearNeeded) {
             if (location.city && !location.shops.isEmpty()) {
                 buyGear();
+                // If slot(s) still empty after visiting shop, can't afford — hunt beasts to earn ss
+                boolean stillMissing = equippedWeapon == null || equippedClothing == null;
+                if (stillMissing && targetQuests.stream().noneMatch(q -> "Hunt Beast".equals(q.name))
+                        && (currentQuest == null || !"Hunt Beast".equals(currentQuest.name))) {
+                    for (Area area : knownLocations) {
+                        if (area != null && area.monsters > 0
+                                && area.highestLvl >= lvl - 10 && area.highestLvl <= lvl + 15) {
+                            targetQuests.add(new Quest("Hunt Beast", false, 40, 3, 65, area));
+                            break;
+                        }
+                    }
+                }
             } else if (targetQuests.stream().noneMatch(q -> "Buy Gear".equals(q.name))
                     && (currentQuest == null || !"Buy Gear".equals(currentQuest.name))) {
                 for (Area area : knownLocations) {
@@ -983,6 +1004,17 @@ public class Character {
                 if (lvl - c.lvl >= 15
                         && targetQuests.stream().noneMatch(q -> "Battle Dislike".equals(q.name) && q.targetCharacter == c.id)) {
                     targetQuests.add(new Quest("Battle Dislike", true, 20, 3, 50, c));
+                    break;
+                }
+            }
+        }
+
+        // Lucky: one-time high-priority loot when a fresh corpse within 30 levels is in this tile
+        if (trait == Traits.Lucky && !location.deadCharacters.isEmpty()) {
+            for (Character deceased : location.deadCharacters) {
+                if (Math.abs(lvl - deceased.lvl) <= 30
+                        && spotQuests.stream().noneMatch(q -> "Loot Corpse".equals(q.name))) {
+                    spotQuests.add(new Quest("Loot Corpse", true, 75, 0, 75));
                     break;
                 }
             }
@@ -1610,6 +1642,11 @@ public class Character {
                 questSuccess = 2;
                 break;
             }
+
+            case "Loot Corpse":
+                eventLootDead();
+                questSuccess = 2;
+                break;
 
             case "Buy City Array": {
                 if (!location.city || location.cityOwner != this) { questSuccess = -2; break; }
@@ -3673,7 +3710,16 @@ public class Character {
         } else {
             int upgradeChance = (trait == Traits.HeavenlyRoot) ? 2 : 5;
             if (martialTechnique != null && rand.nextInt(upgradeChance) == 0) martialTechnique.upgrade(this);
+            Area lostAt = loser.location;
             loser.dead(this);
+            // Evil or Beast destroys undefended city/sect (20% chance per eligible kill)
+            if ((affiliationNum == -1 || trait == Traits.Beast)
+                    && lostAt != null && !"Originis".equals(lostAt.name)
+                    && (lostAt.city || lostAt.sect != null)
+                    && (lostAt.arrayBag == null || lostAt.arrayBag.isEmpty())
+                    && rand.nextInt(5) == 0) {
+                destroyCity(lostAt);
+            }
         }
     }
     //If true, player will flee
@@ -3703,6 +3749,52 @@ public class Character {
             }
         }
         return false;
+    }
+
+    public void destroyCity(Area area) {
+        // Plunder all area bags
+        if (area.backpack != null)    { backpack.addAll(area.backpack);       area.backpack.clear();    }
+        if (area.materialBag != null) { materialBag.addAll(area.materialBag); area.materialBag.clear(); }
+        if (area.pillBag != null)     { pillBag.addAll(area.pillBag);         area.pillBag.clear();     }
+        if (area.arrayBag != null)    { arrayBag.addAll(area.arrayBag);       area.arrayBag.clear();    }
+        // Blood from population massacre — proportional to city size
+        int bloodQty = Math.max(1, (int)(area.population / 100));
+        materialBag.add(new Item(Item.ItemType.Blood, bloodQty));
+        // Cultivation bonus — 10 extra cultivate() calls from the battle aura
+        for (int i = 0; i < 10; i++) cultivate();
+        // Potential gain
+        if (potential < 101 && rand.nextInt(10) == 0) {
+            potential++;
+            if (player > 0 && skipping <= 0) System.out.println("The carnage expanded your limits! Potential → " + potential);
+        }
+        // Plunder coin from city coffers
+        ss += area.population;
+        convertCurrency();
+        // Population devastated — 90% wiped out
+        area.population = Math.max(1, (int)(area.population * 0.1));
+        // Dissolve sect if present
+        if (area.sect != null) {
+            Organization destroyedSect = area.sect;
+            for (Character member : new ArrayList<>(destroyedSect.members)) {
+                if (member != null && !member.dead) {
+                    member.sect = null;
+                    member.sectMission = null;
+                    member.sectMissionBonus = 0;
+                }
+            }
+            destroyedSect.members.clear();
+            destroyedSect.memberRanks.clear();
+            if (destroyedSect.warTarget != null) destroyedSect.endWar(destroyedSect.warTarget);
+            area.sect = null;
+        }
+        // Destroy city — remove infrastructure
+        if (area.city) {
+            area.city = false;
+            area.cityOwner = null;
+            area.shops.clear();
+            area.libraries.clear();
+        }
+        if (player > 0 && skipping <= 0) System.out.println(this + " has destroyed " + area.name + "!");
     }
 
     public void tempLvlCheck(){
@@ -3882,19 +3974,10 @@ public class Character {
         }
     }
     public String toString() {
-
-        if (dead && majorLvl == 10) {
-            dead = false;
-            time = 0;
-            age = 0;
-            return (name + " completed a cycle and has rebirthed. Potential: " + potential);
-        }
-        else if (dead  && age > maxAge) {
+        if (dead && age > maxAge) {
             return (name + " " + lastName + " with potential: " + potential + " and cultivation: " + cultivation + " and major level: " + majorLvl +  " and minor level: " + minorLvl + " and inhibitor: " + inhibitor);
         }
-        else {
-            return (name + " " + lastName);
-        }
+        return (name + " " + lastName);
     }
 
     public int placeholder() {

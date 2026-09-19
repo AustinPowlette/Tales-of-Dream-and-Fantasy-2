@@ -1,5 +1,12 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (6)
+- Fixed: `Item` herb/metal constructor off-by-one — `this.quantity += quantity` → `this.quantity = quantity` (`Item.java:50`)
+- Fixed: `toString()` True Immortal dead-flag side effect — moved rebirth logic to `dead(Character killer)` as an early-return guard; `toString()` no longer mutates state (`Character.java`)
+- Added: City/sect destruction — `destroyCity(Area area)`: plunders all bags, Blood ∝ population/100, 10 cultivate() calls, 10% potential gain, coins from population, 90% pop wipeout, dissolves sect, clears city; triggered from `winCheck()` at 20% chance when Evil/Beast kills at an array-free city/sect (Originis protected) (`Character.java`)
+- Added: Hunt for Money fallback — after `buyGear()` finds items but NPC still lacks a weapon or armor slot (can't afford), queues "Hunt Beast" with priority 40 toward nearest monster area (`Character.java:quest()`)
+- Added: Lucky one-time corpse loot gate — when a corpse within 30 levels appears at Lucky's tile, queues one-time `"Loot Corpse"` spot quest at priority 75; handled by new `spotQuests()` case that calls `eventLootDead()` (`Character.java`)
+
 ## 2026-09-19 (5)
 - Updated: `CLAUDE.md` — rewrote Current State (2026-05-28→2026-09-19), replaced 8-item stale bug list with 5 real active bugs, replaced all-done Priorities section with actual remaining work (3 unimplemented temp-doc items + 4 bug fixes); corrected `player` guard note from `if (player && ...)` to `if (player > 0 && ...)`
 
