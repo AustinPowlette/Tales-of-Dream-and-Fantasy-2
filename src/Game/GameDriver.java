@@ -245,8 +245,9 @@ public class GameDriver {
                     }
                     if (!htElig.isEmpty()) {
                         Area htArea = htElig.get(rand.nextInt(htElig.size()));
-                        Character phantom = characters.get(rand.nextInt(characters.size()));
-                        if (phantom == null) phantom = characters.get(0);
+                        Character phantom = null;
+                        for (Character _ph : characters) { if (_ph != null && !_ph.dead) { phantom = _ph; break; } }
+                        if (phantom == null) continue;
                         Technique heavenTech = new Technique(
                             rand.nextInt(2) == 0 ? Technique.techniqueType.Martial : Technique.techniqueType.Movement,
                             phantom, Math.max(5, rand.nextInt(10) + 5));
@@ -362,7 +363,8 @@ public class GameDriver {
             }
 
             // Ages and Cultivates Players
-            for (Character character : characters) {
+            for (Character character : new ArrayList<>(characters)) {
+                if (character == null || character.dead) continue;
                 if (!character.dead) {
                     character.time();
                     if (character.born) {
@@ -387,7 +389,8 @@ public class GameDriver {
 
             // Causes Players to Move and Go Through Events
 
-            for (Character character : characters) {
+            for (Character character : new ArrayList<>(characters)) {
+                if (character == null) continue;
                 currentCharacter = character;
                 if (!character.dead && character.born) {
                     if (character.player >= 1 && character.age >= 8) {
@@ -584,8 +587,10 @@ public class GameDriver {
             //characters.removeAll(remCharacters); // Old removal method
             if (!remCharacters.isEmpty()) {
                 for (Character character : remCharacters) {
-                    characters.set(character.id, null); // Sets the index to null
-                    population--;
+                    if (character.trait != Character.Traits.Beast && character.trait != Character.Traits.Monster) {
+                        characters.set(character.id, null); // Sets the index to null
+                        population--;
+                    }
                 }
             }
             monstersList.removeAll(remCharacters);

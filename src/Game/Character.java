@@ -235,6 +235,7 @@ public class Character {
         movementTechnique = new Technique(Technique.techniqueType.Movement);
         martialTechnique = new Technique(Technique.techniqueType.Martial);
         techniqueList = new ArrayList<>();
+        affiliationNum = 0; // default neutral; overwritten below in affiliation block
 
         this.mother = mother;
         this.father = mother.spouse;
@@ -397,6 +398,18 @@ public class Character {
     // Beast Constructor
     public Character (Area area, Character cultivator) {
         location = area;
+        relationshipList = new RelationshipList();
+        spotQuests = new PriorityQueue<>(20);
+        targetQuests = new PriorityQueue<>(20);
+        siblings = new ArrayList<>();
+        children = new ArrayList<>();
+        knownLocations = new ArrayList<>();
+        backpack = new ArrayList<>();
+        materialBag = new ArrayList<>();
+        pillBag = new ArrayList<>();
+        arrayBag = new ArrayList<>();
+        ownedShops = new ArrayList<>();
+        techniqueList = new ArrayList<>();
         if (rand.nextInt(2) == 0) {
             gender = "Male";
         }
@@ -771,6 +784,13 @@ public class Character {
     }
 
     public void dead() {
+        if (dead) return;
+        if (trait == Traits.Beast || trait == Traits.Monster) {
+            dead = true;
+            location.characters.remove(this);
+            location.deadCharacters.add(this);
+            return; // beasts/monsters not in population; skip remCharacters
+        }
         dead = true;
         if (majorLvl >= 7) {
             String legend = name + " " + lastName;
@@ -803,6 +823,7 @@ public class Character {
         currentQuest = null;
         // Recycling: remove this character from living friends' relationship lists
         for (Relationship rel : new ArrayList<>(relationshipList.relationships)) {
+            if (rel.friendID < 0 || rel.friendID >= characters.size()) continue;
             Character friend = characters.get(rel.friendID);
             if (friend != null && !friend.dead) friend.relationshipList.remove(this.id);
         }
@@ -820,6 +841,7 @@ public class Character {
 
     }
     public void dead(Character killer) {
+        if (dead) return; // already dead this tick; prevent duplicate remCharacters entry
         // True Immortal rebirth — cycles through death rather than truly dying
         if (majorLvl == 10) {
             dead = false;
@@ -852,7 +874,7 @@ public class Character {
             killer.player = 1;
         }
 
-        if (trait != Traits.Beast) {
+        if (trait != Traits.Beast && trait != Traits.Monster) {
             if (spouse != null) {
                 spouse.spouse = null;
                 spouse = null;
@@ -888,8 +910,8 @@ public class Character {
             location.characters.remove(this); //Removes a cultivator from the location
         }
 
-        if (killer.trait == Traits.Beast) {
-            if (!monstersList.contains(killer)) {
+        if (killer.trait == Traits.Beast || killer.trait == Traits.Monster) {
+            if (killer.trait == Traits.Beast && !monstersList.contains(killer)) {
                 monstersList.add(killer);
             }
             location.deadCharacters.add(this);
@@ -900,7 +922,7 @@ public class Character {
             return;
         }
 
-        if (trait == Traits.Beast) {
+        if (trait == Traits.Beast || trait == Traits.Monster) {
             killer.kills++;
             killer.ss += this.ss;
             this.ss = 0;
@@ -910,8 +932,9 @@ public class Character {
             return;
         }
 
-        if (trait != Traits.Beast && killer.trait != Traits.Beast) {
+        if (trait != Traits.Beast && trait != Traits.Monster && killer.trait != Traits.Beast && killer.trait != Traits.Monster) {
             for (Relationship relationship : relationshipList.relationships) {
+                if (relationship.friendID < 0 || relationship.friendID >= characters.size()) continue;
                 Character friend = characters.get(relationship.friendID);
                 Integer value = relationship.value;
                 if (friend != null && !friend.dead && value >= 2) {
@@ -1529,15 +1552,19 @@ public class Character {
             }
         }
 
-        if (questCode == 1 && currentQuest.oneTime) {
+        if (dead) return; // died during quest execution; dead() already cleaned up quests
+
+        if (questCode == 1 && currentQuest != null && currentQuest.oneTime) {
             currentQuest.questDeconstructor();
             currentQuest = null;
             targetQuests.forEach(q -> q.priority += q.priorityDiff);
         }
         else if (questCode == 1 || questCode == -1) {
             targetQuests.forEach(q -> q.priority += q.priorityDiff);
-            currentQuest.priority = 0;
-            targetQuests.add(currentQuest);
+            if (currentQuest != null) {
+                currentQuest.priority = 0;
+                targetQuests.add(currentQuest);
+            }
         }
         else if (questCode == 2 && tempQuest.oneTime) {
             tempQuest.questDeconstructor();

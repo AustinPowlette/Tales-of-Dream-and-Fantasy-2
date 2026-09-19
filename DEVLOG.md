@@ -1,5 +1,16 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (NPC Audit / Bug Fix Session)
+- Fixed: NPE in `quest()` after mid-quest death — added `if (dead) return;` guard and `currentQuest != null` checks before resolution block (`Character.java:~880`)
+- Fixed: NPE/CME in GameDriver main loops — both character loops now iterate snapshot (`new ArrayList<>(characters)`) with null+dead guard (`GameDriver.java:~350`)
+- Fixed: Heaven-Sent Treasure NPE — replaced `characters.get(rand.nextInt(...))` with first-non-null-non-dead scan (`GameDriver.java:~255`)
+- Fixed: NPE in beast constructor — added all missing field initializations (`relationshipList`, collections, etc.) to `Character(Area, Character)` (`Character.java`)
+- Fixed: NPE in birth constructor — added `affiliationNum = 0` before sibling `changeRelationship` call (`Character.java`)
+- Fixed: IndexOutOfBoundsException in `dead()` relationship cleanup — added bounds check before `characters.get(friendID)` in both `dead()` overloads (`Character.java`)
+- Fixed: Duplicate `dead()` calls — added `if (dead) return;` idempotency guard to both overloads (`Character.java`)
+- Fixed: Monster trait mishandling in `dead(killer)` — added `trait != Traits.Monster` to all trait checks so monsters don't go through NPC death path (`Character.java`)
+- Fixed: **Negative population bug** (root cause) — no-arg `dead()` called `remCharacters.add(this)` unconditionally; added early return for Beast/Monster to skip remCharacters (`Character.java:786`); also added trait guard in GameDriver remCharacters processing loop so Beast/Monster entries never decrement population or null `characters` slots (`GameDriver.java:591`)
+
 ## 2026-09-19 (Batch 19)
 - Added: Seasons — `currentSeason` static int (0=Spring…3=Winter), updated every 13 weeks; `Area.age()` applies seasonal herb/monster growth multipliers; season change printed (`GameDriver.java`, `Area.java`)
 - Added: Spiritual Veins — `Area.spiritualVein` bool (1% spawn chance); occupants get +1 cultivate/tick; teal tile color in MapViewer (`Area.java`, `GameDriver.java`, `MapViewer.java`)
