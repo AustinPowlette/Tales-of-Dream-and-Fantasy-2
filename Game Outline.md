@@ -17,7 +17,9 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ NPC auto-spawning from populated areas
 - ✅ Hotspot generation — yearly: 3-5 random non-city areas get +10 to +30 level spike; reset at next year start
 - ✅ Difficulty scaling — new areas spawn at `currentCharacter.lvl`; explorers naturally push into harder territory as they grow; Originis fixed at level 1
-- ✅ Dungeon types — LOST_RUINS (treasure+technique), BEAST_LAIR (3× beasts), MARTIAL_TRIAL (technique upgrade), HAUNTED_GROUNDS (potential gain); 5% spawn chance per area
+- ✅ Dungeon types — LOST_RUINS (treasure+technique), BEAST_LAIR (3× beasts), MARTIAL_TRIAL (technique upgrade), HAUNTED_GROUNDS (potential gain), CELESTIAL_TRIAL (temporary 10-tick event; 3 boss fights + 20 cultivate + 25% potential + 10% technique); 5% spawn chance per area
+- ✅ Beast Tides — yearly: Beast Lairs with monsters > lvl*2000 overflow to 4 cardinal neighbors; neighboring cities lose up to 10% population
+- ✅ Heaven-Sent Treasure — every 3 years a high-potential technique appears in a random wilderness area; notifies characters within 20 tiles; "Heaven Treasure" priority-70 target quest; technique is first-come-first-served via `area.heavenlyTechnique`
 
 ### Character Creation
 - ✅ NPC constructor (`Character(Area)`)
@@ -44,6 +46,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Lifespan bonuses per breakthrough
 - ✅ Sect cultivation bonus (sect founder's majorLvl extra ticks)
 - ✅ Pill consumption (`consume()`) for both Cultivation and Potential pills
+- ✅ Breakthrough Tribulation — fires at majorLvl 3/5/7/9; chance = `clamp(10-90, potential - (majorLvl-3)*5)`; pass: 10% chance +1 potential + cultivation boost; fail: realm regression + inhibitor
+- ✅ Dual Cultivation — 5%/turn: spouse in same tile → 3 cultivate() bonus each; best friend (value≥3) in tile → 1 cultivate() each
 - ✅ New NPC family lines — `Area.age()` spawns new characters from city populations each tick; world naturally repopulates without a separate rebirth system
 - ✅ Potential increase events — HAUNTED_GROUNDS dungeon; pills via Seek Potential quest; 1% on major realm breakthrough; 2% on surviving forbidden technique; decrease events intentionally deferred
 
@@ -56,7 +60,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `forbiddenCheck()` — forbidden technique (tempLvl boost at lifespan cost)
 - ✅ `durabilityCheck()` — equipment breaking during combat
 - ✅ Beast combat (`beastBattleCheck()`)
-- ✅ Monster NPC awakening — Beast that kills a cultivator has 10% chance to flip trait Beast→Monster; gains a legendary title prefix (Ancient/Dread/Elder/etc.), becomes Evil-aligned, enters main NPC loop (movement + quests + relationships) via `awakenMonster()`; earns kill-milestone title suffixes (Legend@10, Tyrant@20, Dread Lord@30, Immortal Terror@50)
+- ✅ Monster NPC awakening — Beast that kills a cultivator has 10% chance to flip trait Beast→Monster; gains a legendary title prefix (Ancient/Dread/Elder/etc.), becomes Evil-aligned, enters main NPC loop (movement + quests + relationships) via `awakenMonster()`; earns kill-milestone title suffixes (Legend@10, Tyrant@20, Dread Lord@30, Immortal Terror@50); gains cultivate() XP from cultivator kills (up to 20 calls); milestone grants +10 cultivate + 5% potential + city bounty posting; "Hunt Cultivator" spot quest + "Seek Territory" target quest give full aggressive AI; sect Hunt Beast missions
 - ✅ Cheater trait (+5 tempLvl)
 - ✅ Lucky trait (Â±45 win chance)
 - ✅ Sparring — 10% chance/tick when rel ≥ 1; both call `practice()` (cultivate + technique upgrade) via `winCheck()` sparring branch; +1 relationship to both parties
@@ -121,6 +125,9 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ **Find Parent's Body quest** — queued in both `dead()` overloads; awards +1 potential on 20% chance on arrival
 - ✅ **Get Pregnant quest** — queued 2%/turn for married women; handled in targetQuests()
 - ✅ Quest cleanup on death — `dead()` and `dead(Character killer)` clear targetQuests/spotQuests/currentQuest; questViable() handles stale target references lazily
+- ✅ Rob Caravan quest — Evil characters, 5%/turn, target wealthy Merchants (ss ≥ 1000) in same tile via priority-50 target quest; calls `partyBattleCheck(merchant)` on arrival
+- ✅ Heaven Treasure quest — priority-70 target quest fired when character knows an area with `heavenlyTechnique != null`; claims technique on arrival (first-come-first-served)
+- ✅ Legacy Discovery — 2%/turn, meditate on a random entry from `Map.legacyTitles`; `min(legLvl/10, 10)` cultivate() calls
 
 ---
 
@@ -154,6 +161,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ NPC buy decision — all characters check gear-missing/outdated in `quest()` each tick; `buyGear()` fires immediately in city with shops; otherwise queues "Buy Gear" travel quest
 - ✅ **Merchant trait** — sets up shops, restocks from city pool, self-equips from stock, city-to-city arbitrage via Sell Stock quest
 - ✅ Potential pill selling restriction — sell() only adds Potential pills to sell list when potential >= 100
+- ✅ Trade Caravan population growth — Merchant city sales (Go Sell / Sell Stock) increase city population by earnings/1,000,000 per sale
 - ✅ **Item pricing** — formula: `lvl^2.5 * 10` (lvl 1=10ss, lvl 10=3162ss, lvl 100=10M ss); Potential pills 5× base; multi-currency canAfford/deductSs correct
 - ✅ City tax routing — `cityOwner` set by `cityLeadership()`; GameDriver yearly loop pays `cityOwner.ss += population / 100`; sect population also taxed via `Organization.growPopulation()`
 - ✅ Leader/city 20%/80% split — NPC Leaders: 80% skip to sect track, 20% try city first
@@ -172,6 +180,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Relationship removal string comparison fixed — `==` → `.equals()`; NPE guard added
 - ✅ Relationship recycling on death — deceased removed from all living friends' RelationshipLists in `dead()`; Revenge quest queued for close friends (value ≥ 2) within 1 major realm of killer
 - ✅ Kill counter — `kills` field on Character; incremented on combat death, beast kill, and Ghost form entry
+- ✅ Legacy Titles — characters dying at majorLvl≥7 recorded in `Map.legacyTitles + Map.legacyLvls`; living characters have 2%/turn to meditate on a legend for cultivation XP (min(legLvl/10, 10) cultivate calls)
 - ✅ Relationship change from fighting — `changeRelationship()` fires in `battleCheck()` before combat; same thematic effect as post-fight
 
 ---
@@ -192,6 +201,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Kill counter — `kills` field; shown on 'i' stat screen
 - ✅ Item counter — `itemsCrafted` field; incremented on each successful craft (alchemy, smithing, tailoring, array, technique); shown on 'i' stat screen
 - ✅ `removeItems(bag, name, qty)` — static helper; finds item by name in any bag, deducts quantity, removes entry if quantity hits zero; returns amount actually removed
+- ✅ Weapon Enchantments — Innovative characters have 5%/turn chance to enchant their equipped weapon (Sharp/Spiritual/Swift/Heavy/Fierce/Wrathful/Sundering, +1–5 bonus); bonus added to tempLvl in `tempLvlCheck()`; displayed as "[EnchantName +N]" in Item.toString()
 
 ---
 
@@ -209,3 +219,4 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Known locations display ('l' key) — all known areas with coordinates, city/sect flags
 - ✅ Relationship list ('r' key) — all living relationships with label and value
 - ✅ Auto-movement — 'o' menu: wait N turns, directional N turns, coordinate pathfind (X Y then N turns), random N turns; `autoX`/`autoY` fields track coordinate target
+- ✅ MapViewer GUI — optional Swing window (prompt at startup "Enable map viewer? Y/n"); 31×31 color-coded tile grid; click to select tile with info panel (area stats, top characters, bounties); refreshes each game tick; biome-based palette + special colors for Cities/Sects/Dungeons; Monsters shown in red

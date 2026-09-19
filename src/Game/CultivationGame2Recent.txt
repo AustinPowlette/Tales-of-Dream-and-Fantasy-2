@@ -158,6 +158,52 @@ a cultivator (loser.dead==true, loser.trait!=Beast). awakenMonster() flips trait
 sets affiliation=Evil, assigns legendary title prefix (Ancient/Dread/Elder/Primordial/Titan/
 Sovereign/Infernal), gets id=UID++, age=8, enters characters[] via direct add + awakenedMonsters
 list (removed from monstersList at end of tick without population count impact). Initializes
-with monsterQuestInitializer(): Hunt(priority 60) + Random(priority 25) — no profession/gear
+with monsterQuestInitializer(): Hunt(60) + Hunt Cultivator(55) + Random(25) — no profession/gear
 economy. Earns kill-milestone title suffixes in dead(): Legend@10, Tyrant@20, Dread Lord@30,
 Immortal Terror@50. Monsters are excluded from gearNeeded/Seek Potential/Buy Pills triggers.
+
+Monster AI depth (IMPLEMENTED 2026-09-19 Batch 16):
+- Hunt Cultivator spot quest: iterates location.characters, calls battleCheck() on first non-Beast
+  non-Monster alive target. Gives Monsters active cultivator aggression beyond just relationship quests.
+- Seek Territory target quest: 20%/turn trigger in quest(); seeks highest-lvl known area with
+  lvl > current.lvl+10; calls beastBattleCheck() on arrival. Drives Monster expansion into
+  progressively more dangerous zones.
+- Cultivation XP from kills: in dead() cultivator-vs-cultivator block, Monsters get
+  Math.min(victim.lvl, 20) cultivate() calls. Monsters grow from PvP combat.
+- Legendary milestone enhancements: +10 cultivate() bonus calls, 5% chance +1 potential, and
+  post Bounty Hunt (priority 65) at nearest city via cityAreas. City cultivators within 10 levels
+  pick up the bounty via the existing Bounty Hunt pickup in quest().
+- Sect Hunt Beast missions: postMissionsYearly() posts "Hunt|Beast|lvl|qty|bonus" when sl>=5.
+  The "Hunt" spot quest case decrements the remaining qty on each completion; grants sectMissionBonus
+  when qty hits 0. No delivery phase needed (kills are instant rewards).
+
+Depth mechanics batch (IMPLEMENTED 2026-09-19 Batch 18):
+- Breakthrough Tribulation: fires at majorLvl 3/5/7/9 in cultivate(). Pass chance =
+  clamp(10,90, potential - (majorLvl-3)*5). Pass: cultivationBase += 0.5*max, 10% +1 potential.
+  Fail: majorLvl reverts, inhibitor++. Adds meaningful risk to major realm crossings.
+- Dual Cultivation: 5%/turn in quest(). Spouse in tile → 3 cultivate() each. Best friend
+  (value≥3) in tile → 1 cultivate() each. Encourages staying near loved ones.
+- Legacy Titles: dead() records name+lvl in Map.legacyTitles/legacyLvls for majorLvl≥7 deaths.
+  quest() has 2%/turn Legacy Discovery: min(legLvl/10, 10) cultivate() calls. Historical
+  legends leave mechanical echoes in the world.
+- Celestial Trials: yearly event spawns CELESTIAL_TRIAL dungeon at random wilderness lvl≥20 area
+  for 10 ticks. Notifies characters within 15 tiles via knownLocations. On completion: 3 boss
+  fights, 20 cultivate(), 25% +1 potential, 10% technique. Timer ticks down in GameDriver loop.
+- Beast Tides: yearly check. BEAST_LAIR monsters > lvl*2000 overflow to 4 neighbors.
+  City neighbors lose up to 10% population. Gives Beast Lairs world impact.
+- Heaven-Sent Treasure: every 3 years a high-potential technique (potential 50-100, "Heaven-Sent"
+  prefix) appears in a random wilderness area (area.heavenlyTechnique). Broadcasts to chars within
+  20 tiles. "Heaven Treasure" priority-70 target quest; first arrival claims it.
+- Weapon Enchantments: Innovative 5%/turn chance to enchant equipped weapon in professionPicker().
+  Type: Sharp/Spiritual/Swift/Heavy/Fierce/Wrathful/Sundering. Bonus +1–5 to enchantBonus.
+  Applied in tempLvlCheck(). Shown in Item.toString() as [Type +N].
+- Trade Caravan growth: Go Sell / Sell Stock success adds earnings/1M to city.population.
+  Reflects merchants driving city growth.
+- Rob Caravan quest: Evil chars, 5%/turn, target Merchant in same tile with ss≥1000.
+  Priority-50 target quest; calls partyBattleCheck(merchant) on arrival.
+- Hotspot faction wars: squabble += 2 for hotspot areas (vs 1 for dungeons); war threshold
+  lowered from 5 to 4. Hotspot areas escalate conflicts faster.
+- MapViewer GUI: optional Swing JFrame (Y/n at startup). MapPanel reads Map.tiles[][] each tick.
+  Color-codes by biome/feature. Click to select tile; info panel shows stats, top chars, bounties.
+  Refreshes via SwingUtilities.invokeLater() at end of each game tick. Future: area image view
+  and cultivator/beast sprite overlays (planned, not started).

@@ -447,6 +447,7 @@ public class Character {
     // Monster NPCs: primarily hunt, occasionally explore via Random events
     public void monsterQuestInitializer() {
         spotQuests.add(new Quest("Hunt", false, 60, 5, 80));
+        spotQuests.add(new Quest("Hunt Cultivator", false, 55, 5, 75));
         spotQuests.add(new Quest("Random", false, 25, 2, 50));
     }
 
@@ -723,6 +724,26 @@ public class Character {
                     potential++;
                     if (player > 0 && skipping <= 0) System.out.println("Breakthrough insight! Potential increased to " + potential);
                 }
+                // Breakthrough Tribulation at key realm transitions (3=Core, 5=Nascent, 7=Spirit, 9=Immortal)
+                if (majorLvl == preMajor + 1 && (majorLvl == 3 || majorLvl == 5 || majorLvl == 7 || majorLvl == 9)) {
+                    tempLvlCheck();
+                    int tribChance = Math.max(10, Math.min(90, potential - (majorLvl - 3) * 5));
+                    if (rand.nextInt(100) < tribChance) {
+                        // Pass
+                        if (rand.nextInt(10) == 0 && potential < 100) potential++;
+                        cultivationBase += cultivationBaseMax * 0.5;
+                        if (printBreakthroughs || (player > 0 && skipping <= 0))
+                            System.out.println(this + " survived the realm tribulation! (majorLvl " + majorLvl + ")");
+                    } else {
+                        // Fail — pushed back
+                        majorLvl = preMajor;
+                        minorLvl = 8;
+                        lvl -= (lvl - preMajor * 10);
+                        inhibitor++;
+                        if (printBreakthroughs || (player > 0 && skipping <= 0))
+                            System.out.println(this + " failed the realm tribulation! Cultivation regressed.");
+                    }
+                }
             }
         }
     }
@@ -746,6 +767,10 @@ public class Character {
 
     public void dead() {
         dead = true;
+        if (majorLvl >= 7) {
+            String legend = name + " " + lastName;
+            if (!legacyTitles.contains(legend)) { legacyTitles.add(legend); legacyLvls.add(lvl); }
+        }
         if (spouse != null) {
             spouse.spouse = null;
             spouse = null;
@@ -916,6 +941,15 @@ public class Character {
                 if (friend != null && !friend.dead) friend.relationshipList.remove(this.id);
             }
             killer.kills++;
+            // Legacy: record high-level cultivators who fall in battle
+            if (majorLvl >= 7) {
+                String legend = name + " " + lastName;
+                if (!legacyTitles.contains(legend)) { legacyTitles.add(legend); legacyLvls.add(lvl); }
+            }
+            // Cultivation XP for Monster kills
+            if (killer.trait == Traits.Monster) {
+                for (int i = 0; i < Math.min(lvl, 20); i++) killer.cultivate();
+            }
             // Legendary milestone for Monster NPCs
             if (killer.trait == Traits.Monster && killer.kills % 10 == 0) {
                 String title = killer.kills >= 50 ? "Immortal Terror" : killer.kills >= 30 ? "Dread Lord" : killer.kills >= 20 ? "Tyrant" : "Legend";
@@ -923,6 +957,19 @@ public class Character {
                 if (idx >= 0) killer.lastName = killer.lastName.substring(0, idx) + " the " + title;
                 else killer.lastName = killer.lastName + " the " + title;
                 System.out.println(killer.name + " " + killer.lastName + " has earned the title: " + title + " (" + killer.kills + " kills)");
+                for (int i = 0; i < 10; i++) killer.cultivate();
+                if (rand.nextInt(20) == 0 && killer.potential < 100) killer.potential++;
+                for (Area a : cityAreas) {
+                    if (a != null && !a.characters.isEmpty()) {
+                        final int monsterId = killer.id;
+                        boolean alreadyPosted = a.bounties.stream().anyMatch(b -> b.targetCharacter == monsterId);
+                        if (!alreadyPosted) {
+                            a.bounties.add(new Quest("Bounty Hunt", true, 65, 5, 85, killer));
+                            System.out.println("Bounty posted on " + killer.name + " " + killer.lastName + " at " + a.name + "!");
+                        }
+                        break;
+                    }
+                }
             }
             // Transers all items to the killer
             transferAllItems(killer);
@@ -1061,6 +1108,73 @@ public class Character {
                 if (area != null && area.monsters > 0
                         && area.highestLvl >= lvl - 10 && area.highestLvl <= lvl + 15) {
                     targetQuests.add(new Quest("Hunt Beast", false, 30, 2, 50, area));
+                    break;
+                }
+            }
+        }
+
+        // Seek Territory: Monster migrates toward highest-level known area (20% chance per turn)
+        if (trait == Traits.Monster && rand.nextInt(5) == 0
+                && targetQuests.stream().noneMatch(q -> "Seek Territory".equals(q.name))
+                && (currentQuest == null || !"Seek Territory".equals(currentQuest.name))) {
+            Area bestArea = null;
+            for (Area a : knownLocations) {
+                if (a != null && a != location && a.lvl > location.lvl + 10) {
+                    if (bestArea == null || a.lvl > bestArea.lvl) bestArea = a;
+                }
+            }
+            if (bestArea != null) {
+                targetQuests.add(new Quest("Seek Territory", true, 45, 3, 70, bestArea));
+            }
+        }
+
+        // Dual Cultivation: bonus cultivation with spouse or a best friend in the same tile (5%/turn)
+        if (trait != Traits.Beast && trait != Traits.Monster && rand.nextInt(20) == 0) {
+            if (spouse != null && !spouse.dead && spouse.location == location) {
+                for (int i = 0; i < 3; i++) cultivate();
+                spouse.cultivationBase += spouse.cultivation * 3;
+            } else {
+                for (Relationship rel : relationshipList.relationships) {
+                    if (rel.value >= 3) {
+                        Character friend = characters.get(rel.friendID);
+                        if (friend != null && !friend.dead && friend.location == location) {
+                            cultivate();
+                            friend.cultivationBase += friend.cultivation;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Legacy Discovery: rare meditation on a fallen legend grants cultivation insight (2%/turn)
+        if (!legacyTitles.isEmpty() && trait != Traits.Beast && trait != Traits.Monster && rand.nextInt(50) == 0) {
+            int legIdx = rand.nextInt(legacyTitles.size());
+            int legLvl = legacyLvls.get(legIdx);
+            for (int i = 0; i < Math.min(legLvl / 10, 10); i++) cultivate();
+            if (player > 0 && skipping <= 0)
+                System.out.println(this + " meditates on the legend of " + legacyTitles.get(legIdx) + "!");
+        }
+
+        // Heaven Treasure: rush to claim a known heavenly technique (high priority)
+        if (trait != Traits.Beast && trait != Traits.Monster
+                && targetQuests.stream().noneMatch(q -> "Heaven Treasure".equals(q.name))
+                && (currentQuest == null || !"Heaven Treasure".equals(currentQuest.name))) {
+            for (Area a : knownLocations) {
+                if (a != null && a.heavenlyTechnique != null) {
+                    targetQuests.add(new Quest("Heaven Treasure", true, 70, 5, 85, a));
+                    break;
+                }
+            }
+        }
+
+        // Rob Caravan: Evil characters may target wealthy merchants passing through (5%/turn)
+        if ("Evil".equals(affiliation) && trait != Traits.Beast && trait != Traits.Monster && rand.nextInt(20) == 0) {
+            for (Character c : new ArrayList<>(location.characters)) {
+                if (c == null || c.dead || c == this || c.trait == Character.Traits.Beast) continue;
+                if (c.trait == Character.Traits.Merchant && (c.backpack.size() > 5 || c.ss > 100000L)
+                        && targetQuests.stream().noneMatch(q -> "Rob Caravan".equals(q.name) && q.targetCharacter == c.id)) {
+                    targetQuests.add(new Quest("Rob Caravan", true, 30, 2, 55, c));
                     break;
                 }
             }
@@ -1524,8 +1638,31 @@ public class Character {
                 break;
             case "Hunt":
                 beastBattleCheck();
+                if (sect != null) sectPoints += 2;
+                if (sectMission != null) {
+                    String[] mp = sectMission.split("\\|");
+                    if (mp.length >= 4 && "Hunt".equals(mp[0]) && "Beast".equals(mp[1])) {
+                        int remaining = Integer.parseInt(mp[3]) - 1;
+                        if (remaining <= 0) {
+                            sectPoints += sectMissionBonus;
+                            if (player > 0 && skipping <= 0) System.out.println("Hunt mission complete! +" + sectMissionBonus + " SP");
+                            sectMission = null; sectMissionBonus = 0;
+                        } else {
+                            sectMission = mp[0] + "|" + mp[1] + "|" + mp[2] + "|" + remaining + (mp.length > 4 ? "|" + mp[4] : "");
+                        }
+                    }
+                }
                 questSuccess = 2;
                 break;
+            case "Hunt Cultivator": {
+                for (Character c : new ArrayList<>(location.characters)) {
+                    if (c == null || c.dead || c == this || c.trait == Traits.Beast || c.trait == Traits.Monster) continue;
+                    battleCheck(c);
+                    break;
+                }
+                questSuccess = 2;
+                break;
+            }
             case "Interact":
                 Character target = location.characters.get(rand.nextInt(location.characters.size()));
                 if (target != null) {
@@ -1858,6 +1995,7 @@ public class Character {
             case "Go Sell":
                 if (location.city && location.cityOwner != null) {
                     sell(location);
+                    location.population += Math.max(1, (int)(ss / 1000000));
                 }
                 return 1;
 
@@ -1946,6 +2084,22 @@ public class Character {
                 beastBattleCheck();
                 if (sect != null) sectPoints += 5;
                 return 1;
+            case "Seek Territory":
+                beastBattleCheck();
+                return 1;
+            case "Heaven Treasure": {
+                if (location.heavenlyTechnique != null) {
+                    techniqueList.add(location.heavenlyTechnique);
+                    if (player > 0 && skipping <= 0) System.out.println(this + " claimed the heavenly technique: " + location.heavenlyTechnique.name + "!");
+                    location.heavenlyTechnique = null;
+                }
+                return 1;
+            }
+            case "Rob Caravan": {
+                Character merchant = characters.get(quest.targetCharacter);
+                if (merchant != null && !merchant.dead) partyBattleCheck(merchant);
+                return 1;
+            }
             case "Join Sect":
                 if (location.sect != null && sect == null && location.sect.canJoin(this)) {
                     location.sect.join(this);
@@ -2018,6 +2172,7 @@ public class Character {
                 backpack.removeAll(cargo);
                 ss += earned;
                 convertCurrency();
+                location.population += Math.max(1, (int)(earned / 1000000L));
                 if (player > 0 && skipping <= 0) System.out.println(this + " sold cargo at " + location.name + " for " + earned + " ss");
                 return 1;
             }
@@ -2061,6 +2216,18 @@ public class Character {
                         if (rand.nextInt(25) == 0 && potential < 100) {
                             potential++;
                             if (player > 0 && skipping <= 0) System.out.println(this + " gained potential in the Haunted Grounds!");
+                        }
+                        break;
+                    case CELESTIAL_TRIAL:
+                        for (int i = 0; i < 3 && dungeon.monsters > 0; i++) beastBattleCheck();
+                        for (int i = 0; i < 20; i++) cultivate();
+                        if (rand.nextInt(4) == 0 && potential < 100) {
+                            potential++;
+                            if (player > 0 && skipping <= 0) System.out.println(this + " gained potential at the Celestial Trial!");
+                        }
+                        if (rand.nextInt(10) == 0) {
+                            techniqueList.add(new Technique(Technique.techniqueType.Martial, this, Math.max(1, majorLvl)));
+                            if (player > 0 && skipping <= 0) System.out.println(this + " comprehended a celestial martial technique!");
                         }
                         break;
                 }
@@ -2317,6 +2484,12 @@ public class Character {
             case Innovative:
                 if (rand.nextInt(100) == 0) {
                     technique();
+                }
+                if (equippedWeapon != null && equippedWeapon.enchantment == null && rand.nextInt(20) == 0) {
+                    String[] enchants = {"Sharp", "Spiritual", "Swift", "Heavy", "Fierce", "Wrathful", "Sundering"};
+                    equippedWeapon.enchantment = enchants[rand.nextInt(enchants.length)];
+                    equippedWeapon.enchantBonus = rand.nextInt(5) + 1;
+                    if (player > 0 && skipping <= 0) System.out.println(this + " enchanted their weapon: " + equippedWeapon);
                 }
                 break;
             case Merchant:
@@ -3843,7 +4016,7 @@ public class Character {
         }
 
         if (equippedWeapon != null) {
-            tempLvl += equippedWeapon.lvl;
+            tempLvl += equippedWeapon.lvl + equippedWeapon.enchantBonus;
         }
 
         if (martialTechnique != null) {

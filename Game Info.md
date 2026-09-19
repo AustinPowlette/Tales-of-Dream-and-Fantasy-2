@@ -106,7 +106,7 @@ GameDriver.main()
 | Friendly | 1 in 100,000 | Social interaction profession |
 | Tailor | 1 in 100,000 | Clothing crafting |
 | Runner | 1 in 100,000 | Guaranteed flee if opponent is ≤10 levels higher |
-| Monster | Beast → kill → awaken | 10% chance when a Beast kills a cultivator in `winCheck()`: flips trait to Monster, gains a legendary title prefix (Ancient/Dread/Elder/etc.), enters the main NPC loop (movement + quests + relationships). Evil-aligned, hunts beasts and cultivators. Earns legendary title suffixes on kill milestones (Legend@10, Tyrant@20, Dread Lord@30, Immortal Terror@50). |
+| Monster | Beast → kill → awaken | 10% chance when a Beast kills a cultivator in `winCheck()`: flips trait to Monster, gains a legendary title prefix (Ancient/Dread/Elder/etc.), enters the main NPC loop (movement + quests + relationships). Evil-aligned, hunts beasts ("Hunt" spot quest) and cultivators ("Hunt Cultivator" spot quest) in current tile, migrates to high-level areas ("Seek Territory" target quest). Gains `cultivate()` XP on every cultivator kill (up to 20 calls). Earns legendary title suffixes on kill milestones (Legend@10, Tyrant@20, Dread Lord@30, Immortal Terror@50); each milestone also grants +10 cultivate(), 5% chance +1 potential, and posts a high-priority bounty (priority 65) at nearest city. |
 | Beast | Beast constructor | Combat-only NPC, no inventory/quests |
 
 ---
@@ -132,11 +132,27 @@ GameDriver.main()
 - If potential is below the threshold AND a random check fails (1 in 15 or 1 in 10 at higher realms), the character drops back one level and `inhibitor++`.
 - `inhibitor` penalizes future cultivation speed by a factor of `2^inhibitor`.
 
+### Breakthrough Tribulation
+- Fires when a character crosses majorLvl 3, 5, 7, or 9.
+- Pass chance: `clamp(10, 90, potential - (majorLvl - 3) * 5)` percent.
+- **Pass**: 10% chance of +1 potential; `cultivationBase += cultivationBaseMax * 0.5` bonus.
+- **Fail**: majorLvl reverts to previous realm, `inhibitor++`, cultivation slowed.
+- Printed via `printBreakthroughs` flag or player guard.
+
 ### Potential Gain Events
 - 1 in 100 chance on any major realm breakthrough.
 - 1 in 50 chance on surviving a `forbiddenCheck()` during combat.
 - 4% chance on entering a HAUNTED_GROUNDS dungeon (plus 5 extra `cultivate()` calls).
+- 25% chance on completing a CELESTIAL_TRIAL dungeon.
 - Via Potential Pills (crafted by Alchemists, sold at city pill markets).
+
+### Dual Cultivation
+- 5%/turn: if spouse is in same tile → each partner gains 3 extra `cultivate()` calls.
+- 5%/turn: if best friend (relationship value ≥ 3) is in same tile → each gains 1 extra `cultivate()` call.
+
+### Legacy Titles
+- When a character dies at majorLvl ≥ 7, their name and level are appended to `Map.legacyTitles` / `Map.legacyLvls` (no duplicates).
+- Living characters have a 2%/turn chance to meditate on a random legacy: earn `min(legLvl/10, 10)` extra `cultivate()` calls.
 
 ### Sect Bonus
 - If a character belongs to a sect, the game loop grants them `Math.max(founder.majorLvl, sect.sectLvl()/10)` extra `cultivate()` calls per tick.
@@ -191,6 +207,14 @@ GameDriver.main()
 - Friends (relationship ≥ 2) of the deceased lose relationship with killer by `-(value-1)`.
 - If player dies and `changeMc = true`, killer becomes the new player character.
 - Beast death: killer gains ss equal to beast's ss; beast gains XP from lvl kills.
+- Legacy recording: if majorLvl ≥ 7, name appended to `Map.legacyTitles` (no duplicates).
+
+### Weapon Enchantments
+- Innovative characters have a 5%/turn chance to enchant their equipped weapon (in `professionPicker()`).
+- Type chosen from: Sharp, Spiritual, Swift, Heavy, Fierce, Wrathful, Sundering.
+- `Item.enchantBonus` = 1–5; `Item.enchantment` = type string.
+- Applied in `tempLvlCheck()`: `tempLvl += equippedWeapon.lvl + equippedWeapon.enchantBonus`.
+- Displayed in `Item.toString()` as `"Name lvl: N [EnchantType +B]"`.
 
 ---
 
@@ -264,16 +288,21 @@ Monsters get a separate initializer — no Profession/Test, high-priority Hunt:
 | Name | Priority | PriorityDiff | MaxPriority |
 |---|---|---|---|
 | Hunt | 60 | 5 | 80 |
+| Hunt Cultivator | 55 | 5 | 75 |
 | Random | 25 | 2 | 50 |
+
+**Hunt** — calls `beastBattleCheck()` in current tile; tracks sect Hunt mission kill count (decrement remaining qty per completion).
+**Hunt Cultivator** — iterates `location.characters`; finds first non-Beast non-Monster alive character and calls `battleCheck()`. Monsters actively prey on cultivators.
 
 ### Target Quests (selected)
 | Name | Trigger | On Success |
 |---|---|---|
 | Find Person | New relationship formed | `interact()` or `battleCheck()` depending on relationship value |
-| Hunt Beast | Area has no beasts at appropriate level | `beastBattleCheck()` |
+| Hunt Beast | Area with level-appropriate monsters in knownLocations | `beastBattleCheck()` |
+| Seek Territory | Monster, 20%/turn, highest-lvl known area > current+10 | `beastBattleCheck()` on arrival |
 | Battle Rival | Dislike/Rival/Arch-Enemy relationship exists | `battleCheck()` with target |
 | Revenge | Close friend (value ≥ 2) dies | `battleCheck()` with killer |
-| Bounty Hunt | Can't afford revenge target | Post or accept bounty on Area.bounties |
+| Bounty Hunt | Can't afford revenge target, or legendary Monster milestone | Post or accept bounty on Area.bounties |
 | Return to Sect | Member is not at sect location (5%/turn) | Sect arrival grants +2 sectPoints |
 | Deliver Materials | Sect mission complete but away from sect | Transfer materials to treasury, gain sectPoints |
 | Ghost City Rebirth | Ghost physique: seeking a city | Rebirth as new character at city |
@@ -282,8 +311,9 @@ Monsters get a separate initializer — no Profession/Test, high-priority Hunt:
 
 ### Sect Mission System
 - Sect masters post missions to members via `postMissionsYearly()` (yearly).
-- Mission format: `"Forage|Herb|lvl|qty|bonus"` or `"Mine|Metal|lvl|qty|bonus"`.
-- Two-phase delivery: if mission completed away from sect, a Deliver Materials quest queues; if at sect, materials transfer to `sect.treasury` immediately.
+- Mission formats: `"Forage|Herb|lvl|qty|bonus"`, `"Mine|Metal|lvl|qty|bonus"`, `"Hunt|Beast|lvl|qty|bonus"`.
+- Hunt missions posted when `sectLvl() >= 5`; qty = kills remaining (decremented in "Hunt" spot quest case on each `beastBattleCheck()`; completes when qty reaches 0).
+- Two-phase delivery for Forage/Mine: if mission completed away from sect, a Deliver Materials quest queues; if at sect, materials transfer to `sect.treasury` immediately. Hunt missions complete in-place (no delivery needed).
 
 ### Pathfinder (`pathfinder()`)
 - Moves diagonally toward destination using wrap-around world logic.
@@ -356,7 +386,7 @@ Monsters get a separate initializer — no Profession/Test, high-priority Hunt:
 - `ArrayList<Item> treasury` — stores donated items from all members.
 - `sectLvl()` — `sum(herb+metal qty×lvl) / 10000`, capped at 100. Used as cultivation bonus multiplier.
 - `donationPoints(Item, qty)` / `buyingCost(Item, qty)` — proportional: herbs/metals: `qty×lvl/1000`; pills: `qty×lvl×2`; gear: `item.lvl`.
-- `postMissionsYearly()` — assigns Forage/Mine missions to members.
+- `postMissionsYearly()` — assigns Forage/Mine/Hunt missions to members. Hunt missions require `sectLvl() >= 5`.
 - Master promotes Outer Disciples to Inner Disciples (5%/turn, level threshold check) and Inner Disciples to Elders.
 
 ---
@@ -385,6 +415,26 @@ Monsters get a separate initializer — no Profession/Test, high-priority Hunt:
 | BEAST_LAIR | 3 forced beast battles |
 | MARTIAL_TRIAL | tempLvlCheck + technique upgrade if won |
 | HAUNTED_GROUNDS | 4% potential gain; 5 extra cultivate() calls |
+| CELESTIAL_TRIAL | Temporary 10-tick event; 3 boss beast battles, 20 cultivate() calls, 25% +1 potential, 10% technique grant |
+
+### Beast Tides
+- Checked once per year in GameDriver yearly loop.
+- Condition: `area.dungeonType == BEAST_LAIR && area.monsters > area.lvl * 2000`.
+- Overflow (`area.monsters - area.lvl * 2000`) spread evenly to 4 cardinal-neighbor tiles.
+- If a neighbor is a city, population decreases by up to 10%.
+
+### Heaven-Sent Treasure
+- Fires every 3 years (`(time/52) % 3 == 2`).
+- A high-potential Technique (random maker, "Heaven-Sent" name prefix, technique potential = `rand.nextInt(50)+50`) is placed in a random wilderness area (`area.heavenlyTechnique`).
+- All characters within 20 tiles have the area added to `knownLocations` and receive a priority-70 "Heaven Treasure" target quest.
+- First character to arrive claims the technique (set to null after claim).
+
+### Celestial Trials (Spawn)
+- Fires once per year.
+- Requires a wilderness area with `lvl >= 20` and no existing dungeon.
+- Sets `area.dungeonType = CELESTIAL_TRIAL`, `area.celestialTrialTimer = 10`.
+- Broadcasts the area to characters within 15 tiles (adds to `knownLocations`).
+- Timer counts down each tick; at 0, `dungeonType` cleared and closure message printed.
 
 ---
 

@@ -1,5 +1,29 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (Batch 18)
+- Confirmed: Forbidden Technique (feature 9) already implemented — `forbiddenCheck()` boosts tempLvl by √potential, costs maxAge, was already wired into winCheck(); no change needed
+- Added: Breakthrough Tribulation — fires at majorLvl 3/5/7/9 in `cultivate()`; pass chance = potential - (majorLvl-3)*5, clamped 10-90%; fail pushes back one realm + inhibitor; exceptional pass has 10% chance +1 potential (`Character.java:cultivate()`)
+- Added: Dual Cultivation — 5%/turn: spouse in same tile → 3 cultivate() bonus each; best friend (value≥3) → 1 cultivate() each (`Character.java:quest()`)
+- Added: Legacy Titles — characters who die at majorLvl≥7 recorded in `Map.legacyTitles + Map.legacyLvls`; living characters have 2%/turn to meditate on a legend for cultivation bonus (`Character.java:dead()`, `quest()`, `Map.java`)
+- Added: Celestial Trials — once per year a random wilderness area (lvl≥20) becomes CELESTIAL_TRIAL dungeon for 10 ticks; notifies characters within 15 tiles; on completion: 3 beast fights, 20 cultivate, 25% potential, 10% technique (`Area.java` new DungeonType, `GameDriver.java`, `Character.java:targetQuests()`)
+- Added: Beast Tide — yearly check: Beast Lair with monsters > lvl*2000 spreads 1/4 of overflow to 4 cardinal neighbors; city neighbors lose up to 10% population (`GameDriver.java`)
+- Added: Heaven-Sent Treasure — every 3 years a high-potential technique descends in a random wilderness area; broadcasts location to characters within 20 tiles; first arrival claims it via "Heaven Treasure" target quest (priority 70) (`Area.java heavenlyTechnique`, `GameDriver.java`, `Character.java`)
+- Added: Weapon Enchantments — Innovative characters have 5%/turn chance to enchant equipped weapon (Sharp/Spiritual/Swift/Heavy/Fierce/Wrathful/Sundering, +1–5 bonus); bonus adds to tempLvl in `tempLvlCheck()`; shown in Item.toString() (`Item.java`, `Character.java`)
+- Added: Trade Caravan growth — after Merchant sells at city (Go Sell or Sell Stock), city.population grows by earnings/1M; Evil characters may queue "Rob Caravan" target quest against nearby wealthy Merchants (5%/turn) (`Character.java`)
+- Changed: Hotspot faction wars — hotspot-area squabbles now add 2 per year (vs 1 for dungeons); war threshold lowered from 5 to 4 (`GameDriver.java`)
+
+## 2026-09-19 (Batch 17)
+- Added: `MapViewer.java` — optional read-only Swing map viewer (31×31 tile grid, biome/feature color coding, cultivator density brightness, click-to-inspect info panel with tile details + top cultivators); interactive action hooks stubbed as comments for future expansion
+- Changed: `GameDriver.java` — "Enable map viewer? Y/n" prompt at startup; `guiEnabled` + `mapViewer` static fields; `mapViewer.refresh()` call at end of each tick (after cleanup, before sleep)
+
+## 2026-09-19 (Batch 16)
+- Added: "Hunt Cultivator" spot quest (priority 55) to `monsterQuestInitializer()` — Monsters now actively target cultivators in their tile via `battleCheck()` (`Character.java:monsterQuestInitializer()`)
+- Added: "Seek Territory" target quest trigger in `quest()` — 20% chance/tick, Monster migrates to highest-lvl known area with lvl > current+10; "Seek Territory" case in `targetQuests()` calls `beastBattleCheck()` on arrival (`Character.java:quest()`, `targetQuests()`)
+- Added: Cultivation XP for Monster kills — when a Monster kills a cultivator in `dead()`, calls `cultivate()` up to `Math.min(victim.lvl, 20)` times; Monsters now grow from PvP kills like they do from beast kills (`Character.java:dead()`)
+- Changed: Legendary milestone in `dead()` — now also grants 10 bonus `cultivate()` calls, 5% chance of +1 potential, and posts a high-priority "Bounty Hunt" quest (priority 65) at nearest city via `cityAreas` (`Character.java:dead()`)
+- Added: "Hunt Beast" mission to `Organization.postMissionsYearly()` — posted when `sl >= 5`; format `Hunt|Beast|lvl|qty|bonus`; tracked in "Hunt" spot quest case (decrement remaining kills per `beastBattleCheck()`; complete when qty reaches 0) (`Organization.java:postMissionsYearly()`, `Character.java:spotQuests()`)
+- Confirmed: Ghost rebirth ("Possess Womb" + "Ghost City Rebirth") fully implemented — no code change needed; item 6 was documentation-only
+
 ## 2026-09-19 (Batch 15)
 - Added: Monster NPC awakening — `awakenMonster()` in `Character.java`; triggered from `winCheck()` at 10% when a Beast kills a cultivator; flips `trait=Monster`, `affiliation=Evil`, assigns legendary title prefix, sets `id=UID++`, adds to `characters` and `awakenedMonsters` (`Character.java`)
 - Added: `monsterQuestInitializer()` — Monster spot quests: Hunt (priority 60) + Random (priority 25); no Profession/Test quests; battle quests accumulate via relationship system (`Character.java`)

@@ -182,6 +182,13 @@ public class Organization {
             int bonus = Math.max(10, neededQty * neededLvl / 200);
             questBoard.add("Mine|Metal|" + neededLvl + "|" + neededQty + "|" + bonus);
         }
+        // Hunt Beast mission for established sects
+        if (sl >= 5 && questBoard.size() < 5) {
+            int huntLvl = Math.max(1, sl / 2);
+            int huntQty = Math.max(3, sl / 3);
+            int bonus = Math.max(15, huntQty * huntLvl * 2);
+            questBoard.add("Hunt|Beast|" + huntLvl + "|" + huntQty + "|" + bonus);
+        }
         // Check for low-level resource gaps (useful for crafters)
         for (int lvlBracket = 10; lvlBracket <= 100; lvlBracket += 10) {
             int lo = lvlBracket - 9;

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
+import javax.swing.SwingUtilities;
 import static Game.Map.*;
 
 public class GameDriver {
@@ -13,6 +14,8 @@ public class GameDriver {
     static final boolean printBreakthroughs = false;
     static final boolean changeMc = true;
     public static int UID = 0;
+    static boolean guiEnabled = false;
+    static MapViewer mapViewer = null;
     //public static int iUID = 0;
 
 
@@ -21,6 +24,17 @@ public class GameDriver {
         Map map = new Map(); // Starting Point of the World
         //Character[] characters = new Character[startingPopulation];
         int time = 0; // In Weeks
+        System.out.println("Enable map viewer? Y/n");
+        char guiInput = scan.next().charAt(0);
+        if (guiInput == 'Y' || guiInput == 'y') {
+            guiEnabled = true;
+            try {
+                SwingUtilities.invokeAndWait(() -> mapViewer = new MapViewer());
+            } catch (Exception e) {
+                System.out.println("Map viewer unavailable: " + e.getMessage());
+                guiEnabled = false;
+            }
+        }
         System.out.println("Would you like to play? Y/n");
         char input = scan.next().charAt(0);
 
@@ -121,8 +135,8 @@ public class GameDriver {
                         for (Area a : s1.master.knownLocations) {
                             if (a == null || (!a.hotspot && a.dungeonType == null)) continue;
                             if (s2.master.knownLocations.contains(a)) {
-                                s1.squabbles++;
-                                if (s1.squabbles >= 5) s1.declareWar(s2);
+                                s1.squabbles += a.hotspot ? 2 : 1; // hotspot disputes escalate faster
+                                if (s1.squabbles >= 4) s1.declareWar(s2);
                                 break;
                             }
                         }
@@ -143,6 +157,72 @@ public class GameDriver {
                         area.cityOwner.convertCurrency();
                     }
                 }
+                // Beast Tide: overflow Beast Lairs spread monsters to neighbors and threaten nearby cities
+                int[] btDx = {-1, 1, 0, 0};
+                int[] btDy = {0, 0, -1, 1};
+                for (Area area : new ArrayList<>(createdAreas)) {
+                    if (area.dungeonType == Area.DungeonType.BEAST_LAIR && area.monsters > area.lvl * 2000) {
+                        int spread = area.monsters / 4;
+                        for (int _d = 0; _d < 4; _d++) {
+                            int nx = area.x + btDx[_d], ny = area.y + btDy[_d];
+                            if (nx >= 0 && nx < range && ny >= 0 && ny < range && tiles[nx][ny] != null) {
+                                Area nbr = tiles[nx][ny];
+                                nbr.monsters += spread / 4;
+                                if (nbr.city && nbr.population > 0) {
+                                    long casualties = Math.min(nbr.population / 10, spread * 100L);
+                                    nbr.population = (int) Math.max(1, nbr.population - casualties);
+                                    System.out.println("Beast Tide erupts from " + area.name + " and strikes " + nbr.name + "! -" + casualties + " population");
+                                }
+                            }
+                        }
+                        area.monsters = area.lvl * 1000;
+                    }
+                }
+                // Celestial Trial: once per year, spawn a temporary high-level trial site
+                if (!createdAreas.isEmpty()) {
+                    ArrayList<Area> trialElig = new ArrayList<>();
+                    for (Area area : createdAreas) {
+                        if (!area.city && area.dungeonType == null && area.celestialTrialTimer == 0 && area.lvl >= 20) trialElig.add(area);
+                    }
+                    if (!trialElig.isEmpty()) {
+                        Area trialArea = trialElig.get(rand.nextInt(trialElig.size()));
+                        trialArea.dungeonType = Area.DungeonType.CELESTIAL_TRIAL;
+                        trialArea.celestialTrialTimer = 10;
+                        // Notify characters within 15 tiles
+                        for (Character cc : characters) {
+                            if (cc == null || cc.dead || !cc.born) continue;
+                            if (Math.abs(cc.location.x - trialArea.x) + Math.abs(cc.location.y - trialArea.y) <= 15) {
+                                if (!cc.knownLocations.contains(trialArea)) cc.knownLocations.add(trialArea);
+                            }
+                        }
+                        System.out.println("A Celestial Trial has opened at " + trialArea.name + " [" + trialArea.x + "," + trialArea.y + "]! It will close in 10 ticks.");
+                    }
+                }
+                // Heaven-Sent Treasure: every 3 years, a powerful technique descends into the world
+                if ((time / 52) % 3 == 2) {
+                    ArrayList<Area> htElig = new ArrayList<>();
+                    for (Area area : createdAreas) {
+                        if (!area.city && area.heavenlyTechnique == null) htElig.add(area);
+                    }
+                    if (!htElig.isEmpty()) {
+                        Area htArea = htElig.get(rand.nextInt(htElig.size()));
+                        Character phantom = characters.get(rand.nextInt(characters.size()));
+                        if (phantom == null) phantom = characters.get(0);
+                        Technique heavenTech = new Technique(
+                            rand.nextInt(2) == 0 ? Technique.techniqueType.Martial : Technique.techniqueType.Movement,
+                            phantom, Math.max(5, rand.nextInt(10) + 5));
+                        heavenTech.name = "Heaven-Sent " + heavenTech.name;
+                        htArea.heavenlyTechnique = heavenTech;
+                        // Broadcast to all characters within 20 tiles
+                        for (Character cc : characters) {
+                            if (cc == null || cc.dead || !cc.born) continue;
+                            if (Math.abs(cc.location.x - htArea.x) + Math.abs(cc.location.y - htArea.y) <= 20) {
+                                if (!cc.knownLocations.contains(htArea)) cc.knownLocations.add(htArea);
+                            }
+                        }
+                        System.out.println("Heaven's Will descends! A heavenly technique has appeared at " + htArea.name + " [" + htArea.x + "," + htArea.y + "]!");
+                    }
+                }
                 //scan.nextLine();
             }
             // Tournament timer countdown and resolution (every tick)
@@ -151,6 +231,14 @@ public class GameDriver {
                     area.tournamentTimer--;
                     if (area.tournamentTimer == 0) {
                         area.runTournament();
+                    }
+                }
+                // Celestial Trial despawn
+                if (area.celestialTrialTimer > 0) {
+                    area.celestialTrialTimer--;
+                    if (area.celestialTrialTimer == 0) {
+                        area.dungeonType = null;
+                        System.out.println("The Celestial Trial at " + area.name + " has closed.");
                     }
                 }
             }
@@ -379,6 +467,7 @@ public class GameDriver {
             awakenedMonsters.clear();
             tempCharacters.clear();
             remCharacters.clear();
+            if (guiEnabled && mapViewer != null) mapViewer.refresh();
             Thread.sleep(10000);
         }
     }

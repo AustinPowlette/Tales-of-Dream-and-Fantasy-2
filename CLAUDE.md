@@ -9,11 +9,16 @@ Java xianxia cultivation simulation. 100K+ NPC world, turn-based (weekly ticks),
 - Design docs: `src/Game/CultivationGame2.txt`, `src/Game/CultivationGame2Recent.txt`, `src/Game/Cultivation Game 2 Temp.txt`
 
 ## Current State (as of 2026-09-19)
-All three previously-blocked systems are now implemented. The simulation runs a full autonomous loop with quests, economy, and sect AI. Remaining work is polish and minor bugs.
+All systems are now implemented. The simulation runs a full autonomous loop with quests, economy, sect AI, world events, and depth mechanics.
 
-- **Quest system** — complete. All quest types from design docs implemented: Forage/Mine prereq, Hunt Beast, Buy Gear, Go Sell, Battle Rival/Revenge/Bounty, Join Sect, Seek Potential, Return to Sect, Deliver Materials, sect missions, tournaments, arena registration, Ghost City Rebirth, Get Pregnant, Find Parent's Body, Sell Technique, and more.
-- **Economy/Shops** — complete. `Shop.java` exists. `cityOwner` set by `cityLeadership()`. Tax collected yearly (`population/100` to cityOwner). Merchant arbitrage (buy cheap → carry → sell dear). NPC pill buying. Library buy/sell. Item pricing formula: `lvl^2.5 × 10`.
-- **Sect/Organization AI** — complete. Sect missions (Forage/Mine + Deliver Materials two-phase). Promotions (Outer→Inner→Elder). Tournaments. Politics (war/alliance/tribute/defection/succession). Return to Sect drift. Sect cultivation bonus.
+- **Quest system** — complete. All quest types: Forage/Mine prereq, Hunt Beast, Buy Gear, Go Sell, Battle Rival/Revenge/Bounty, Join Sect, Seek Potential, Return to Sect, Deliver Materials, sect missions, tournaments, arena registration, Ghost City Rebirth, Get Pregnant, Find Parent's Body, Sell Technique, Rob Caravan, Heaven Treasure, Legacy Discovery, and more.
+- **Economy/Shops** — complete. `Shop.java` exists. `cityOwner` set by `cityLeadership()`. Tax collected yearly. Merchant arbitrage. NPC pill buying. Library buy/sell. Trade Caravan population growth (earnings/1M → city pop).
+- **Sect/Organization AI** — complete. Sect missions (Forage/Mine/Hunt Beast). Promotions. Tournaments. Politics. Return to Sect drift. Sect cultivation bonus.
+- **Monster AI** — complete. Hunt Cultivator spot quest, Seek Territory target quest, cultivation XP from kills, legendary milestone rewards (cultivate + potential + bounties).
+- **Cultivation depth** — complete. Breakthrough Tribulations (majorLvl 3/5/7/9), Dual Cultivation (spouse/friend bonus), Legacy Titles (meditation on fallen legends), Forbidden Technique (existing).
+- **World events** — complete. Beast Tides (yearly overflow from Beast Lairs), Celestial Trials (temporary lvl≥20 dungeon, 10-tick timer), Heaven-Sent Treasure (every 3 years, claimed via target quest), Hotspot faction wars (threshold 4).
+- **Items** — complete. Weapon Enchantments (Innovative 5%/turn, +1–5 bonus to tempLvl).
+- **MapViewer GUI** — complete. Optional Swing window (Y/n prompt at startup); 31×31 color-coded map; click-to-inspect tile; refreshes each tick.
 
 ## Known Bugs (Active)
 None as of 2026-09-19. (Items 1–4 — herb/metal off-by-one, Quest.targetArea stale, null-slot NPE, toString True Immortal — all resolved.)

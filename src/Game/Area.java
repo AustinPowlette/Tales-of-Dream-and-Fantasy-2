@@ -8,7 +8,7 @@ import static Game.Map.*;
 
 public class Area {
 
-    enum DungeonType { LOST_RUINS, BEAST_LAIR, MARTIAL_TRIAL, HAUNTED_GROUNDS }
+    enum DungeonType { LOST_RUINS, BEAST_LAIR, MARTIAL_TRIAL, HAUNTED_GROUNDS, CELESTIAL_TRIAL }
 
     static int uindex = 1;
     int index;
@@ -34,7 +34,8 @@ public class Area {
     int monsters;
     int herbMaterials;
     int metalMaterials;
-    // Create an ArrayList of Structures and Create a Structure Object
+    int celestialTrialTimer = 0;
+    Technique heavenlyTechnique = null;
 
     ArrayList<Shop> shops = new ArrayList<>();
     ArrayList<Quest> bounties = new ArrayList<>();

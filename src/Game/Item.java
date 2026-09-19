@@ -35,6 +35,8 @@ public class Item {
     int quantity = 1;
     int lvl = -1;
     boolean stackable = false;
+    String enchantment = null;
+    int enchantBonus = 0;
 
     // Constructor for Herbs and Metals
     public Item(ItemType itemType, int lvl, int quantity) {
@@ -174,7 +176,8 @@ public class Item {
             return (name + " Quantity: " + quantity);
         }
         else {
-            return (name + " lvl: " + lvl);
+            String enchStr = enchantment != null ? " [" + enchantment + " +" + enchantBonus + "]" : "";
+            return (name + " lvl: " + lvl + enchStr);
         }
     }
 }

@@ -20,6 +20,8 @@ public class Map {
     public static ArrayList<Character> awakenedMonsters = new ArrayList<>();
     public static ArrayList<Area> hotspotAreas = new ArrayList<>();
     public static Character currentCharacter;
+    public static ArrayList<String> legacyTitles = new ArrayList<>();
+    public static ArrayList<Integer> legacyLvls = new ArrayList<>();
 
     public Map(){
         tiles[range / 2][range / 2] = new Area(); // Starting Point of the World
