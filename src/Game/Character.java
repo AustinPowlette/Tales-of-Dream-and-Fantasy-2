@@ -280,18 +280,15 @@ public class Character {
             lastName = father.lastName;
         }
 
-        // Technique Inheritance
+        // Technique Inheritance — child starts at 1/4 of parent's mastery level
         {
-            if (temp.movementTechnique2 != null) {
-                movementTechnique = new Technique(temp.movementTechnique2);
-            } else {
-                movementTechnique = new Technique(temp.movementTechnique);
-            }
-            if (temp.martialTechnique2 != null) {
-                martialTechnique = new Technique(temp.martialTechnique2);
-            } else {
-                martialTechnique = new Technique(temp.martialTechnique);
-            }
+            Technique srcMove = (temp.movementTechnique2 != null) ? temp.movementTechnique2 : temp.movementTechnique;
+            movementTechnique = new Technique(srcMove);
+            movementTechnique.lvl = Math.max(1, srcMove.lvl / 4);
+
+            Technique srcMart = (temp.martialTechnique2 != null) ? temp.martialTechnique2 : temp.martialTechnique;
+            martialTechnique = new Technique(srcMart);
+            martialTechnique.lvl = Math.max(1, srcMart.lvl / 4);
         }
 
         // Limiter Inheritance
@@ -549,6 +546,7 @@ public class Character {
             cultivationBaseMax = Math.pow(lvl, 3) * (((70.+1./3.) + ((11./6.) * lvl)) / 25.);
             cultivation = ((Math.pow(potential,2) * Math.sqrt(lvl) * 10.) / (52. * Math.sqrt(potential) * Math.pow(2,inhibitor)));
             if ((minorLvl >= 11 && majorLvl < 10)) {
+                int preMajor = majorLvl;
                 majorLvl++;
                 minorLvl = 1;
 
@@ -695,6 +693,11 @@ public class Character {
                         totalAgeGained += 2140000000;
                         System.out.println(this + " has broken through to True Immortal");
                         break;
+                }
+                // Rare potential gain on successful breakthrough (1% chance)
+                if (majorLvl == preMajor + 1 && potential < 101 && rand.nextInt(100) == 0) {
+                    potential++;
+                    if (player > 0 && skipping <= 0) System.out.println("Breakthrough insight! Potential increased to " + potential);
                 }
             }
         }
@@ -1078,6 +1081,23 @@ public class Character {
                         && sect.warTarget.getRank(c) == Organization.SectRank.ELDER) {
                     targetQuests.add(new Quest("Recruit Defector", true, 45, 5, 65, c));
                     break;
+                }
+            }
+        }
+
+        // Promote Disciples: sect masters check members for rank advancement (5% chance/turn)
+        if (sect != null && sect.isMaster(this) && rand.nextInt(20) == 0) {
+            for (Character member : new ArrayList<>(sect.members)) {
+                if (member == null || member.dead) continue;
+                Organization.SectRank rank = sect.getRank(member);
+                if (rank == Organization.SectRank.OUTER_DISCIPLE
+                        && member.majorLvl >= Math.max(1, majorLvl - 4)) {
+                    sect.promoteRank(member);
+                    if (player > 0 && skipping <= 0) System.out.println(member + " promoted to Inner Disciple of " + sect.name);
+                } else if (rank == Organization.SectRank.INNER_DISCIPLE
+                        && member.majorLvl >= Math.max(2, majorLvl - 2)) {
+                    sect.promoteRank(member);
+                    if (player > 0 && skipping <= 0) System.out.println(member + " promoted to Elder of " + sect.name);
                 }
             }
         }
@@ -2005,6 +2025,7 @@ public class Character {
                         final String tqName = bestTq.name;
                         if (recipient.techniqueList.stream().noneMatch(t -> t.name.equals(tqName))) {
                             Technique copy = new Technique(bestTq);
+                            copy.lvl = Math.max(1, bestTq.lvl / 2); // parent teaches directly — better start
                             recipient.techniqueList.add(copy);
                             if (player > 0 && skipping <= 0) System.out.println("Gave technique " + bestTq.name + " (potential " + bestTq.potential + ") to " + recipient);
                         }
@@ -2948,11 +2969,9 @@ public class Character {
         }
     }
 
-    // TODO: price formulas are placeholders — confirm before finalising economy pass
     public static long itemPrice(Item item) {
         if (item.lvl <= 0) return 0;
-        double raw = Math.pow(100, item.lvl / 10.0);
-        long base = raw >= (double) Long.MAX_VALUE ? Long.MAX_VALUE : (long) raw;
+        long base = Math.max(1, (long)(Math.pow(item.lvl, 2.5) * 10));
         if (item.itemType == Item.ItemType.Pill && item.pillType == Item.PillType.Potential)
             return base > Long.MAX_VALUE / 5 ? Long.MAX_VALUE : base * 5;
         return base;
@@ -3707,6 +3726,11 @@ public class Character {
         else {
             tempLvl += Math.sqrt(potential);
             maxAge -= totalAgeGained / 10;
+            // Rare potential gain for surviving a forbidden technique (2% chance)
+            if (potential < 101 && rand.nextInt(50) == 0) {
+                potential++;
+                if (player > 0 && skipping <= 0) System.out.println("Surviving the forbidden technique expanded your potential to " + potential + "!");
+            }
         }
     }
 

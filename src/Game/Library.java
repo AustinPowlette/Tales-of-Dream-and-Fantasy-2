@@ -51,7 +51,9 @@ public class Library {
             location.cityOwner.ss += price;
             location.cityOwner.convertCurrency();
         }
-        buyer.techniqueList.add(new Technique(technique)); // copy — original stays in library
+        Technique learned = new Technique(technique);
+        learned.lvl = Math.max(1, technique.lvl / 5); // transcribed texts preserve some mastery
+        buyer.techniqueList.add(learned);
         buyer.equip();
         return true;
     }
@@ -63,7 +65,9 @@ public class Library {
         if (!techniques.contains(technique)) return false;
         if (member.sectPoints < pointCost) return false;
         member.sectPoints -= pointCost;
-        member.techniqueList.add(new Technique(technique));
+        Technique learned = new Technique(technique);
+        learned.lvl = Math.max(1, technique.lvl / 3); // sect masters teach more directly
+        member.techniqueList.add(learned);
         member.equip();
         return true;
     }

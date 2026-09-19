@@ -1,5 +1,14 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19
+- Added: Potential gain on major realm breakthrough (`Character.java:cultivate()`) — 1% chance when `majorLvl` advances; capped at 101; prints message to player
+- Added: Potential gain on surviving forbidden technique (`Character.java:forbiddenCheck()`) — 2% chance in surviving `else` branch; caps at 101
+- Added: Sect rank promotion (`Character.java:quest()`) — sect masters check members each turn (5% chance); OUTER→INNER at `majorLvl >= master.majorLvl-4`; INNER→ELDER at `majorLvl >= master.majorLvl-2`
+- Changed: Item pricing formula (`Character.java:itemPrice()`) — `lvl^2.5 * 10` replaces old exponential; lvl 1=10ss, lvl 10=3162ss, lvl 100=10M ss; Potential pills 5× base
+- Changed: Technique mastery on library learn (`Library.java`) — city library copies start at lvl/5; sect library copies start at lvl/3
+- Changed: Technique mastery on birth (`Character.java` birth constructor) — child inherits best parent technique at lvl/4 starting mastery
+- Changed: Technique mastery on Gift Technique (`Character.java:targetQuests()`) — copy given at lvl/2 starting mastery
+
 ## 2026-09-18 (12)
 - Added: Ghost physique trait — characters spawning with Ghost trait enter ghost form on death (not old age); can "Possess Womb" (take over unborn child stronger than mother) or "Ghost City Rebirth" (spawn as new NPC in a city); inherit Ghost trait in next body; `originalName` tracks name chain; permanent death if killed while already in ghost form
 - Added: IronBody, SpiritVein, HeavenlyRoot special physique traits — IronBody adds majorLvl/2+1 to tempLvl; SpiritVein gives 1.5× cultivation speed; HeavenlyRoot doubles technique upgrade chance in winCheck(); all three added to NPC trait pickers at rare physique rarity (~1% each)
