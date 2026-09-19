@@ -1,5 +1,18 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (Feature Batch: Startup Flow, GUI Enhancements, Cheat Menu, Reincarnation)
+- Added: Startup mode select — Single Player / Multiplayer (2-4 players) / Watch (spectate); each player gets an editable generated character (`GameDriver.java:main`)
+- Added: Full character editor at startup and in-game ('e' key) — name, trait (all 17 variants), potential, affiliation, gender via `editCharacterInteractive()` (`GameDriver.java`)
+- Added: Pause + tick-speed controls — `tickDelayMs` and `paused` volatile statics; GUI buttons (⏸/0.1s/0.5s/2s/10s) in speed panel; 'p' key in terminal; live status label (`GameDriver.java`, `MapViewer.java`)
+- Added: World History tab in event log — `historyLog` list (capped 1000) accumulates `[HERO]`, `[SUCCESSION]`, `[WORLD]`, Beast Tide, Celestial Trial, plague, heaven fire, tournament wins; shown in GUI second tab (`GameDriver.java`, `MapViewer.java`)
+- Added: NPC tracker panel in MapViewer — `Map.trackedCharacters` list; panel shows name/level/age/coords with remove button; tracked NPCs shown as cyan dots on map (`Map.java`, `MapViewer.java`)
+- Added: Clickable cultivator names in tile info panel — JButton for each top-5 cultivator opens a detailed stats dialog with Track and Control buttons (`MapViewer.java:showCharacterDialog`)
+- Added: Control button in character dialog — switches player control to that NPC (demotes previous player to follow mode); works from tracker panel too (`MapViewer.java`)
+- Added: Quest display — 'q' key shows active quest, target queue, spot queue for the controlled character (`GameDriver.java`)
+- Added: Cheat menu ('z' key) — select self/by ID/nearby; options: give SS, set level, set potential, heal, create weapon, clear quests, set kills, track (`GameDriver.java:handleCheatMenu`)
+- Added: Death/reincarnation — `needsReincarnation` flag set in `dead()` and `dead(killer)` for non-Ghost player characters; `handleReincarnation()` offers to take over killer/child/any NPC/spectate after death (`Character.java`, `GameDriver.java:handleReincarnation`)
+- Changed: `Item` weapon removed one-arg constructor usage in cheat menu; uses correct `Item(Character maker, WeaponType, lvl)` constructor
+
 ## 2026-09-19 (Features: Hero Threshold, Event Observation, Plague, Beast Tide Defense, City Succession)
 - Fixed: Monster mortality restored — `dead()` no-arg now adds monsters to `remCharacters` (nulls `characters` slot); GameDriver already skips `population--` for them (`Character.java:788`)
 - Added: Hero threshold — first cultivator to reach Ensoulment/Ascension/Pseudo Immortal prints a `[HERO]` world event; flags on `Map.java` (`Character.java:765`, `Map.java`)

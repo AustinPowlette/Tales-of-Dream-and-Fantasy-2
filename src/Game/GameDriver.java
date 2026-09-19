@@ -21,8 +21,10 @@ public class GameDriver {
     static MapViewer mapViewer = null;
     static LinkedBlockingQueue<String> guiInputQueue = new LinkedBlockingQueue<>();
     static List<String> eventLog = Collections.synchronizedList(new ArrayList<>());
+    static List<String> historyLog = Collections.synchronizedList(new ArrayList<>());
     static int currentSeason = 0; // 0=Spring 1=Summer 2=Autumn 3=Winter
-    //public static int iUID = 0;
+    static volatile int tickDelayMs = 500;  // adjustable tick speed
+    static volatile boolean paused = false; // pause flag for GUI speed controls
 
     static String readInput() {
         if (guiEnabled) {
@@ -40,6 +42,15 @@ public class GameDriver {
         if (s == null) return;
         eventLog.add(s);
         while (eventLog.size() > 30) eventLog.remove(0);
+        // Push tagged world events to the persistent history log
+        if (s.startsWith("[HERO]") || s.startsWith("[SUCCESSION]") || s.startsWith("[WORLD]")
+                || s.contains("Beast Tide") || s.contains("Celestial Trial")
+                || s.contains("Heaven's Will") || s.contains("spiritual storm")
+                || s.contains("plague strikes") || s.contains("Heaven fire")
+                || s.contains("Tournament at") && s.contains("wins")) {
+            historyLog.add(s);
+            if (historyLog.size() > 1000) historyLog.remove(0);
+        }
     }
 
     // Intercepts System.out to also populate the GUI event log
@@ -49,13 +60,230 @@ public class GameDriver {
         @Override public void println(Object o) { super.println(o); logEvent(o == null ? "null" : o.toString()); }
     }
 
+    /** Interactive character editing; used at startup and in-game via 'e'. */
+    static void editCharacterInteractive(Character c) {
+        boolean editing = true;
+        while (editing) {
+            System.out.println("Edit: (N)ame (T)rait (P)otential (A)ffiliation (G)ender (D)one");
+            System.out.println("  Current: " + c.name + " " + c.lastName
+                    + "  Trait:" + c.getTrait() + "  Pot:" + c.potential
+                    + "  Aff:" + c.affiliation + "  Gender:" + c.gender);
+            char opt = readInput().charAt(0);
+            switch (opt) {
+                case 'N': case 'n':
+                    System.out.println("First name:"); c.name = readInput();
+                    System.out.println("Last name:");  c.lastName = readInput();
+                    break;
+                case 'T': case 't':
+                    System.out.println("Trait: A=Alchemist B=Blacksmith T=Tailor S=Scribe I=Innovative L=Leader M=Merchant R=Runner G=Ghost Ga=Gatherer Mi=Miner Fr=Friendly Ck=Cheater Lk=Lucky Ib=IronBody Sv=SpiritVein Hr=HeavenlyRoot");
+                    String tc = readInput().toLowerCase();
+                    switch (tc) {
+                        case "a":  c.trait = Character.Traits.Alchemist;    break;
+                        case "b":  c.trait = Character.Traits.Blacksmith;   break;
+                        case "t":  c.trait = Character.Traits.Tailor;       break;
+                        case "s":  c.trait = Character.Traits.Scribe;       break;
+                        case "i":  c.trait = Character.Traits.Innovative;   break;
+                        case "l":  c.trait = Character.Traits.Leader;       break;
+                        case "m":  c.trait = Character.Traits.Merchant;     break;
+                        case "r":  c.trait = Character.Traits.Runner;       break;
+                        case "g":  c.trait = Character.Traits.Ghost;        break;
+                        case "ga": c.trait = Character.Traits.Gatherer;     break;
+                        case "mi": c.trait = Character.Traits.Miner;        break;
+                        case "fr": c.trait = Character.Traits.Friendly;     break;
+                        case "ck": c.trait = Character.Traits.Cheater;      break;
+                        case "lk": c.trait = Character.Traits.Lucky;        break;
+                        case "ib": c.trait = Character.Traits.IronBody;     break;
+                        case "sv": c.trait = Character.Traits.SpiritVein;   break;
+                        case "hr": c.trait = Character.Traits.HeavenlyRoot; break;
+                    }
+                    break;
+                case 'P': case 'p':
+                    System.out.println("Potential (1-100):");
+                    try { c.potential = Math.min(100, Math.max(1, Integer.parseInt(readInput()))); } catch (Exception ignored) {}
+                    break;
+                case 'A': case 'a':
+                    System.out.println("Affiliation: G=Good N=Neutral E=Evil");
+                    char ac = readInput().charAt(0);
+                    if (ac == 'G' || ac == 'g') c.affiliation = "Good";
+                    else if (ac == 'E' || ac == 'e') c.affiliation = "Evil";
+                    else c.affiliation = "Neutral";
+                    break;
+                case 'G': case 'g':
+                    System.out.println("Gender: M=Male F=Female");
+                    char gc = readInput().charAt(0);
+                    c.gender = (gc == 'M' || gc == 'm') ? "Male" : "Female";
+                    break;
+                case 'D': case 'd': editing = false; break;
+            }
+        }
+    }
+
+    /** Cheat menu: pick any character and modify stats/items/wealth. */
+    static void handleCheatMenu(Character self) {
+        System.out.println("=== CHEAT MENU ===  Target: (S)elf (I)D (N)earby");
+        char targetOpt = readInput().charAt(0);
+        Character target = null;
+        if (targetOpt == 'S' || targetOpt == 's') {
+            target = self;
+        } else if (targetOpt == 'I' || targetOpt == 'i') {
+            System.out.println("Enter character ID:");
+            try {
+                int cid = Integer.parseInt(readInput());
+                if (cid >= 0 && cid < characters.size()) target = characters.get(cid);
+            } catch (Exception ignored) {}
+        } else if (targetOpt == 'N' || targetOpt == 'n') {
+            System.out.println("Nearby characters:");
+            int shown = 0;
+            for (Character c : self.location.characters) {
+                if (c != null && !c.dead && c != self && shown < 10) {
+                    System.out.println("  ID:" + c.id + " " + c.name + " " + c.lastName + " Lv." + c.lvl);
+                    shown++;
+                }
+            }
+            System.out.println("Enter ID:");
+            try {
+                int cid = Integer.parseInt(readInput());
+                if (cid >= 0 && cid < characters.size()) target = characters.get(cid);
+            } catch (Exception ignored) {}
+        }
+        if (target == null || target.dead) { System.out.println("Target not found."); return; }
+        final Character t = target;
+        System.out.println("Target: " + t.name + " " + t.lastName + " Lv." + t.lvl);
+        System.out.println("Cheat: (S)S wealth (L)evel (P)otential (H)eal (W)eapon (R)eset quests (K)ills (T)rack");
+        char cheatOpt = readInput().charAt(0);
+        switch (cheatOpt) {
+            case 'S': case 's':
+                System.out.println("Add how many Spirit Stones?");
+                try { t.ss += Long.parseLong(readInput()); } catch (Exception ignored) {}
+                System.out.println(t.name + " now has " + t.ss + " SS.");
+                break;
+            case 'L': case 'l':
+                System.out.println("Set major level (0-10):");
+                try {
+                    int ml = Math.min(10, Math.max(0, Integer.parseInt(readInput())));
+                    t.majorLvl = ml;
+                    t.minorLvl = 1;
+                    t.lvl = ml * 10 + 1;
+                    t.tempLvl = t.lvl;
+                } catch (Exception ignored) {}
+                System.out.println(t.name + " is now major level " + t.majorLvl + ".");
+                break;
+            case 'P': case 'p':
+                System.out.println("Set potential (1-100):");
+                try { t.potential = Math.min(100, Math.max(1, Integer.parseInt(readInput()))); } catch (Exception ignored) {}
+                break;
+            case 'H': case 'h':
+                t.cultivation = t.cultivationBaseMax;
+                System.out.println(t.name + " cultivation restored to max.");
+                break;
+            case 'W': case 'w':
+                System.out.println("Create weapon at level (1-10):");
+                try {
+                    int wlvl = Math.min(10, Math.max(1, Integer.parseInt(readInput())));
+                    Item weapon = new Item(t, Item.WeaponType.values()[rand.nextInt(Item.WeaponType.values().length)], wlvl);
+                    t.backpack.add(weapon);
+                    t.equip();
+                    System.out.println("Gave " + weapon + " to " + t.name + ".");
+                } catch (Exception ignored) { System.out.println("Failed to create weapon."); }
+                break;
+            case 'R': case 'r':
+                t.targetQuests.clear();
+                t.spotQuests.clear();
+                t.currentQuest = null;
+                System.out.println(t.name + " quests cleared.");
+                break;
+            case 'K': case 'k':
+                System.out.println("Set kill count:");
+                try { t.kills = Integer.parseInt(readInput()); } catch (Exception ignored) {}
+                break;
+            case 'T': case 't':
+                if (!trackedCharacters.contains(t.id)) {
+                    trackedCharacters.add(t.id);
+                    System.out.println(t.name + " " + t.lastName + " is now tracked.");
+                } else {
+                    System.out.println(t.name + " is already tracked.");
+                }
+                break;
+        }
+    }
+
+    /** Reincarnation dialog: shown when a player character dies. */
+    static void handleReincarnation(Character dead) {
+        System.out.println("=== " + dead.name + " " + dead.lastName + " has died! Age " + dead.age + ", Realm " + dead.majorLvl + " ===");
+        // Collect options
+        Character killer = dead.reincarnationKiller;
+        List<Character> aliveChildren = new ArrayList<>();
+        for (Character child : dead.children) {
+            if (child != null && !child.dead && child.born && child.trait != Character.Traits.Ghost) aliveChildren.add(child);
+        }
+        aliveChildren.sort((a, b) -> Integer.compare(b.lvl, a.lvl));
+
+        System.out.println("Reincarnation options:");
+        int opt = 1;
+        if (killer != null && !killer.dead && killer.trait != Character.Traits.Ghost
+                && killer.trait != Character.Traits.Beast && killer.trait != Character.Traits.Monster) {
+            System.out.println("  " + opt + ". Take over killer: " + killer.name + " " + killer.lastName + " Lv." + killer.lvl);
+        } else {
+            killer = null; // invalid for takeover
+        }
+        int killerOpt = killer != null ? opt++ : 0;
+        if (killerOpt > 0) {} // used above
+
+        int childOpt = 0;
+        if (!aliveChildren.isEmpty()) {
+            opt = (killerOpt > 0) ? 2 : 1;
+            System.out.println("  " + opt + ". Take over child: " + aliveChildren.get(0).name + " " + aliveChildren.get(0).lastName + " Lv." + aliveChildren.get(0).lvl);
+            childOpt = opt;
+            opt++;
+        }
+        int npcsOpt = opt;
+        System.out.println("  " + opt + ". Choose any living NPC (enter ID)");
+        opt++;
+        int spectateOpt = opt;
+        System.out.println("  " + opt + ". Spectate (follow mode on nearby NPC)");
+
+        System.out.println("Choice:");
+        int choice;
+        try { choice = Integer.parseInt(readInput()); } catch (Exception e) { choice = spectateOpt; }
+
+        Character newChar = null;
+        if (choice == killerOpt && killerOpt > 0 && killer != null) {
+            newChar = killer;
+        } else if (choice == childOpt && childOpt > 0 && !aliveChildren.isEmpty()) {
+            newChar = aliveChildren.get(0);
+        } else if (choice == npcsOpt) {
+            System.out.println("Enter character ID:");
+            try {
+                int cid = Integer.parseInt(readInput());
+                if (cid >= 0 && cid < characters.size()) {
+                    Character c = characters.get(cid);
+                    if (c != null && !c.dead && c.trait != Character.Traits.Ghost) newChar = c;
+                }
+            } catch (Exception ignored) {}
+            if (newChar == null) System.out.println("Invalid ID, switching to spectate.");
+        }
+
+        if (newChar != null) {
+            newChar.player = 1;
+            System.out.println("You are now " + newChar.name + " " + newChar.lastName + "!");
+        } else {
+            // Spectate: find any living NPC near old location
+            for (Character c : dead.location.characters) {
+                if (c != null && !c.dead && c.player == 0) { c.player = 2; break; }
+            }
+            System.out.println("Spectating. Press 'e' to take control of a tracked NPC or use the GUI Control button.");
+        }
+        dead.player = 0;
+        dead.needsReincarnation = false;
+        dead.reincarnationKiller = null;
+    }
+
 
     public static void main(String[] args) throws InterruptedException, IOException {
-        //tiles[range / 2][range / 2] = new Area(); // Starting Point of the World
         System.setOut(new TeeStream(System.out));
-        Map map = new Map(); // Starting Point of the World
-        //Character[] characters = new Character[startingPopulation];
+        Map map = new Map();
         int time = 0; // In Weeks
+
         System.out.println("Enable map viewer? Y/n");
         char guiInput = scan.next().charAt(0);
         if (guiInput == 'Y' || guiInput == 'y') {
@@ -67,69 +295,38 @@ public class GameDriver {
                 guiEnabled = false;
             }
         }
-        System.out.println("Would you like to play? Y/n");
-        char input = scan.next().charAt(0);
 
-        if (input == 'Y' || input == 'y') {
-            System.out.println("Character setup: (C)ustomize, (F)ollow mode, Enter for default Alchemist");
-            char mcOpt = scan.next().charAt(0);
+        // ── Startup flow ───────────────────────────────────────────────────────
+        System.out.println("Mode: (S)ingle Player | (M)ultiplayer | (W)atch / Spectate");
+        char modeInput = scan.next().charAt(0);
+        int playerCount = 0;
+        if (modeInput == 'S' || modeInput == 's') {
+            playerCount = 1;
+        } else if (modeInput == 'M' || modeInput == 'm') {
+            System.out.println("How many players? (2-4)");
+            try { playerCount = Math.min(4, Math.max(2, Integer.parseInt(scan.next()))); } catch (Exception e) { playerCount = 2; }
+        } // else spectate: playerCount = 0
+
+        for (int pi = 0; pi < playerCount; pi++) {
+            if (playerCount > 1) System.out.println("\n=== Player " + (pi + 1) + " Setup ===");
             Character bete = new Character(tiles[range / 2][range / 2]);
             currentCharacter = bete;
             characters.add(bete);
-            population++; // Don't forget to add player characters to population
+            population++;
             bete.player = 1;
-            if (mcOpt == 'C' || mcOpt == 'c') {
-                System.out.println("Trait: A=Alchemist B=Blacksmith T=Tailor S=Scribe I=Innovative L=Leader M=Merchant R=Runner");
-                char tc = scan.next().charAt(0);
-                switch (tc) {
-                    case 'A': case 'a': bete.trait = Character.Traits.Alchemist;   break;
-                    case 'B': case 'b': bete.trait = Character.Traits.Blacksmith;  break;
-                    case 'T': case 't': bete.trait = Character.Traits.Tailor;      break;
-                    case 'S': case 's': bete.trait = Character.Traits.Scribe;      break;
-                    case 'I': case 'i': bete.trait = Character.Traits.Innovative;  break;
-                    case 'L': case 'l': bete.trait = Character.Traits.Leader;      break;
-                    case 'M': case 'm': bete.trait = Character.Traits.Merchant;    break;
-                    case 'R': case 'r': bete.trait = Character.Traits.Runner;      break;
-                    default:            bete.trait = Character.Traits.Innovative;  break;
-                }
-                System.out.println("Potential (1-100):");
-                try { bete.potential = Math.min(100, Math.max(1, Integer.parseInt(scan.next()))); } catch (Exception e) { bete.potential = 100; }
-                System.out.println("Affiliation: G=Good N=Neutral E=Evil");
-                char ac = scan.next().charAt(0);
-                if (ac == 'G' || ac == 'g') bete.affiliation = "Good";
-                else if (ac == 'E' || ac == 'e') bete.affiliation = "Evil";
-                else bete.affiliation = "Neutral";
-            } else if (mcOpt == 'F' || mcOpt == 'f') {
-                bete.player = 2; bete.potential = 100; bete.trait = Character.Traits.Innovative;
-            } else {
-                bete.potential = 100; bete.trait = Character.Traits.Alchemist;
-            }
-            System.out.println("" + bete + bete.location);
-            System.out.println(bete + "'s Potential: " + bete.potential + " Trait: " + bete.getTrait());
-
-            //Quest quest1 = new Quest("Random", false, 50, 5, 50);
-            //Quest quest2 = new Quest("Test", false, 45, 5, 50);
-            //bete.quests.add(quest1);
-            //bete.quests.add(quest2);
-            //System.out.println(bete.quests);
-            //System.out.println(quest1);
-            //System.out.println(quest2);
-
-            /*while (true) {
-                currentCharacter = bete;
-                bete.quest();
-                bete.movement(scan.next().charAt(0));
-                bete.cultivate();
-                System.out.print(bete);
-                System.out.println(bete.location);
-                System.out.println(bete.backpack + "\n" + bete.materialBag + "\n" + bete.pillBag);
-                if (scan.next().charAt(0) == '0') {
-                    break;
-                }
-            }*/
-
+            bete.potential = 100;
+            bete.trait = Character.Traits.Alchemist;
+            System.out.println("Generated: " + bete.name + " " + bete.lastName + "  Trait:" + bete.getTrait() + "  Potential:" + bete.potential);
+            System.out.println("Modify character? Y/n");
+            char editChoice = scan.next().charAt(0);
+            if (editChoice == 'Y' || editChoice == 'y') editCharacterInteractive(bete);
+            System.out.println("" + bete + bete.location + "  Trait:" + bete.getTrait() + "  Potential:" + bete.potential);
         }
-        // Character Creation
+        if (playerCount == 0) {
+            System.out.println("Spectating. Use 'Control' button in GUI or set player=2 follow-mode NPC.");
+        }
+
+        // NPC population
         for (int i = 0; i < startingPopulation; i++) {
             characters.add(new Character(tiles[range / 2][range / 2]));
         }
@@ -143,7 +340,6 @@ public class GameDriver {
                 String[] SEASON_NAMES = {"Spring", "Summer", "Autumn", "Winter"};
                 System.out.println("=== " + SEASON_NAMES[currentSeason] + " begins ===");
             }
-            //System.out.println("It's day: " + (time/24 + 1));
             if ((time) % 52 == 0) {
                 int _year = (time / 52) + 1;
                 System.out.println("It's year: " + _year + " Population: " + population + " " + monstersList);
@@ -384,7 +580,6 @@ public class GameDriver {
                 for (Character _cc : characters) {
                     if (_cc != null && !_cc.dead && _cc.born) _cc.updateRepTitle();
                 }
-                //scan.nextLine();
             }
             // Tournament timer countdown and resolution (every tick)
             for (Area area : createdAreas) {
@@ -440,9 +635,8 @@ public class GameDriver {
                             character.movement();
                             System.out.println("[Follow] " + character + character.location);
                         } else {
-                        //character.movement(scan.next().charAt(0));
                         if (character.skipping <= 0) {
-                            System.out.println(character.backpack + "\n" + character.materialBag + "\n" + character.pillBag); // Change .backpack to just character
+                            System.out.println(character.backpack + "\n" + character.materialBag + "\n" + character.pillBag);
                             if (character.spouse != null) {
                                 System.out.println("" + character.spouse + character.spouse.location);
                             }
@@ -503,6 +697,29 @@ public class GameDriver {
                                         }
                                     }
                                     if (character.spouse != null) System.out.println("Spouse: " + character.spouse.name + " " + character.spouse.lastName);
+                                    character.movement('x');
+                                    break;
+                                case 'q':
+                                    System.out.println("=== Quests ===");
+                                    if (character.currentQuest != null) System.out.println("Active: " + character.currentQuest);
+                                    System.out.println("Target quests (" + character.targetQuests.size() + "):");
+                                    for (Quest q : character.targetQuests) System.out.println("  " + q);
+                                    System.out.println("Spot quests (" + character.spotQuests.size() + "):");
+                                    for (Quest q : character.spotQuests) System.out.println("  " + q);
+                                    character.movement('x');
+                                    break;
+                                case 'e':
+                                    System.out.println("=== Character Editor ===");
+                                    editCharacterInteractive(character);
+                                    character.movement('x');
+                                    break;
+                                case 'z':
+                                    handleCheatMenu(character);
+                                    character.movement('x');
+                                    break;
+                                case 'p':
+                                    paused = !paused;
+                                    System.out.println(paused ? "--- PAUSED --- (press 'p' again to resume)" : "--- RESUMED ---");
                                     character.movement('x');
                                     break;
                                 case 'o':
@@ -577,16 +794,13 @@ public class GameDriver {
                                 System.out.println("" + character + character.location);
                             }
                         } // end else (non-followMode)
-                        //System.out.println(character + " is doing their quest!");
                         character.quest();
                     }
                     else if (character.age >= 8) {
-                        //System.out.println(character + " is doing their quest!!");
                         character.movement();
                         character.quest();
                     }
                     else {
-                        //System.out.println(character + " is doing their quest!!!");
                         character.quest();
                     }
 
@@ -597,10 +811,10 @@ public class GameDriver {
                                 child.location.characters.remove(child);
                                 child.location = child.mother.location;
                                 if (!child.location.characters.contains(child)) {
-                                    child.location.characters.add(child); // Adds This Character to the Character List of the New Location
+                                    child.location.characters.add(child);
                                 }
                                 if (!child.knownLocations.contains(child.location)) {
-                                    child.knownLocations.add(child.location); // Adds New Location to knownLocations
+                                    child.knownLocations.add(child.location);
                                 }
                             }
                         }
@@ -608,6 +822,12 @@ public class GameDriver {
                 }
             }
 
+            // Handle reincarnation for any player character that died this tick
+            for (Character character : new ArrayList<>(characters)) {
+                if (character != null && character.dead && character.needsReincarnation) {
+                    handleReincarnation(character);
+                }
+            }
 
             // Ages the areas and adds the tempCharacters list to the characters list.
 
@@ -626,11 +846,10 @@ public class GameDriver {
             characters.addAll(tempCharacters);
             population += tempCharacters.size();
 
-            //characters.removeAll(remCharacters); // Old removal method
             if (!remCharacters.isEmpty()) {
                 for (Character character : remCharacters) {
                     if (character.trait != Character.Traits.Beast && character.trait != Character.Traits.Monster) {
-                        characters.set(character.id, null); // Sets the index to null
+                        characters.set(character.id, null);
                         population--;
                     }
                 }
@@ -641,7 +860,9 @@ public class GameDriver {
             tempCharacters.clear();
             remCharacters.clear();
             if (guiEnabled && mapViewer != null) mapViewer.refresh();
-            Thread.sleep(guiEnabled ? 500 : 10000);
+            // Pause support: spin until unpaused, then sleep the configured delay
+            while (paused) Thread.sleep(50);
+            Thread.sleep(tickDelayMs);
         }
     }
 }

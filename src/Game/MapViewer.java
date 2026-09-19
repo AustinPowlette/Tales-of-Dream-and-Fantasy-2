@@ -11,7 +11,9 @@ public class MapViewer extends JFrame {
 
     private final MapPanel mapPanel;
     private final JPanel infoPanel;
+    private final JPanel trackerPanel;
     private final JTextArea logArea;
+    private final JTextArea historyArea;
     private volatile int selX = -1, selY = -1;
 
     private int tileSize() {
@@ -29,17 +31,41 @@ public class MapViewer extends JFrame {
         mapScroll.setPreferredSize(new Dimension(Map.range * ms + 24, Map.range * ms + 24));
         mapScroll.getViewport().setBackground(new Color(15, 15, 25));
 
-        // Info panel
+        // Info panel (tile details)
         infoPanel = new JPanel();
         infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
         infoPanel.setBackground(new Color(20, 20, 35));
         infoPanel.setBorder(new EmptyBorder(8, 8, 8, 8));
 
         JScrollPane infoScroll = new JScrollPane(infoPanel);
-        infoScroll.setPreferredSize(new Dimension(260, 280));
+        infoScroll.setPreferredSize(new Dimension(260, 200));
         infoScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         infoScroll.getViewport().setBackground(new Color(20, 20, 35));
-        infoScroll.setBorder(null);
+        infoScroll.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(50, 50, 80)),
+                "Tile Info", 0, 0, new Font("Monospaced", Font.BOLD, 10), new Color(100, 120, 200)));
+
+        // NPC tracker panel
+        trackerPanel = new JPanel();
+        trackerPanel.setLayout(new BoxLayout(trackerPanel, BoxLayout.Y_AXIS));
+        trackerPanel.setBackground(new Color(15, 20, 30));
+        trackerPanel.setBorder(new EmptyBorder(4, 8, 4, 8));
+
+        JScrollPane trackerScroll = new JScrollPane(trackerPanel);
+        trackerScroll.setPreferredSize(new Dimension(260, 130));
+        trackerScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        trackerScroll.getViewport().setBackground(new Color(15, 20, 30));
+        trackerScroll.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(40, 80, 60)),
+                "NPC Tracker", 0, 0, new Font("Monospaced", Font.BOLD, 10), new Color(80, 180, 100)));
+
+        // Stacked info + tracker
+        JPanel infoStack = new JPanel();
+        infoStack.setLayout(new BoxLayout(infoStack, BoxLayout.Y_AXIS));
+        infoStack.setBackground(new Color(20, 20, 35));
+        infoStack.add(infoScroll);
+        infoStack.add(Box.createVerticalStrut(3));
+        infoStack.add(trackerScroll);
 
         JPanel buttonPanel = buildButtonPanel();
         JPanel legend = buildLegend();
@@ -51,11 +77,11 @@ public class MapViewer extends JFrame {
 
         JPanel right = new JPanel(new BorderLayout(0, 4));
         right.setBackground(new Color(20, 20, 35));
-        right.add(infoScroll, BorderLayout.CENTER);
+        right.add(infoStack, BorderLayout.CENTER);
         right.add(rightBottom, BorderLayout.SOUTH);
 
-        // Event log
-        logArea = new JTextArea(6, 70);
+        // Event log (tabbed: Events + World History)
+        logArea = new JTextArea(5, 70);
         logArea.setEditable(false);
         logArea.setBackground(new Color(12, 12, 22));
         logArea.setForeground(new Color(160, 200, 140));
@@ -63,16 +89,34 @@ public class MapViewer extends JFrame {
         logArea.setLineWrap(true);
         logArea.setWrapStyleWord(true);
         JScrollPane logScroll = new JScrollPane(logArea);
-        logScroll.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createLineBorder(new Color(50, 70, 50)),
-            "Event Log", 0, 0,
-            new Font("Monospaced", Font.BOLD, 10), new Color(100, 160, 80)));
-        logScroll.setPreferredSize(new Dimension(0, 120));
+        logScroll.setBorder(null);
+
+        historyArea = new JTextArea(5, 70);
+        historyArea.setEditable(false);
+        historyArea.setBackground(new Color(12, 18, 12));
+        historyArea.setForeground(new Color(200, 220, 160));
+        historyArea.setFont(new Font("Monospaced", Font.PLAIN, 10));
+        historyArea.setLineWrap(true);
+        historyArea.setWrapStyleWord(true);
+        JScrollPane historyScroll = new JScrollPane(historyArea);
+        historyScroll.setBorder(null);
+
+        JTabbedPane logTabs = new JTabbedPane(JTabbedPane.BOTTOM);
+        logTabs.setBackground(new Color(15, 15, 25));
+        logTabs.setForeground(new Color(180, 180, 140));
+        logTabs.setFont(new Font("Monospaced", Font.PLAIN, 10));
+        logTabs.addTab("Events", logScroll);
+        logTabs.addTab("World History", historyScroll);
+        logTabs.setPreferredSize(new Dimension(0, 120));
+
+        // Speed controls panel (top)
+        JPanel speedPanel = buildSpeedPanel();
 
         setLayout(new BorderLayout(4, 4));
+        add(speedPanel, BorderLayout.NORTH);
         add(mapScroll, BorderLayout.CENTER);
         add(right, BorderLayout.EAST);
-        add(logScroll, BorderLayout.SOUTH);
+        add(logTabs, BorderLayout.SOUTH);
 
         mapPanel.addMouseListener(new MouseAdapter() {
             @Override
@@ -129,6 +173,40 @@ public class MapViewer extends JFrame {
         return btn;
     }
 
+    private JPanel buildSpeedPanel() {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 3));
+        p.setBackground(new Color(15, 15, 30));
+        p.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(50, 50, 80)));
+
+        JLabel lbl = new JLabel("Speed:");
+        lbl.setForeground(new Color(160, 160, 200));
+        lbl.setFont(new Font("Monospaced", Font.BOLD, 11));
+        p.add(lbl);
+
+        JButton pauseBtn = makeBtn("⏸ Pause", () -> {
+            GameDriver.paused = !GameDriver.paused;
+        });
+        pauseBtn.setForeground(new Color(255, 180, 80));
+        p.add(pauseBtn);
+
+        p.add(makeBtn("0.1s", () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 100; }));
+        p.add(makeBtn("0.5s", () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 500; }));
+        p.add(makeBtn("2s",   () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 2000; }));
+        p.add(makeBtn("10s",  () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 10000; }));
+
+        JLabel statusLbl = new JLabel("  ");
+        statusLbl.setForeground(new Color(120, 200, 120));
+        statusLbl.setFont(new Font("Monospaced", Font.PLAIN, 10));
+        p.add(statusLbl);
+
+        // Update status label in a timer
+        new javax.swing.Timer(300, e2 -> {
+            statusLbl.setText(GameDriver.paused ? "PAUSED" : (GameDriver.tickDelayMs + "ms/tick"));
+        }).start();
+
+        return p;
+    }
+
     private JPanel buildButtonPanel() {
         JPanel p = new JPanel();
         p.setBackground(new Color(20, 20, 35));
@@ -152,7 +230,11 @@ public class MapViewer extends JFrame {
 
         JPanel row5 = row(new Color(20, 20, 35));
         row5.add(makeBtn("Relations", () -> queueInput("r")));
-        row5.add(makeBtn("Options", () -> queueInput("o")));
+        row5.add(makeBtn("Quests", () -> queueInput("q")));
+
+        JPanel row6 = row(new Color(20, 20, 35));
+        row6.add(makeBtn("Edit Self", () -> queueInput("e")));
+        row6.add(makeBtn("Cheats", () -> queueInput("z")));
 
         JButton moveHere = makeBtn("▶ Move to Selected Tile", () -> {
             if (selX >= 0 && selY >= 0) {
@@ -167,8 +249,8 @@ public class MapViewer extends JFrame {
         moveHere.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         p.add(row1); p.add(row2); p.add(row3);
-        p.add(Box.createVerticalStrut(5));
-        p.add(row4); p.add(row5);
+        p.add(Box.createVerticalStrut(3));
+        p.add(row4); p.add(row5); p.add(row6);
         p.add(Box.createVerticalStrut(5));
         p.add(moveHere);
         return p;
@@ -188,21 +270,175 @@ public class MapViewer extends JFrame {
                 updateInfo(Map.tiles[selX][selY]);
             }
             refreshLog();
+            updateTracker();
         });
     }
 
     private void refreshLog() {
-        List<String> snapshot;
-        synchronized (GameDriver.eventLog) {
-            snapshot = new ArrayList<>(GameDriver.eventLog);
-        }
+        List<String> evSnap;
+        synchronized (GameDriver.eventLog) { evSnap = new ArrayList<>(GameDriver.eventLog); }
         StringBuilder sb = new StringBuilder();
-        for (String line : snapshot) sb.append(line).append("\n");
-        String text = sb.toString();
-        if (!text.equals(logArea.getText())) {
-            logArea.setText(text);
+        for (String line : evSnap) sb.append(line).append("\n");
+        String evText = sb.toString();
+        if (!evText.equals(logArea.getText())) {
+            logArea.setText(evText);
             logArea.setCaretPosition(logArea.getDocument().getLength());
         }
+
+        List<String> histSnap;
+        synchronized (GameDriver.historyLog) { histSnap = new ArrayList<>(GameDriver.historyLog); }
+        StringBuilder hsb = new StringBuilder();
+        for (String line : histSnap) hsb.append(line).append("\n");
+        String hText = hsb.toString();
+        if (!hText.equals(historyArea.getText())) {
+            historyArea.setText(hText);
+            historyArea.setCaretPosition(historyArea.getDocument().getLength());
+        }
+    }
+
+    private void updateTracker() {
+        trackerPanel.removeAll();
+        Color gold = new Color(255, 210, 80);
+        Color fg   = new Color(200, 200, 170);
+        Color dim  = new Color(120, 130, 110);
+        Color red  = new Color(220, 100, 80);
+
+        if (Map.trackedCharacters.isEmpty()) {
+            JLabel empty = new JLabel("(none tracked — click a cultivator name to track)");
+            empty.setForeground(dim);
+            empty.setFont(new Font("Monospaced", Font.ITALIC, 10));
+            trackerPanel.add(empty);
+        } else {
+            for (int i = 0; i < Map.trackedCharacters.size(); i++) {
+                int cid = Map.trackedCharacters.get(i);
+                if (cid < 0 || cid >= Map.characters.size()) continue;
+                Character c = Map.characters.get(cid);
+                if (c == null || c.dead) {
+                    JLabel dead = new JLabel("† ID:" + cid + " (deceased)");
+                    dead.setForeground(dim);
+                    dead.setFont(new Font("Monospaced", Font.PLAIN, 10));
+                    trackerPanel.add(dead);
+                    continue;
+                }
+                JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+                row.setBackground(new Color(15, 20, 30));
+                row.setMaximumSize(new Dimension(260, 20));
+
+                JButton nameBtn = new JButton(c.name + " " + c.lastName);
+                nameBtn.setFont(new Font("Monospaced", Font.BOLD, 10));
+                nameBtn.setForeground(c.player == 1 ? gold : fg);
+                nameBtn.setBackground(new Color(20, 30, 40));
+                nameBtn.setBorderPainted(false);
+                nameBtn.setFocusPainted(false);
+                nameBtn.setMargin(new Insets(0, 2, 0, 2));
+                final Character tracked = c;
+                nameBtn.addActionListener(e -> showCharacterDialog(tracked));
+
+                JLabel info = new JLabel(" Lv." + c.lvl + " Age" + c.age
+                        + " [" + (c.location != null ? c.location.x + "," + c.location.y : "?") + "]");
+                info.setForeground(dim);
+                info.setFont(new Font("Monospaced", Font.PLAIN, 10));
+
+                final int idx = i;
+                JButton removeBtn = new JButton("×");
+                removeBtn.setFont(new Font("Monospaced", Font.BOLD, 10));
+                removeBtn.setForeground(red);
+                removeBtn.setBackground(new Color(30, 20, 20));
+                removeBtn.setBorderPainted(false);
+                removeBtn.setFocusPainted(false);
+                removeBtn.setMargin(new Insets(0, 2, 0, 2));
+                removeBtn.addActionListener(e -> {
+                    Map.trackedCharacters.remove(idx);
+                    updateTracker();
+                });
+
+                row.add(nameBtn);
+                row.add(info);
+                row.add(removeBtn);
+                trackerPanel.add(row);
+            }
+        }
+        trackerPanel.revalidate();
+        trackerPanel.repaint();
+    }
+
+    /** Shows a detailed character dialog with Track and Control buttons. */
+    private void showCharacterDialog(Character c) {
+        JDialog dialog = new JDialog(this, c.name + " " + c.lastName, false);
+        dialog.setBackground(new Color(15, 15, 25));
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBackground(new Color(20, 20, 35));
+        panel.setBorder(new EmptyBorder(10, 14, 10, 14));
+
+        Color gold   = new Color(255, 210, 80);
+        Color fg     = new Color(220, 210, 180);
+        Color dim    = new Color(140, 130, 110);
+        Color cyan   = new Color(80, 210, 210);
+        Color purple = new Color(190, 130, 255);
+
+        Runnable addLbl = null; // placeholder — use helper inline
+        java.util.function.BiConsumer<String, Color> dlgLabel = (text, color) -> {
+            JLabel lbl = new JLabel(text);
+            lbl.setForeground(color);
+            lbl.setFont(new Font("Monospaced", Font.PLAIN, 11));
+            lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+            panel.add(lbl);
+        };
+
+        dlgLabel.accept(c.name + " " + c.lastName + (c.repTitle != null ? " '" + c.repTitle + "'" : ""), gold);
+        dlgLabel.accept("Realm: Major " + c.majorLvl + "  Minor " + c.minorLvl + "  Lv." + c.lvl, fg);
+        dlgLabel.accept("Cultivation: " + (int)c.cultivation + " / " + (int)c.cultivationBaseMax, dim);
+        dlgLabel.accept("Age: " + c.age + " / " + c.maxAge + "  Potential: " + c.potential, fg);
+        dlgLabel.accept("Trait: " + c.getTrait() + "  Affiliation: " + c.affiliation + "  Gender: " + c.gender, fg);
+        dlgLabel.accept("Profession Lv." + c.professionLvl, dim);
+        dlgLabel.accept("Wealth: " + c.ss + " SS  " + c.sc + " SC  " + c.dc + " DC", fg);
+        dlgLabel.accept("Weapon: " + (c.equippedWeapon != null ? c.equippedWeapon.toString() : "None"), fg);
+        dlgLabel.accept("Armor:  " + (c.equippedClothing != null ? c.equippedClothing.toString() : "None"), fg);
+        dlgLabel.accept("Kills: " + c.kills + "  Items crafted: " + c.itemsCrafted, dim);
+        if (c.sect != null) dlgLabel.accept("Sect: " + c.sect.name + " [" + c.sect.getRank(c) + "]", purple);
+        if (c.spouse != null) dlgLabel.accept("Spouse: " + c.spouse.name + " " + c.spouse.lastName, new Color(255, 160, 200));
+        dlgLabel.accept("Location: " + (c.location != null ? c.location.name + " [" + c.location.x + "," + c.location.y + "]" : "?"), dim);
+        dlgLabel.accept("ID: " + c.id + "  Player: " + c.player, dim);
+
+        panel.add(Box.createVerticalStrut(8));
+
+        JPanel btnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        btnRow.setBackground(new Color(20, 20, 35));
+        btnRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JButton trackBtn = makeBtn(Map.trackedCharacters.contains(c.id) ? "✓ Tracked" : "Track", () -> {
+            if (!Map.trackedCharacters.contains(c.id)) Map.trackedCharacters.add(c.id);
+            updateTracker();
+            dialog.dispose();
+        });
+
+        JButton controlBtn = makeBtn("Control", () -> {
+            // Set this NPC as the player; demote previous player to follow mode
+            for (Character pc : Map.characters) {
+                if (pc != null && pc.player == 1 && pc != c) pc.player = 2;
+            }
+            c.player = 1;
+            System.out.println("[GUI] Player now controls: " + c.name + " " + c.lastName);
+            dialog.dispose();
+        });
+        controlBtn.setForeground(new Color(255, 220, 80));
+
+        JButton closeBtn = makeBtn("Close", dialog::dispose);
+
+        btnRow.add(trackBtn);
+        btnRow.add(controlBtn);
+        btnRow.add(closeBtn);
+        panel.add(btnRow);
+
+        JScrollPane scroll = new JScrollPane(panel);
+        scroll.getViewport().setBackground(new Color(20, 20, 35));
+        scroll.setBorder(null);
+        dialog.add(scroll);
+        dialog.setSize(340, 380);
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 
     private void updateInfo(Area area) {
@@ -216,7 +452,6 @@ public class MapViewer extends JFrame {
 
         String[] SEASON_NAMES = {"Spring", "Summer", "Autumn", "Winter"};
         addLabel("Season: " + SEASON_NAMES[GameDriver.currentSeason], dim);
-        // Show player location
         Character pl = findPlayer();
         if (pl != null && pl.location != null)
             addLabel("Player: [" + pl.location.x + "," + pl.location.y + "] Lv." + pl.lvl, new Color(255, 255, 100));
@@ -267,7 +502,7 @@ public class MapViewer extends JFrame {
             addLabel("Bounties: " + area.bounties.size(), area.bounties.isEmpty() ? dim : new Color(255, 140, 60));
             addSep();
 
-            addLabel("Top cultivators:", dim);
+            addLabel("Top cultivators (click to inspect):", dim);
             try {
                 area.characters.stream()
                     .filter(c -> c != null && !c.dead)
@@ -275,10 +510,23 @@ public class MapViewer extends JFrame {
                     .limit(5)
                     .forEach(c -> {
                         String trait = c.getTrait();
-                        Color tc = c.trait == Character.Traits.Monster ? red : fg;
+                        Color tc = c.trait == Character.Traits.Monster ? red : (c.player >= 1 ? gold : fg);
                         String title = c.repTitle != null ? " '" + c.repTitle + "'" : "";
-                        addLabel("  " + c.name + " " + c.lastName + title + " Lv." + c.lvl
-                                + " [" + trait.substring(0, Math.min(4, trait.length())) + "]", tc);
+                        String labelText = "  " + c.name + " " + c.lastName + title + " Lv." + c.lvl
+                                + " [" + trait.substring(0, Math.min(4, trait.length())) + "]";
+                        // Make each cultivator a clickable button
+                        JButton btn = new JButton(labelText);
+                        btn.setFont(new Font("Monospaced", Font.PLAIN, 11));
+                        btn.setForeground(tc);
+                        btn.setBackground(new Color(25, 25, 40));
+                        btn.setBorderPainted(false);
+                        btn.setFocusPainted(false);
+                        btn.setHorizontalAlignment(SwingConstants.LEFT);
+                        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+                        btn.setMaximumSize(new Dimension(260, 18));
+                        btn.setMargin(new Insets(0, 0, 0, 0));
+                        btn.addActionListener(e -> showCharacterDialog(c));
+                        infoPanel.add(btn);
                     });
             } catch (Exception ignored) {}
 
@@ -382,6 +630,19 @@ public class MapViewer extends JFrame {
                         g.setColor(new Color(255, 255, 100));
                         int cx = x * ts + ts / 2, cy = y * ts + ts / 2, r = Math.max(2, ts / 4);
                         g.fillOval(cx - r, cy - r, r * 2, r * 2);
+                    }
+                    // Tracked NPC dots (cyan)
+                    for (int tid : Map.trackedCharacters) {
+                        if (tid < 0 || tid >= Map.characters.size()) continue;
+                        Character tc = Map.characters.get(tid);
+                        if (tc != null && !tc.dead && tc.location != null
+                                && tc.location.x == x && tc.location.y == y
+                                && !(x == playerX && y == playerY)) {
+                            g.setColor(new Color(0, 220, 220));
+                            int cx2 = x * ts + ts / 2, cy2 = y * ts + ts / 2, r2 = Math.max(2, ts / 5);
+                            g.fillOval(cx2 - r2, cy2 - r2, r2 * 2, r2 * 2);
+                            break;
+                        }
                     }
                 }
             }

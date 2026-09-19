@@ -28,6 +28,9 @@ public class Map {
     public static boolean heroAscension = false;     // majorLvl 7
     public static boolean heroPseudoImmortal = false; // majorLvl 9
 
+    // Player-pinned NPC IDs shown in the tracker panel
+    public static ArrayList<Integer> trackedCharacters = new ArrayList<>();
+
     public Map(){
         tiles[range / 2][range / 2] = new Area(); // Starting Point of the World
     }

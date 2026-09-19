@@ -62,6 +62,8 @@ public class Character {
     boolean isGhostForm = false;
     String originalName = null; // chain of prior names for Ghost rebirths
     int bloodlineBonus = 0;
+    boolean needsReincarnation = false; // set when a player character dies; resolved by GameDriver
+    Character reincarnationKiller = null; // the killer, if any, for the reincarnation menu
     String repTitle = null;
     int exhaustionPenalty = 0;
     int autoX = -1;
@@ -799,6 +801,7 @@ public class Character {
             return;
         }
         dead = true;
+        if (player >= 1 && trait != Traits.Ghost) needsReincarnation = true;
         if (majorLvl >= 7) {
             String legend = name + " " + lastName;
             if (!legacyTitles.contains(legend)) { legacyTitles.add(legend); legacyLvls.add(lvl); }
@@ -878,8 +881,9 @@ public class Character {
             return;
         }
         dead = true;
-        if (changeMc && player == 1) {
-            killer.player = 1;
+        if (player >= 1 && trait != Traits.Ghost) {
+            needsReincarnation = true;
+            reincarnationKiller = killer;
         }
 
         if (trait != Traits.Beast && trait != Traits.Monster) {
