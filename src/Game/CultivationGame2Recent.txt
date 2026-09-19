@@ -118,3 +118,21 @@ Make AI logic for shopping and buying
 Make quest for shopping and buying
 Test
 Change leadership so that it's a 20% of making a city and 80% of making a sect. Then have the profession skill do related tasks for leader or city
+--- Design Decisions (2026-09-19) ---
+Technique rarity tiers: RESOLVED as implicit. Technique potential (1-100) already encodes
+rarity — a technique with potential 80 is naturally rare since few characters can generate
+one. No separate Rare/Legendary tier system needed; the potential value IS the rarity signal.
+Actual rarity emerges from the world: high-potential techniques require high-potential
+crafters (Innovative trait), and are gatekept behind sectPoints in sect libraries.
+
+Event system cases 0/3/4 (PvP battle, Forage, Mine): REMOVED from event(). Aggression is
+now exclusively quest-driven (Battle Dislike/Rival/Arch-Enemy/Revenge from changeRelationship
+and dead()). Forage/Mine are exclusive profession spot quests, not random events. Event
+weights redistributed: beast 7-15%, interact 30-40%, profession 35-40%, loot 13-20%.
+
+Sect mission delivery: requires physical return to sect location. Character collects materials
+via Forage/Mine spot quests; on reaching threshold, "Deliver Materials" target quest fires
+to sect.location; treasury updated on arrival. Simple two-phase pattern.
+
+City taxation: 1% of city population as yearly ss income to cityOwner. Scales with city
+growth; complements shop revenue and tribute income.

@@ -1,5 +1,12 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (3)
+- Added: Sect mission delivery — Forage/Mine completion now checks location; if at sect, transfers materials to treasury immediately; if away, queues "Deliver Materials" target quest to return and deliver; materials actually leave character's bag on delivery (`Character.java:spotQuests()`, `targetQuests()`, `questViable()`)
+- Added: City taxation — cityOwner collects `population / 100` ss per year in GameDriver's yearly tick (`GameDriver.java`)
+- Changed: `eventChoosing()` — removed dead cases 0/3/4 (PvP/Forage/Mine); redistributed weights: beast 7–15%, interact 30–40%, profession 35–40%, loot 13–20%; cleaned up default-case debug print (`Character.java`)
+- Changed: `event()` switch — removed empty cases 0, 3, 4; only active cases 1/2/5/6 remain (`Character.java`)
+- Design: Technique rarity tiers noted as implicit in `CultivationGame2Recent.txt` — potential value (1–100) encodes rarity; sect library gating provides the access barrier
+
 ## 2026-09-19 (2)
 - Added: "Return to Sect" quest — sect non-masters drift back to sect location (5%/turn when away); queued in dynamic triggers; awards 2 sectPoints on arrival; viability check cancels if sect dissolved (`Character.java:quest()`, `questViable()`, `targetQuests()`)
 - Added: NPC buy cultivation pills — when at a city with pills for the next major realm, NPCs purchase one (10% chance/turn); price paid to cityOwner; economy circulation (`Character.java:quest()`)

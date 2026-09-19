@@ -83,7 +83,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Profession exp + level cap at 100
 - ✅ `professionPicker()` dispatch — fall-throughs fixed (Friendly/Tailor breaks added)
 - ✅ Merchant profession — Shop.java; sets up shops, restocks local pool, equips from own stock; city-to-city arbitrage: buys cargo at 30% → carries to demand city → sells at 100% via "Sell Stock" quest
-- ✅ Library/Technique selling — city libraries sell technique copies for ss (lvl/5 starting mastery); sect libraries gate on sectPoints (lvl/3 starting mastery); Innovative can sell; birth inheritance lvl/4; Gift Technique lvl/2; rarity tiers deferred
+- ✅ Library/Technique selling — city libraries sell technique copies for ss (lvl/5 starting mastery); sect libraries gate on sectPoints (lvl/3 starting mastery); Innovative can sell; birth inheritance lvl/4; Gift Technique lvl/2; rarity tiers implicit via technique potential value (1–100)
 - ✅ Pre-req check — Forage/Mine queued from `professionPicker()` when materials missing (Alchemist, Blacksmith, Tailor, Scribe branches)
 - ✅ Crafting level cap — items capped at `(majorLvl + 1) * 10` capped at 100 max; crafter can make 1 realm above their cultivation
 - ✅ Selling excess items — Go Sell quest at backpack > 20; `sell()` transfers surplus to city pool
@@ -129,9 +129,9 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Event probability by affiliation (`eventChoosing()`)
 - ✅ Beast autonomous movement + attacking characters in tile
 - ✅ `event()` case 1 fall-through fixed — `break` added after beast battle
-- 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
-- 🟡 **Sect NPC decision engine** — Join Sect, Recruit Member, Sect Raid, Propose Alliance, Demand Tribute, Recruit Defector, Donate to Sect, Buy from Sect, Promote Disciples, Return to Sect implemented; treasury system with sectLvl advancement; squabble→war escalation; sect ranks; succession crisis; resource disputes; assigned mission quests deferred
-- ✅ **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; all NPCs buy gear via buyGear() and cultivation pills inline; arbitrage via Restock Trip + Sell Stock; `findBestRestockCity()` and `findBestSellCity()` scorers; cityOwner receives all shop revenue
+- ✅ `event()` dead cases removed — PvP (case 0) removed (aggression is quest-driven); Forage/Mine (cases 3/4) removed (now profession spot quests); event weights redistributed
+- ✅ **Sect NPC decision engine** — Join Sect, Recruit Member, Sect Raid, Propose Alliance, Demand Tribute, Recruit Defector, Donate to Sect, Buy from Sect, Promote Disciples, Return to Sect, Deliver Materials (mission delivery) all implemented; treasury system with sectLvl advancement; squabble→war escalation; sect ranks; succession crisis; resource disputes
+- ✅ **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; all NPCs buy gear via buyGear() and cultivation pills inline; arbitrage via Restock Trip + Sell Stock; cityOwner receives shop revenue + 1%/yr city population tax
 - ✅ Higher-level characters avoiding weaker targets — affiliation guards in `battleCheck()` prevent unprovoked attacks (Good won't attack non-Evil unless arch-enemy; Neutral unless rival); `bullyCheck()` replaces combat with intimidation/theft when 15+ level advantage; arch-enemy fights regardless of level (correct behavior)
 - ✅ Affiliation-based aggression rules — Good won't attack non-Evil unless arch-enemy; Neutral won't attack non-Evil unless rival or worse
 - ✅ Bully personality type — Evil characters with 15+ level advantage queue "Battle Dislike" vs weaker co-located characters (10%/turn)

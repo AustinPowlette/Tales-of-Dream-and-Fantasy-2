@@ -136,6 +136,13 @@ public class GameDriver {
                 for (Organization s : sectList) {
                     s.postMissionsYearly();
                 }
+                // City taxation: owners collect 1% of population as yearly ss income
+                for (Area area : createdAreas) {
+                    if (area.city && area.cityOwner != null && !area.cityOwner.dead) {
+                        area.cityOwner.ss += area.population / 100;
+                        area.cityOwner.convertCurrency();
+                    }
+                }
                 //scan.nextLine();
             }
             // Tournament timer countdown and resolution (every tick)

@@ -1436,6 +1436,9 @@ public class Character {
                 if ("Return to Sect".equals(quest.name)) {
                     return (sect != null && quest.targetArea != null && quest.targetArea == sect.location) ? 1 : 0;
                 }
+                if ("Deliver Materials".equals(quest.name)) {
+                    return (sect != null && sectMission != null && quest.targetArea != null && quest.targetArea == sect.location) ? 1 : 0;
+                }
                 return 1;
 
         }
@@ -1476,12 +1479,24 @@ public class Character {
                     String[] mp = sectMission.split("\\|");
                     if (mp.length >= 4 && "Forage".equals(mp[0]) && "Herb".equals(mp[1])) {
                         int missionLv = Integer.parseInt(mp[2]);
+                        int missionQty = Integer.parseInt(mp[3]);
                         boolean hasEnough = materialBag.stream().anyMatch(m ->
-                            m.itemType == Item.ItemType.Herb && m.lvl >= missionLv && m.quantity >= Integer.parseInt(mp[3]));
+                            m.itemType == Item.ItemType.Herb && m.lvl >= missionLv && m.quantity >= missionQty);
                         if (hasEnough && sect != null) {
-                            sectPoints += sectMissionBonus;
-                            if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
-                            sectMission = null; sectMissionBonus = 0;
+                            if (location == sect.location) {
+                                String itemName = "Herb Lvl: " + missionLv;
+                                int removed = removeItems(materialBag, itemName, missionQty);
+                                if (removed > 0) {
+                                    boolean merged = false;
+                                    for (Item t : sect.treasury) { if (t.name.equals(itemName)) { t.quantity += removed; merged = true; break; } }
+                                    if (!merged) sect.treasury.add(new Item(Item.ItemType.Herb, missionLv, removed));
+                                }
+                                sectPoints += sectMissionBonus;
+                                if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
+                                sectMission = null; sectMissionBonus = 0;
+                            } else if (targetQuests.stream().noneMatch(q -> "Deliver Materials".equals(q.name))) {
+                                targetQuests.add(new Quest("Deliver Materials", false, 65, 3, 80, sect.location));
+                            }
                         }
                     }
                 }
@@ -1495,12 +1510,24 @@ public class Character {
                     String[] mp = sectMission.split("\\|");
                     if (mp.length >= 4 && "Mine".equals(mp[0]) && "Metal".equals(mp[1])) {
                         int missionLv = Integer.parseInt(mp[2]);
+                        int missionQty = Integer.parseInt(mp[3]);
                         boolean hasEnough = materialBag.stream().anyMatch(m ->
-                            m.itemType == Item.ItemType.Metal && m.lvl >= missionLv && m.quantity >= Integer.parseInt(mp[3]));
+                            m.itemType == Item.ItemType.Metal && m.lvl >= missionLv && m.quantity >= missionQty);
                         if (hasEnough && sect != null) {
-                            sectPoints += sectMissionBonus;
-                            if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
-                            sectMission = null; sectMissionBonus = 0;
+                            if (location == sect.location) {
+                                String itemName = "Metal Lvl: " + missionLv;
+                                int removed = removeItems(materialBag, itemName, missionQty);
+                                if (removed > 0) {
+                                    boolean merged = false;
+                                    for (Item t : sect.treasury) { if (t.name.equals(itemName)) { t.quantity += removed; merged = true; break; } }
+                                    if (!merged) sect.treasury.add(new Item(Item.ItemType.Metal, missionLv, removed));
+                                }
+                                sectPoints += sectMissionBonus;
+                                if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
+                                sectMission = null; sectMissionBonus = 0;
+                            } else if (targetQuests.stream().noneMatch(q -> "Deliver Materials".equals(q.name))) {
+                                targetQuests.add(new Quest("Deliver Materials", false, 65, 3, 80, sect.location));
+                            }
                         }
                     }
                 }
@@ -1857,6 +1884,28 @@ public class Character {
             case "Return to Sect":
                 if (sect != null) sectPoints += 2;
                 return 1;
+            case "Deliver Materials": {
+                if (sect != null && sectMission != null) {
+                    String[] mp = sectMission.split("\\|");
+                    if (mp.length >= 4) {
+                        int mLv = Integer.parseInt(mp[2]);
+                        int mQty = Integer.parseInt(mp[3]);
+                        boolean isHerb = "Herb".equals(mp[1]);
+                        Item.ItemType mType = isHerb ? Item.ItemType.Herb : Item.ItemType.Metal;
+                        String itemName = (isHerb ? "Herb Lvl: " : "Metal Lvl: ") + mLv;
+                        int removed = removeItems(materialBag, itemName, mQty);
+                        if (removed > 0) {
+                            boolean merged = false;
+                            for (Item t : sect.treasury) { if (t.name.equals(itemName)) { t.quantity += removed; merged = true; break; } }
+                            if (!merged) sect.treasury.add(new Item(mType, mLv, removed));
+                            sectPoints += sectMissionBonus;
+                            if (player > 0 && skipping <= 0) System.out.println("Materials delivered to sect! +" + sectMissionBonus + " SP");
+                        }
+                        sectMission = null; sectMissionBonus = 0;
+                    }
+                }
+                return 1;
+            }
             case "Restock Trip": {
                 if (location.city && location.cityOwner != null) {
                     boolean hasShopHere = ownedShops.stream().anyMatch(s -> s.location == location);
@@ -2120,11 +2169,6 @@ public class Character {
         Character target = location.characters.get(rand.nextInt(location.characters.size()));
         int result = -2;
         switch (eventChoosing()) {
-            //Battle A Player
-            case 0:
-                //battleCheck(target); // Remove this
-                break;
-            // Battle a Random Beast
             case 1:
                 beastBattleCheck();
                 result = 2;
@@ -2133,20 +2177,10 @@ public class Character {
                 interact(target);
                 result = 2;
                 break;
-            //Forage
-            case 3:
-                //forage(); // Remove this
-                break;
-            // Mine
-            case 4:
-                //mine(); // Remove this
-                break;
-            // Professions
             case 5:
                 professionPicker();
                 result = 2;
                 break;
-            // Loot Dead
             case 6:
                 eventLootDead();
                 result = 2;
@@ -2290,59 +2324,27 @@ public class Character {
         }
     }
     public int eventChoosing()  {
-        int eventNum = rand.nextInt(10000); // Change back to 10000
+        // Returns: 1=beast battle, 2=interact, 5=profession, 6=loot dead
+        // Evil: slightly more beast fighting; Good/Neutral: balanced
+        int eventNum = rand.nextInt(10000);
         switch (affiliationNum) {
-            case -1:
-                if (eventNum < 125) {
-                    return 0;
-                } else if (eventNum < 1000) {
-                    return 1;
-                } else if (eventNum < 4000) {
-                    return 2;
-                } else if (eventNum < 6000){
-                    return 3;
-                } else if (eventNum < 8000) {
-                    return 4;
-                } else if (eventNum < 9000) {
-                    return 5;
-                } else {
-                    return 6;
-                }
-            case 0:
-                if (eventNum < 50) {
-                    return 0;
-                } else if (eventNum < 1000) {
-                    return 1;
-                } else if (eventNum < 4000) {
-                    return 2;
-                } else if (eventNum < 6000){
-                    return 3;
-                } else if (eventNum < 8000) {
-                    return 4;
-                } else if (eventNum < 9000) {
-                    return 5;
-                } else {
-                    return 6;
-                }
-            case 1:
-                if (eventNum < 125) {
-                    return 0;
-                } else if (eventNum < 1000) {
-                    return 1;
-                } else if (eventNum < 4000) {
-                    return 2;
-                } else if (eventNum < 6000){
-                    return 3;
-                } else if (eventNum < 8000) {
-                    return 4;
-                } else if (eventNum < 9000) {
-                    return 5;
-                } else {
-                    return 6;
-                }
+            case -1: // Evil
+                if (eventNum < 1500) return 1;       // 15% beast battle
+                else if (eventNum < 4500) return 2;  // 30% interact
+                else if (eventNum < 8000) return 5;  // 35% profession
+                else return 6;                        // 20% loot dead
+            case 0:  // Neutral
+                if (eventNum < 1000) return 1;        // 10% beast battle
+                else if (eventNum < 4500) return 2;   // 35% interact
+                else if (eventNum < 8500) return 5;   // 40% profession
+                else return 6;                         // 15% loot dead
+            case 1:  // Good
+                if (eventNum < 700) return 1;          // 7% beast battle
+                else if (eventNum < 4700) return 2;    // 40% interact
+                else if (eventNum < 8700) return 5;    // 40% profession
+                else return 6;                          // 13% loot dead
             default:
-                System.out.println("We got a problem in the event choosing method!!!");
-                return 1; // Change this to
+                return 5;
         }
     }
     public void forage(){
