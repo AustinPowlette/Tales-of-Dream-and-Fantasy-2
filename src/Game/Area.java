@@ -36,6 +36,7 @@ public class Area {
     int metalMaterials;
     int celestialTrialTimer = 0;
     Technique heavenlyTechnique = null;
+    boolean spiritualVein = false;
 
     ArrayList<Shop> shops = new ArrayList<>();
     ArrayList<Quest> bounties = new ArrayList<>();
@@ -258,14 +259,17 @@ public class Area {
         monsters = rand.nextInt((startingPopulation * 10) - startingPopulation + 1) + startingPopulation;
         herbMaterials = rand.nextInt((startingPopulation * 10000) - startingPopulation + 1) + startingPopulation;
         metalMaterials = rand.nextInt((startingPopulation * 1000) - startingPopulation + 1) + startingPopulation;
+        if (rand.nextInt(100) == 0) spiritualVein = true;
         createdAreas.add(this);
     }
 
     public void age() {
-        monsters *= 1.01;
-        herbMaterials *= 1.01;
-        metalMaterials *= 1.01;
-        population *= 1.01;
+        double herbMult = (currentSeason == 1) ? 1.03 : (currentSeason == 3) ? 0.98 : 1.01;
+        double monsterMult = (currentSeason == 3) ? 0.995 : 1.01;
+        monsters = (int)(monsters * monsterMult);
+        herbMaterials = (int)(herbMaterials * herbMult);
+        metalMaterials = (int)(metalMaterials * 1.01);
+        population = (int)(population * 1.01);
         if (population > 0 && rand.nextInt(10) == 0) {
             Character temp = new Character(this);
             if (rand.nextInt(2) == 0 && sect != null) {

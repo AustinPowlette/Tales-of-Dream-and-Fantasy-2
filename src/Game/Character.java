@@ -61,6 +61,8 @@ public class Character {
     int sectMissionBonus = 0;
     boolean isGhostForm = false;
     String originalName = null; // chain of prior names for Ghost rebirths
+    int bloodlineBonus = 0;
+    String repTitle = null;
     int exhaustionPenalty = 0;
     int autoX = -1;
     int autoY = -1;
@@ -300,6 +302,9 @@ public class Character {
             }
             cultivation = (Math.pow(potential, 2) * Math.sqrt(lvl) / (52. * Math.sqrt(potential)));
         }
+        // Bloodline bonus: each parent at Soul Wandering+ (majorLvl >= 3) grants +1 bonus cultivate/tick
+        if (mother.majorLvl >= 3) bloodlineBonus++;
+        if (father != null && father.majorLvl >= 3) bloodlineBonus++;
 
         //Caution Setter
         {
@@ -4183,11 +4188,32 @@ public class Character {
                 return "Error in trait";
         }
     }
+    public void updateRepTitle() {
+        if (majorLvl >= 10)  { repTitle = "True Immortal"; return; }
+        if (kills >= 500)    { repTitle = "God Slayer"; return; }
+        if (majorLvl >= 9)   { repTitle = "Pseudo Immortal Venerable"; return; }
+        if (kills >= 100)    { repTitle = gender.equals("Female") ? "Demoness Butcher" : "Demon Butcher"; return; }
+        if (majorLvl >= 7)   { repTitle = "Ascension Expert"; return; }
+        if (kills >= 50)     { repTitle = gender.equals("Female") ? "Slaughter Maiden" : "Slaughter King"; return; }
+        if (professionLvl >= 100 && trait != null) {
+            switch (trait) {
+                case Alchemist:  repTitle = gender.equals("Female") ? "Pill Queen" : "Pill King"; return;
+                case Blacksmith: repTitle = gender.equals("Female") ? "Forge Lady" : "Forge Saint"; return;
+                case Tailor:     repTitle = "Robe Saint"; return;
+                case Scribe:     repTitle = "Array Sage"; return;
+                case Innovative: repTitle = "Technique Ancestor"; return;
+                case Merchant:   repTitle = gender.equals("Female") ? "Trade Queen" : "Trade King"; return;
+                default: break;
+            }
+        }
+    }
+
     public String toString() {
         if (dead && age > maxAge) {
             return (name + " " + lastName + " with potential: " + potential + " and cultivation: " + cultivation + " and major level: " + majorLvl +  " and minor level: " + minorLvl + " and inhibitor: " + inhibitor);
         }
-        return (name + " " + lastName);
+        String title = (repTitle != null ? " '" + repTitle + "'" : "");
+        return (name + " " + lastName + title);
     }
 
     public int placeholder() {

@@ -1,5 +1,17 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (Batch 19)
+- Added: Seasons — `currentSeason` static int (0=Spring…3=Winter), updated every 13 weeks; `Area.age()` applies seasonal herb/monster growth multipliers; season change printed (`GameDriver.java`, `Area.java`)
+- Added: Spiritual Veins — `Area.spiritualVein` bool (1% spawn chance); occupants get +1 cultivate/tick; teal tile color in MapViewer (`Area.java`, `GameDriver.java`, `MapViewer.java`)
+- Added: Bloodline Bonus — `Character.bloodlineBonus` (birth constructor; +1 per parent at majorLvl≥3); extra cultivate/tick per point (`Character.java`, `GameDriver.java`)
+- Added: Heaven Calamities — 10% per year: Spiritual Storm (area level surge), Plague (city -30% pop), Heaven Fire (clear arrays or cull beasts) (`GameDriver.java`)
+- Added: Reputation Titles — `Character.repTitle` field; `updateRepTitle()` sets titles based on kills/majorLvl/professionLvl; shown in `toString()` as `'Title'`; updated yearly (`Character.java`)
+- Added: Auction House — cities with population≥500 auction top 3 items yearly to richest known bidder; proceeds to city owner (`GameDriver.java`)
+- Added: Sect Territory Bonus — yearly: if sect members occupy 3+ distinct tiles within 5 of sect, `territoryBonus=1`; added to cultivation loop bonus (`Organization.java`, `GameDriver.java`)
+- Added: Interactive GUI — `LinkedBlockingQueue<String> guiInputQueue`; `readInput()`/`readInt()` helpers replace `scan.next()`/`scan.nextInt()` in player loop; `TeeStream` captures System.out to `eventLog` (`GameDriver.java`)
+- Added: MapViewer interactive controls — movement pad (N/S/E/W/Wait), action buttons (Stats/Locs/Rels/Options), Move-to-Tile buttons (click map or info panel), event log panel; player dot on map; dynamic tile scaling (`Map.range`-aware); Celestial Trial cyan + Spiritual Vein teal colors; season/title/territory shown in info (`MapViewer.java`)
+- Changed: Thread.sleep 10s→500ms when guiEnabled (`GameDriver.java`)
+
 ## 2026-09-19 (Batch 18)
 - Confirmed: Forbidden Technique (feature 9) already implemented — `forbiddenCheck()` boosts tempLvl by √potential, costs maxAge, was already wired into winCheck(); no change needed
 - Added: Breakthrough Tribulation — fires at majorLvl 3/5/7/9 in `cultivate()`; pass chance = potential - (majorLvl-3)*5, clamped 10-90%; fail pushes back one realm + inhibitor; exceptional pass has 10% chance +1 potential (`Character.java:cultivate()`)

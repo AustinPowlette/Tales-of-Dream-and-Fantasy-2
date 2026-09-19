@@ -37,6 +37,7 @@ public class Organization {
 
     // Non-cultivating population under sect protection; grows 1%/year, taxed to master
     long sectPopulation = 1000;
+    int territoryBonus = 0; // computed yearly: +1 when members occupy 3+ distinct tiles near sect
 
     public Organization(Character founder) {
         this.founder = founder;

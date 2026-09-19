@@ -2,7 +2,10 @@ package Game;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.File;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.Lock;
 import javax.swing.SwingUtilities;
 import static Game.Map.*;
@@ -16,11 +19,40 @@ public class GameDriver {
     public static int UID = 0;
     static boolean guiEnabled = false;
     static MapViewer mapViewer = null;
+    static LinkedBlockingQueue<String> guiInputQueue = new LinkedBlockingQueue<>();
+    static List<String> eventLog = Collections.synchronizedList(new ArrayList<>());
+    static int currentSeason = 0; // 0=Spring 1=Summer 2=Autumn 3=Winter
     //public static int iUID = 0;
+
+    static String readInput() {
+        if (guiEnabled) {
+            try { return guiInputQueue.take(); } catch (InterruptedException e) { return "x"; }
+        }
+        return scan.next();
+    }
+    static int readInt() {
+        if (guiEnabled) {
+            try { return Integer.parseInt(guiInputQueue.take().trim()); } catch (Exception e) { return 0; }
+        }
+        return scan.nextInt();
+    }
+    static void logEvent(String s) {
+        if (s == null) return;
+        eventLog.add(s);
+        while (eventLog.size() > 30) eventLog.remove(0);
+    }
+
+    // Intercepts System.out to also populate the GUI event log
+    private static class TeeStream extends PrintStream {
+        TeeStream(PrintStream wrapped) { super(wrapped, true); }
+        @Override public void println(String s) { super.println(s); logEvent(s); }
+        @Override public void println(Object o) { super.println(o); logEvent(o == null ? "null" : o.toString()); }
+    }
 
 
     public static void main(String[] args) throws InterruptedException, IOException {
         //tiles[range / 2][range / 2] = new Area(); // Starting Point of the World
+        System.setOut(new TeeStream(System.out));
         Map map = new Map(); // Starting Point of the World
         //Character[] characters = new Character[startingPopulation];
         int time = 0; // In Weeks
@@ -104,6 +136,13 @@ public class GameDriver {
 
 
         while (true) {
+            // Season update (Spring/Summer/Autumn/Winter change every 13 weeks)
+            int newSeason = (time % 52) / 13;
+            if (newSeason != currentSeason) {
+                currentSeason = newSeason;
+                String[] SEASON_NAMES = {"Spring", "Summer", "Autumn", "Winter"};
+                System.out.println("=== " + SEASON_NAMES[currentSeason] + " begins ===");
+            }
             //System.out.println("It's day: " + (time/24 + 1));
             if ((time) % 52 == 0) {
                 System.out.println("It's year: " + (((time / 52)) + 1) + " Population: " + population + " " + monstersList);
@@ -223,6 +262,85 @@ public class GameDriver {
                         System.out.println("Heaven's Will descends! A heavenly technique has appeared at " + htArea.name + " [" + htArea.x + "," + htArea.y + "]!");
                     }
                 }
+                // Heaven Calamities (10% chance per year — storm, plague, or heaven fire)
+                if (rand.nextInt(10) == 0 && !createdAreas.isEmpty()) {
+                    switch (rand.nextInt(3)) {
+                        case 0: { // Spiritual Storm — random area level surge
+                            Area stormArea = createdAreas.get(rand.nextInt(createdAreas.size()));
+                            stormArea.baseLvl = stormArea.lvl;
+                            stormArea.lvl += rand.nextInt(20) + 10;
+                            stormArea.hotspot = true;
+                            hotspotAreas.add(stormArea);
+                            System.out.println("A spiritual storm ravages " + stormArea.name + "! Level surges to " + stormArea.lvl + "!");
+                            break;
+                        }
+                        case 1: { // Plague — random city loses 30% population
+                            Area plagueArea = null;
+                            for (Area _a : createdAreas) { if (_a.city && _a.population > 100 && _a != tiles[range/2][range/2]) { plagueArea = _a; break; } }
+                            if (plagueArea != null) {
+                                int lost = plagueArea.population / 3;
+                                plagueArea.population -= lost;
+                                System.out.println("A terrible plague strikes " + plagueArea.name + "! -" + lost + " population.");
+                            }
+                            break;
+                        }
+                        case 2: { // Heaven Fire — destroys arrays or culls beasts
+                            Area fireArea = createdAreas.get(rand.nextInt(createdAreas.size()));
+                            if (fireArea.arrayBag != null && !fireArea.arrayBag.isEmpty()) {
+                                int destroyed = fireArea.arrayBag.size();
+                                fireArea.arrayBag.clear();
+                                System.out.println("Heaven fire descends on " + fireArea.name + "! " + destroyed + " array(s) destroyed!");
+                            } else {
+                                fireArea.monsters = (int)(fireArea.monsters * 0.7);
+                                System.out.println("Heaven fire scorches " + fireArea.name + "! Beasts are culled.");
+                            }
+                            break;
+                        }
+                    }
+                }
+                // Auction House: cities with population >= 500 hold yearly auctions
+                for (Area _aArea : new ArrayList<>(createdAreas)) {
+                    if (!_aArea.city || _aArea.population < 500 || _aArea.backpack == null || _aArea.backpack.isEmpty()) continue;
+                    _aArea.backpack.sort((a, b) -> Integer.compare(b.lvl, a.lvl));
+                    int auctionCount = Math.min(3, _aArea.backpack.size());
+                    for (int _ac = 0; _ac < auctionCount; _ac++) {
+                        if (_aArea.backpack.isEmpty()) break;
+                        Item aItem = _aArea.backpack.get(0);
+                        long basePrice = (long)(Math.pow(aItem.lvl, 2.5) * 1000);
+                        Character buyer = null;
+                        long maxBid = basePrice;
+                        for (Character _cc : characters) {
+                            if (_cc == null || _cc.dead || !_cc.born) continue;
+                            if (!_cc.knownLocations.contains(_aArea)) continue;
+                            long wealth = _cc.ss + _cc.sc * 1000000L;
+                            if (wealth > maxBid) { maxBid = wealth; buyer = _cc; }
+                        }
+                        if (buyer != null) {
+                            long payment = Math.min(buyer.ss, maxBid);
+                            buyer.ss -= payment;
+                            buyer.backpack.add(aItem);
+                            buyer.equip();
+                            _aArea.backpack.remove(0);
+                            if (_aArea.cityOwner != null) _aArea.cityOwner.ss += payment;
+                            System.out.println("Auction at " + _aArea.name + ": " + buyer.name + " " + buyer.lastName + " wins " + aItem + " for " + payment + " SS!");
+                        }
+                    }
+                }
+                // Sect territory bonus: members spread across 3+ distinct tiles near sect location
+                for (Organization _s : sectList) {
+                    if (_s.location == null || _s.members == null) { _s.territoryBonus = 0; continue; }
+                    java.util.Set<Area> controlled = new java.util.HashSet<>();
+                    for (Character _m : _s.members) {
+                        if (_m == null || _m.dead || _m.location == null) continue;
+                        int dist = Math.abs(_m.location.x - _s.location.x) + Math.abs(_m.location.y - _s.location.y);
+                        if (dist <= 5) controlled.add(_m.location);
+                    }
+                    _s.territoryBonus = controlled.size() >= 3 ? 1 : 0;
+                }
+                // Update reputation titles for all living characters once per year
+                for (Character _cc : characters) {
+                    if (_cc != null && !_cc.dead && _cc.born) _cc.updateRepTitle();
+                }
                 //scan.nextLine();
             }
             // Tournament timer countdown and resolution (every tick)
@@ -250,10 +368,18 @@ public class GameDriver {
                     if (character.born) {
                         character.cultivate();
                         if (character.sect != null && character.sect.founder.lvl > character.lvl) {
-                            int bonus = Math.max(character.sect.founder.majorLvl, character.sect.sectLvl() / 10);
+                            int bonus = Math.max(character.sect.founder.majorLvl, character.sect.sectLvl() / 10) + character.sect.territoryBonus;
                             for (int i = 0; i < bonus; i++) {
                                 character.cultivate();
                             }
+                        }
+                        // Spiritual vein bonus (+1 cultivate/tick while occupying a vein tile)
+                        if (character.location != null && character.location.spiritualVein) {
+                            character.cultivate();
+                        }
+                        // Bloodline bonus (inherited from high-realm parents)
+                        for (int _bl = 0; _bl < character.bloodlineBonus; _bl++) {
+                            character.cultivate();
                         }
                     }
                 }
@@ -276,7 +402,7 @@ public class GameDriver {
                                 System.out.println("" + character.spouse + character.spouse.location);
                             }
 
-                            switch (scan.next().charAt(0)) {
+                            switch (readInput().charAt(0)) {
                                 case 'w':
                                     character.movement('w');
                                     break;
@@ -340,27 +466,27 @@ public class GameDriver {
                                     System.out.println("  w/a/s/d — Move in direction N turns");
                                     System.out.println("  c — Move toward coordinate N turns");
                                     System.out.println("  m — Random movement N turns");
-                                    char moveOpt = scan.next().charAt(0);
+                                    char moveOpt = readInput().charAt(0);
                                     switch (moveOpt) {
                                         case 'x':
                                             character.movement = 'x';
                                             System.out.println("How many turns?");
-                                            character.skipping = scan.nextInt() - 1;
+                                            character.skipping = readInt() - 1;
                                             character.movement('x');
                                             break;
                                         case 'w': case 'a': case 's': case 'd':
                                             character.movement = moveOpt;
                                             System.out.println("How many turns?");
-                                            character.skipping = scan.nextInt() - 1;
+                                            character.skipping = readInt() - 1;
                                             character.movement(moveOpt);
                                             break;
                                         case 'c':
                                             System.out.println("Target tile X Y (0-" + (Map.range-1) + ", e.g. '15 15'):");
-                                            character.autoX = scan.nextInt();
-                                            character.autoY = scan.nextInt();
+                                            character.autoX = readInt();
+                                            character.autoY = readInt();
                                             character.movement = 'c';
                                             System.out.println("How many turns?");
-                                            character.skipping = scan.nextInt() - 1;
+                                            character.skipping = readInt() - 1;
                                             // first step toward coord
                                             int dx0 = character.autoX - character.location.x;
                                             int dy0 = character.autoY - character.location.y;
@@ -371,7 +497,7 @@ public class GameDriver {
                                         case 'm':
                                             character.movement = 'm';
                                             System.out.println("How many turns?");
-                                            character.skipping = scan.nextInt() - 1;
+                                            character.skipping = readInt() - 1;
                                             character.movement();
                                             break;
                                         default:
@@ -468,7 +594,7 @@ public class GameDriver {
             tempCharacters.clear();
             remCharacters.clear();
             if (guiEnabled && mapViewer != null) mapViewer.refresh();
-            Thread.sleep(10000);
+            Thread.sleep(guiEnabled ? 500 : 10000);
         }
     }
 }
