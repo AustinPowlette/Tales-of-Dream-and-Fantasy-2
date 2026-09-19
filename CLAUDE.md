@@ -16,9 +16,7 @@ All three previously-blocked systems are now implemented. The simulation runs a 
 - **Sect/Organization AI** — complete. Sect missions (Forage/Mine + Deliver Materials two-phase). Promotions (Outer→Inner→Elder). Tournaments. Politics (war/alliance/tribute/defection/succession). Return to Sect drift. Sect cultivation bonus.
 
 ## Known Bugs (Active)
-1. **`Monster` trait unassigned** — Enum entry exists but is never set in any constructor. Only `Beast` is used for creature characters.
-
-(Bugs 1–4 from prior tracking — Item off-by-one, Quest.targetArea stale, null-slot NPE, toString True Immortal — all resolved as of 2026-09-19.)
+None as of 2026-09-19. (Items 1–4 — herb/metal off-by-one, Quest.targetArea stale, null-slot NPE, toString True Immortal — all resolved.)
 
 ## Design Notes
 - **Arrays** protect area features (Shops, Dungeons/Tombs, Sects, Cities). Attackers must break the array AND defeat any defending cultivators to take the area. Arrays give defenders a temporary level boost during the fight. Multiple arrays can be installed in one area but they do not buff each other — only the array being broken at that moment matters.
@@ -32,9 +30,8 @@ All three previously-blocked systems are now implemented. The simulation runs a 
 
 ## Priorities for Next Development
 
-### Remaining
-- **`Monster` trait unassigned** — enum entry unused; low priority
-- No other known blocking bugs as of 2026-09-19
+### Unimplemented features
+- **Monster NPC awakening** — `Traits.Monster` is the planned upgrade for a Beast that kills a cultivator: it gains a proper name, trait flips from Beast → Monster, and begins behaving like an NPC (movement, quests, relationships). Not yet implemented; the `Monster` enum entry is reserved for this path.
 
 ## Coding Conventions (this codebase)
 - Java, package `Game`. Static imports from `GameDriver`, `Map`, `Dictionary`.

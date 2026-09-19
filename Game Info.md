@@ -105,7 +105,7 @@ GameDriver.main()
 | Friendly | 1 in 100,000 | Social interaction profession |
 | Tailor | 1 in 100,000 | Clothing crafting |
 | Runner | 1 in 100,000 | Guaranteed flee if opponent is ≤10 levels higher |
-| Monster | Enum entry | Not assigned in any constructor |
+| Monster | Beast → kill → awaken | Planned upgrade from Beast: after killing a cultivator, Beast trait flips to Monster; gains NPC-like behavior (movement, quests, relationships). Not yet implemented. |
 | Beast | Beast constructor | Combat-only NPC, no inventory/quests |
 
 ---
@@ -382,9 +382,10 @@ GameDriver.main()
 ## Known Bugs & Issues
 
 ### Active
-1. **`Monster` trait unassigned** — The `Monster` enum entry exists but is never set in any constructor. Only `Beast` is used for creature characters.
+None as of 2026-09-19.
 
-(Bugs 1–4 from prior tracking — Item off-by-one, Quest.targetArea stale, null-slot NPE, toString True Immortal — all resolved as of 2026-09-19.)
+### Unimplemented Feature Note
+- **Monster NPC awakening** — `Traits.Monster` is reserved for Beasts that kill a cultivator and awaken into NPC-like entities (movement, quests, relationships). The trait and enum entry exist; the awakening trigger in `winCheck()` is not yet implemented.
 
 ### Design Notes
 - `movementTechnique2` / `martialTechnique2` secondary slots are temporary holders used during `equip()` to merge a newly-learned technique into the primary slot. They are nulled after processing; they do not need to be included in `tempLvlCheck()` separately since `equip()` is always called first.

@@ -152,3 +152,9 @@ is reactive and per-corpse, not a permanent state change.
 
 True Immortal rebirth: moved from toString() side-effect to proper dead(killer) early-return
 guard. Rebirth resets dead=false, time=0, age=0; killer still gets kill credit.
+
+Monster NPC awakening (not yet implemented): Traits.Beast is the starting trait for all
+beast spawns. Traits.Monster is the upgrade when a Beast kills a cultivator — it should
+gain a proper NPC name, flip trait to Monster, and begin using the normal NPC AI (movement,
+quests, relationships). The enum entry is reserved; trigger belongs in winCheck() after
+loser.dead(this) when this.trait == Traits.Beast.
