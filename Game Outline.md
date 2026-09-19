@@ -16,7 +16,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Area aging (+1%/tick on all resources)
 - ✅ NPC auto-spawning from populated areas
 - ✅ Hotspot generation — yearly: 3-5 random non-city areas get +10 to +30 level spike; reset at next year start
-- ❌ Difficulty scaling further from Originis (area level currently = explorer's level)
+- ✅ Difficulty scaling — new areas spawn at `currentCharacter.lvl`; explorers naturally push into harder territory as they grow; Originis fixed at level 1
 - ✅ Dungeon types — LOST_RUINS (treasure+technique), BEAST_LAIR (3× beasts), MARTIAL_TRIAL (technique upgrade), HAUNTED_GROUNDS (potential gain); 5% spawn chance per area
 
 ### Character Creation
@@ -44,8 +44,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Lifespan bonuses per breakthrough
 - ✅ Sect cultivation bonus (sect founder's majorLvl extra ticks)
 - ✅ Pill consumption (`consume()`) for both Cultivation and Potential pills
-- ❌ Rebirth mechanic for killed original NPCs (new family lines)
-- 🟡 Potential increase events — HAUNTED_GROUNDS dungeon gives rare potential gain; pills via Seek Potential quest; random decrease events not yet implemented
+- ✅ New NPC family lines — `Area.age()` spawns new characters from city populations each tick; world naturally repopulates without a separate rebirth system
+- 🟡 Potential increase events — HAUNTED_GROUNDS dungeon gives rare potential gain; pills via Seek Potential quest; decrease events intentionally deferred
 
 ### Combat
 - ✅ `battle()` full resolution
@@ -132,7 +132,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - 🟡 `event()` case 0 (PvP battle) is commented out (intentionally obsolete once quest system handles aggression)
 - 🟡 **Sect NPC decision engine** — Join Sect (canJoin() criteria), Recruit Member, Sect Raid, Propose Alliance, Demand Tribute, Recruit Defector Donate to Sect, Buy from Sect implemented; treasury system with sectLvl advancement; squabble→war escalation; sect ranks; succession crisis; resource disputes; internal rank promotion, assigned mission quests deferred
 - 🟡 **Economy/Merchant decision engine** — Merchant sets up shops, restocks from city pool; NPC buy decision (buyGear) for unequipped characters; arbitrage travel via Restock Trip quest (combines pool-size scan, own-shop bonus, circuit distance); full NPC buy/sell trees deferred
-- ❌ Higher-level characters avoiding weaker targets (design doc note)
+- ✅ Higher-level characters avoiding weaker targets — affiliation guards in `battleCheck()` prevent unprovoked attacks (Good won't attack non-Evil unless arch-enemy; Neutral unless rival); `bullyCheck()` replaces combat with intimidation/theft when 15+ level advantage; arch-enemy fights regardless of level (correct behavior)
 - ✅ Affiliation-based aggression rules — Good won't attack non-Evil unless arch-enemy; Neutral won't attack non-Evil unless rival or worse
 - ✅ Bully personality type — Evil characters with 15+ level advantage queue "Battle Dislike" vs weaker co-located characters (10%/turn)
 
@@ -149,7 +149,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Go Sell quest — triggers at backpack.size() > 20; Area quest to nearest known city; calls sell() on arrival
 - ✅ Currency tiers added — `sc`, `dc`, `ij` fields; `convertCurrency()` rolls up at 1M:1 per tier
 - ✅ **Shop class** — `Shop.java`; per-merchant; buyRate=0.55, sellRate=1.50, cityBuyRate=0.30; `buyFromSeller()`, `sellToBuyer()`, `restockFromCity()`
-- 🟡 **Merchant trait** — sets up shops in cities, restocks from city pool; arbitrage travel and NPC buy decision tree deferred
+- ✅ NPC buy decision — all characters check gear-missing/outdated in `quest()` each tick; `buyGear()` fires immediately in city with shops; otherwise queues "Buy Gear" travel quest
+- 🟡 **Merchant trait** — sets up shops, restocks from city pool, self-equips from stock; full city-to-city arbitrage travel deferred
 - ✅ Potential pill selling restriction — sell() only adds Potential pills to sell list when potential >= 100
 - 🟡 **Item pricing** — overflow fixed (capped at Long.MAX_VALUE for lvl > 92); multi-currency canAfford/deductSs fixed; formula still placeholder pending economy pass
 - ✅ City tax routing — `cityOwner` set by `cityLeadership()`; `Area.age()` pays `cityOwner.ss += population` each tick; sect population also taxed via `Organization.growPopulation()`
@@ -184,11 +185,11 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `durabilityCheck()` / `durabilityCheckUtil()` — equipment breaking
 - ✅ Item stackability (Herb, Metal, Pill, Blood stackable; Weapon, Clothing, Array not)
 - ✅ `equip()` technique duplication fixed — `!techniqueList.contains()` guard prevents duplicate adds
-- 🟡 `transferAllItems()` doesn't merge Weapons/Arrays by name (only merges Herbs, Metals, Pills by name)
+- ✅ `transferAllItems()` — Weapons/Arrays are unique non-stackable items; they transfer individually by design; Herbs/Metals/Pills stack by name as expected
 - ✅ Random name generation for weapons, clothing, arrays — word lists in Dictionary.java; Item constructors use random adjective+type combos
 - ✅ Kill counter — `kills` field; shown on 'i' stat screen
-- ❌ Item counter tracking (crafted/looted totals)
-- ❌ Method for removing specific quantity of stackable items from inventory
+- ✅ Item counter — `itemsCrafted` field; incremented on each successful craft (alchemy, smithing, tailoring, array, technique); shown on 'i' stat screen
+- ✅ `removeItems(bag, name, qty)` — static helper; finds item by name in any bag, deducts quantity, removes entry if quantity hits zero; returns amount actually removed
 
 ---
 

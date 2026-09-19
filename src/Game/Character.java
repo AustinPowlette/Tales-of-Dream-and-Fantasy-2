@@ -55,6 +55,7 @@ public class Character {
     int lvl = 1;
     int tempLvl = lvl;
     int kills = 0;
+    int itemsCrafted = 0;
     int sectPoints = 0;
     String sectMission = null;
     int sectMissionBonus = 0;
@@ -2342,6 +2343,7 @@ public class Character {
                 if (!hasItem) {
                     pillBag.add(pill);
                 }
+                itemsCrafted++;
                 //Leveling up your alchemy skill
                 if (professionLvl < 100) {
                     professionExp += pill.lvl * 10 * pill.quantity;
@@ -2649,6 +2651,7 @@ public class Character {
 
         if (weapon != null) {
             backpack.add(weapon);
+            itemsCrafted++;
 
             //Leveling up your profession skill
             if (professionLvl < 100) {
@@ -2698,6 +2701,7 @@ public class Character {
 
         if (clothing != null) {
             backpack.add(clothing);
+            itemsCrafted++;
 
             //Leveling up your profession skill
             if (professionLvl < 100) {
@@ -2744,6 +2748,7 @@ public class Character {
 
         if (array != null) {
             arrayBag.add(array);
+            itemsCrafted++;
 
             //Leveling up your profession skill
             if (professionLvl < 100) {
@@ -2987,6 +2992,7 @@ public class Character {
                 break;
         }
         equip();
+        if (technique != null) itemsCrafted++;
 
         //Leveling up your profession skill
         if (professionLvl < 100) {
@@ -3166,6 +3172,20 @@ public class Character {
         //System.out.println(this + " | " + movementTechnique + " | " + movementTechnique2 + " | " + techniqueList);
 
     }
+    /** Remove up to `qty` of a named stackable item from a bag. Returns the amount actually removed. */
+    public static int removeItems(ArrayList<Item> bag, String name, int qty) {
+        for (int i = 0; i < bag.size(); i++) {
+            Item item = bag.get(i);
+            if (item.name.equals(name)) {
+                int removed = Math.min(item.quantity, qty);
+                item.quantity -= removed;
+                if (item.quantity <= 0) bag.remove(i);
+                return removed;
+            }
+        }
+        return 0;
+    }
+
     public void transferAllItems(Character receiver) {
         // Transfers losers items to the receiver
         for (Item item : backpack) {

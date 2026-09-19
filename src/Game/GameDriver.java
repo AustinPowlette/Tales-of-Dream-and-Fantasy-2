@@ -205,7 +205,7 @@ public class GameDriver {
                                     System.out.println("Weapon: " + (character.equippedWeapon != null ? character.equippedWeapon : "None"));
                                     System.out.println("Armor:  " + (character.equippedClothing != null ? character.equippedClothing : "None"));
                                     System.out.println("Martial Technique: " + character.martialTechnique + "  Movement Technique: " + character.movementTechnique);
-                                    System.out.println("Kills: " + character.kills + "  Sect Points: " + character.sectPoints);
+                                    System.out.println("Kills: " + character.kills + "  Items Crafted: " + character.itemsCrafted + "  Sect Points: " + character.sectPoints);
                                     if (character.sect != null) System.out.println("Sect: " + character.sect + " [" + character.sect.getRank(character) + "]  Sect Lvl: " + character.sect.sectLvl() + "  Treasury: " + character.sect.treasury.size() + " items");
                                     character.movement('x');
                                     break;
