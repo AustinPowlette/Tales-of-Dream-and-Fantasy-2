@@ -1,5 +1,11 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-20 (GUI Polish — Larger Fonts, Resizable Panels, 0ms Speed, Running Indicator)
+- Increased: All GUI fonts bumped again — 14pt body, 15pt labels/dialogs (was 12–13pt)
+- Changed: Layout restructured with JSplitPane — vertical split between main content and event log (draggable divider, default 72% to log); horizontal split between map and right column; vertical split between Tile Info and NPC Tracker panels
+- Added: "0ms" tick speed button (maximum simulation speed)
+- Added: Status label in speed bar shows "▶ Simulation running — no input needed" (green) or "⏸ PAUSED" (orange), updating every 300ms
+
 ## 2026-09-20 (GUI Fixes — Scalability, Movement, Reincarnation, Calamity Grace)
 - Fixed: GUI window opens at 85% of screen size instead of fixed 800×650; map tiles scale dynamically with panel size; ComponentListener triggers repaint on resize (`MapViewer.java`)
 - Fixed: `pathfinder()` now returns early when `player >= 1 && skipping <= 0`, preventing quest auto-navigation from overwriting human player's manual movement (`Character.java:pathfinder`)

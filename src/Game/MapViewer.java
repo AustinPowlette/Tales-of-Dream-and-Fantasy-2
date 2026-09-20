@@ -41,12 +41,11 @@ public class MapViewer extends JFrame {
         infoPanel.setBorder(new EmptyBorder(8, 8, 8, 8));
 
         JScrollPane infoScroll = new JScrollPane(infoPanel);
-        infoScroll.setPreferredSize(new Dimension(260, 200));
         infoScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         infoScroll.getViewport().setBackground(new Color(20, 20, 35));
         infoScroll.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createLineBorder(new Color(50, 50, 80)),
-                "Tile Info", 0, 0, new Font("Monospaced", Font.BOLD, 12), new Color(100, 120, 200)));
+                "Tile Info", 0, 0, new Font("Monospaced", Font.BOLD, 14), new Color(100, 120, 200)));
 
         // NPC tracker panel
         trackerPanel = new JPanel();
@@ -55,20 +54,18 @@ public class MapViewer extends JFrame {
         trackerPanel.setBorder(new EmptyBorder(4, 8, 4, 8));
 
         JScrollPane trackerScroll = new JScrollPane(trackerPanel);
-        trackerScroll.setPreferredSize(new Dimension(260, 130));
         trackerScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         trackerScroll.getViewport().setBackground(new Color(15, 20, 30));
         trackerScroll.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createLineBorder(new Color(40, 80, 60)),
-                "NPC Tracker", 0, 0, new Font("Monospaced", Font.BOLD, 12), new Color(80, 180, 100)));
+                "NPC Tracker", 0, 0, new Font("Monospaced", Font.BOLD, 14), new Color(80, 180, 100)));
 
-        // Stacked info + tracker
-        JPanel infoStack = new JPanel();
-        infoStack.setLayout(new BoxLayout(infoStack, BoxLayout.Y_AXIS));
-        infoStack.setBackground(new Color(20, 20, 35));
-        infoStack.add(infoScroll);
-        infoStack.add(Box.createVerticalStrut(3));
-        infoStack.add(trackerScroll);
+        // Info + tracker: vertically resizable split
+        JSplitPane infoTrackerSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, infoScroll, trackerScroll);
+        infoTrackerSplit.setResizeWeight(0.6);
+        infoTrackerSplit.setContinuousLayout(true);
+        infoTrackerSplit.setDividerSize(5);
+        infoTrackerSplit.setBackground(new Color(20, 20, 35));
 
         JPanel buttonPanel = buildButtonPanel();
         JPanel legend = buildLegend();
@@ -80,7 +77,8 @@ public class MapViewer extends JFrame {
 
         JPanel right = new JPanel(new BorderLayout(0, 4));
         right.setBackground(new Color(20, 20, 35));
-        right.add(infoStack, BorderLayout.CENTER);
+        right.setPreferredSize(new Dimension(300, 0));
+        right.add(infoTrackerSplit, BorderLayout.CENTER);
         right.add(rightBottom, BorderLayout.SOUTH);
 
         // Event log (tabbed: Events + World History)
@@ -88,7 +86,7 @@ public class MapViewer extends JFrame {
         logArea.setEditable(false);
         logArea.setBackground(new Color(12, 12, 22));
         logArea.setForeground(new Color(160, 200, 140));
-        logArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        logArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
         logArea.setLineWrap(true);
         logArea.setWrapStyleWord(true);
         JScrollPane logScroll = new JScrollPane(logArea);
@@ -98,7 +96,7 @@ public class MapViewer extends JFrame {
         historyArea.setEditable(false);
         historyArea.setBackground(new Color(12, 18, 12));
         historyArea.setForeground(new Color(200, 220, 160));
-        historyArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        historyArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
         historyArea.setLineWrap(true);
         historyArea.setWrapStyleWord(true);
         JScrollPane historyScroll = new JScrollPane(historyArea);
@@ -107,19 +105,28 @@ public class MapViewer extends JFrame {
         JTabbedPane logTabs = new JTabbedPane(JTabbedPane.BOTTOM);
         logTabs.setBackground(new Color(15, 15, 25));
         logTabs.setForeground(new Color(180, 180, 140));
-        logTabs.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        logTabs.setFont(new Font("Monospaced", Font.PLAIN, 14));
         logTabs.addTab("Events", logScroll);
         logTabs.addTab("World History", historyScroll);
-        logTabs.setPreferredSize(new Dimension(0, 120));
 
         // Speed controls panel (top)
         JPanel speedPanel = buildSpeedPanel();
 
+        // Horizontal split: map | right panel
+        JSplitPane horizSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, mapScroll, right);
+        horizSplit.setResizeWeight(1.0);
+        horizSplit.setContinuousLayout(true);
+        horizSplit.setDividerSize(5);
+
+        // Vertical split: main content | event log
+        JSplitPane vertSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, horizSplit, logTabs);
+        vertSplit.setResizeWeight(0.72);
+        vertSplit.setContinuousLayout(true);
+        vertSplit.setDividerSize(6);
+
         setLayout(new BorderLayout(4, 4));
         add(speedPanel, BorderLayout.NORTH);
-        add(mapScroll, BorderLayout.CENTER);
-        add(right, BorderLayout.EAST);
-        add(logTabs, BorderLayout.SOUTH);
+        add(vertSplit, BorderLayout.CENTER);
 
         mapPanel.addMouseListener(new MouseAdapter() {
             @Override
@@ -171,7 +178,7 @@ public class MapViewer extends JFrame {
         JButton btn = new JButton(label);
         btn.setBackground(new Color(35, 35, 55));
         btn.setForeground(new Color(200, 190, 160));
-        btn.setFont(new Font("Monospaced", Font.BOLD, 12));
+        btn.setFont(new Font("Monospaced", Font.BOLD, 14));
         btn.setFocusPainted(false);
         btn.setMargin(new Insets(2, 4, 2, 4));
         btn.addActionListener(e -> action.run());
@@ -185,7 +192,7 @@ public class MapViewer extends JFrame {
 
         JLabel lbl = new JLabel("Speed:");
         lbl.setForeground(new Color(160, 160, 200));
-        lbl.setFont(new Font("Monospaced", Font.BOLD, 13));
+        lbl.setFont(new Font("Monospaced", Font.BOLD, 15));
         p.add(lbl);
 
         JButton pauseBtn = makeBtn("⏸ Pause", () -> {
@@ -194,19 +201,25 @@ public class MapViewer extends JFrame {
         pauseBtn.setForeground(new Color(255, 180, 80));
         p.add(pauseBtn);
 
+        p.add(makeBtn("0ms",  () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 0; }));
         p.add(makeBtn("0.1s", () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 100; }));
         p.add(makeBtn("0.5s", () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 500; }));
         p.add(makeBtn("2s",   () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 2000; }));
         p.add(makeBtn("10s",  () -> { GameDriver.paused = false; GameDriver.tickDelayMs = 10000; }));
 
         JLabel statusLbl = new JLabel("  ");
-        statusLbl.setForeground(new Color(120, 200, 120));
-        statusLbl.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        statusLbl.setFont(new Font("Monospaced", Font.BOLD, 14));
         p.add(statusLbl);
 
         // Update status label in a timer
         new javax.swing.Timer(300, e2 -> {
-            statusLbl.setText(GameDriver.paused ? "PAUSED" : (GameDriver.tickDelayMs + "ms/tick"));
+            if (GameDriver.paused) {
+                statusLbl.setForeground(new Color(255, 180, 60));
+                statusLbl.setText("  ⏸ PAUSED");
+            } else {
+                statusLbl.setForeground(new Color(80, 220, 80));
+                statusLbl.setText("  ▶ Simulation running — no input needed");
+            }
         }).start();
 
         return p;
@@ -320,7 +333,7 @@ public class MapViewer extends JFrame {
         if (Map.trackedCharacters.isEmpty()) {
             JLabel empty = new JLabel("(none tracked — click a cultivator name to track)");
             empty.setForeground(dim);
-            empty.setFont(new Font("Monospaced", Font.ITALIC, 12));
+            empty.setFont(new Font("Monospaced", Font.ITALIC, 14));
             trackerPanel.add(empty);
         } else {
             for (int i = 0; i < Map.trackedCharacters.size(); i++) {
@@ -330,7 +343,7 @@ public class MapViewer extends JFrame {
                 if (c == null || c.dead) {
                     JLabel dead = new JLabel("† ID:" + cid + " (deceased)");
                     dead.setForeground(dim);
-                    dead.setFont(new Font("Monospaced", Font.PLAIN, 12));
+                    dead.setFont(new Font("Monospaced", Font.PLAIN, 14));
                     trackerPanel.add(dead);
                     continue;
                 }
@@ -339,7 +352,7 @@ public class MapViewer extends JFrame {
                 row.setMaximumSize(new Dimension(260, 20));
 
                 JButton nameBtn = new JButton(c.name + " " + c.lastName);
-                nameBtn.setFont(new Font("Monospaced", Font.BOLD, 12));
+                nameBtn.setFont(new Font("Monospaced", Font.BOLD, 14));
                 nameBtn.setForeground(c.player == 1 ? gold : fg);
                 nameBtn.setBackground(new Color(20, 30, 40));
                 nameBtn.setBorderPainted(false);
@@ -351,11 +364,11 @@ public class MapViewer extends JFrame {
                 JLabel info = new JLabel(" Lv." + c.lvl + " Age" + c.age
                         + " [" + (c.location != null ? c.location.x + "," + c.location.y : "?") + "]");
                 info.setForeground(dim);
-                info.setFont(new Font("Monospaced", Font.PLAIN, 12));
+                info.setFont(new Font("Monospaced", Font.PLAIN, 14));
 
                 final int removeCid = cid;
                 JButton removeBtn = new JButton("×");
-                removeBtn.setFont(new Font("Monospaced", Font.BOLD, 12));
+                removeBtn.setFont(new Font("Monospaced", Font.BOLD, 14));
                 removeBtn.setForeground(red);
                 removeBtn.setBackground(new Color(30, 20, 20));
                 removeBtn.setBorderPainted(false);
@@ -396,7 +409,7 @@ public class MapViewer extends JFrame {
         java.util.function.BiConsumer<String, Color> dlgLabel = (text, color) -> {
             JLabel lbl = new JLabel(text);
             lbl.setForeground(color);
-            lbl.setFont(new Font("Monospaced", Font.PLAIN, 13));
+            lbl.setFont(new Font("Monospaced", Font.PLAIN, 15));
             lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
             panel.add(lbl);
         };
@@ -530,7 +543,7 @@ public class MapViewer extends JFrame {
                                 + " [" + trait.substring(0, Math.min(4, trait.length())) + "]";
                         // Make each cultivator a clickable button
                         JButton btn = new JButton(labelText);
-                        btn.setFont(new Font("Monospaced", Font.PLAIN, 13));
+                        btn.setFont(new Font("Monospaced", Font.PLAIN, 15));
                         btn.setForeground(tc);
                         btn.setBackground(new Color(25, 25, 40));
                         btn.setBorderPainted(false);
@@ -587,10 +600,10 @@ public class MapViewer extends JFrame {
         r.setBackground(new Color(20, 20, 35));
         JLabel dot = new JLabel("■");
         dot.setForeground(swatch);
-        dot.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        dot.setFont(new Font("Monospaced", Font.PLAIN, 14));
         JLabel txt = new JLabel(label);
         txt.setForeground(new Color(155, 150, 135));
-        txt.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        txt.setFont(new Font("Monospaced", Font.PLAIN, 14));
         r.add(dot); r.add(txt);
         p.add(r);
     }
@@ -598,7 +611,7 @@ public class MapViewer extends JFrame {
     private void addLabel(String text, Color color) {
         JLabel lbl = new JLabel(text);
         lbl.setForeground(color);
-        lbl.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        lbl.setFont(new Font("Monospaced", Font.PLAIN, 15));
         lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
         infoPanel.add(lbl);
     }
