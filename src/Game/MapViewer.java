@@ -339,7 +339,7 @@ public class MapViewer extends JFrame {
                 info.setForeground(dim);
                 info.setFont(new Font("Monospaced", Font.PLAIN, 10));
 
-                final int idx = i;
+                final int removeCid = cid;
                 JButton removeBtn = new JButton("×");
                 removeBtn.setFont(new Font("Monospaced", Font.BOLD, 10));
                 removeBtn.setForeground(red);
@@ -348,7 +348,7 @@ public class MapViewer extends JFrame {
                 removeBtn.setFocusPainted(false);
                 removeBtn.setMargin(new Insets(0, 2, 0, 2));
                 removeBtn.addActionListener(e -> {
-                    Map.trackedCharacters.remove(idx);
+                    Map.trackedCharacters.remove(Integer.valueOf(removeCid));
                     updateTracker();
                 });
 
