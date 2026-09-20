@@ -1,5 +1,12 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-20 (Multithreading — Parallel Cultivate + Spatial NPC Batching)
+- Added: `Map.tickPool` (`ForkJoinPool`, all cores), `Map.tileLock`, `volatile` hero flags, synchronized `addTemp/addRem/addMonster/addCreatedArea/addLegacy` helpers (`Map.java`)
+- Changed: `Area.characters` is now `List<Character>` backed by `CopyOnWriteArrayList` for thread-safe parallel iteration; `readObject()` migrates old saves; both `createdAreas.add(this)` calls replaced with `addCreatedArea(this)` (`Area.java`)
+- Changed: All `remCharacters.add/tempCharacters.add/monstersList.add/legacyTitles.add` calls in dead paths replaced with synchronized Map helpers; hero flag announcements use double-checked locking on `Map.class`; `ensureTile()` helper with double-checked locking on `Map.tileLock` replaces 8 inline tile-creation sites in `movement(char)` (`Character.java`)
+- Changed: Pass 1 split into serial `time()` loop (using `tickSnap`) then parallel `cultivate()` via `tickPool.submit(() -> tickSnap.parallelStream()...)` (`GameDriver.java`)
+- Changed: Pass 2 split into serial player-I/O phase (Phase 2A) and parallel NPC-by-area phase (Phase 2B) — NPCs grouped by tile into `byArea` map then processed via `parallelStream()` (`GameDriver.java`)
+
 ## 2026-09-20 (GUI Polish — Larger Fonts, Resizable Panels, 0ms Speed, Running Indicator)
 - Increased: All GUI fonts bumped again — 14pt body, 15pt labels/dialogs (was 12–13pt)
 - Changed: Layout restructured with JSplitPane — vertical split between main content and event log (draggable divider, default 72% to log); horizontal split between map and right column; vertical split between Tile Info and NPC Tracker panels

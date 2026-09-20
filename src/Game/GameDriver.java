@@ -732,231 +732,271 @@ public class GameDriver {
                 }
             }
 
-            // Ages and Cultivates Players
-            for (Character character : new ArrayList<>(characters)) {
+            // Pass 1a: age every character — serial (birth writes mother.pregnant, death writes remChars)
+            final java.util.List<Character> tickSnap = new ArrayList<>(characters);
+            for (Character character : tickSnap) {
                 if (character == null || character.dead) continue;
-                if (!character.dead) {
-                    character.time();
-                    if (character.born) {
-                        character.cultivate();
-                        if (character.sect != null && character.sect.founder.lvl > character.lvl) {
-                            int bonus = Math.max(character.sect.founder.majorLvl, character.sect.sectLvl() / 10) + character.sect.territoryBonus;
-                            for (int i = 0; i < bonus; i++) {
+                character.time();
+            }
+
+            // Pass 1b: cultivate — parallel (pure per-character math; hero flags use double-checked sync)
+            try {
+                tickPool.submit(() ->
+                    tickSnap.parallelStream()
+                        .filter(c -> c != null && !c.dead && c.born)
+                        .forEach(character -> {
+                            character.cultivate();
+                            if (character.sect != null && character.sect.founder != null
+                                    && character.sect.founder.lvl > character.lvl) {
+                                int bonus = Math.max(character.sect.founder.majorLvl,
+                                        character.sect.sectLvl() / 10) + character.sect.territoryBonus;
+                                for (int i = 0; i < bonus; i++) character.cultivate();
+                            }
+                            if (character.location != null && character.location.spiritualVein) {
                                 character.cultivate();
                             }
+                            for (int _bl = 0; _bl < character.bloodlineBonus; _bl++) {
+                                character.cultivate();
+                            }
+                        })
+                ).get();
+            } catch (Exception _ex) {
+                System.err.println("[WARN] Parallel cultivate error: " + _ex.getMessage());
+            }
+
+            // Phase 2A: serial — player characters (interactive I/O must stay single-threaded)
+            for (Character character : tickSnap) {
+                if (character == null || character.dead || !character.born) continue;
+                if (character.player < 1) continue;
+                currentCharacter = character;
+                if (character.age >= 8) {
+                    if (character.player == 2) {
+                        character.movement();
+                        System.out.println("[Follow] " + character + character.location);
+                    } else {
+                    if (character.skipping <= 0) {
+                        System.out.println(character.backpack + "\n" + character.materialBag + "\n" + character.pillBag);
+                        if (character.spouse != null) {
+                            System.out.println("" + character.spouse + character.spouse.location);
                         }
-                        // Spiritual vein bonus (+1 cultivate/tick while occupying a vein tile)
-                        if (character.location != null && character.location.spiritualVein) {
-                            character.cultivate();
+
+                        switch (readInput().charAt(0)) {
+                            case 'w':
+                                character.movement('w');
+                                break;
+                            case 'a':
+                                character.movement('a');
+                                break;
+                            case 's':
+                                character.movement('s');
+                                break;
+                            case 'd':
+                                character.movement('d');
+                                break;
+                            case 'i':
+                                System.out.println("=== " + character.name + " " + character.lastName + " ===");
+                                System.out.println("Level: " + character.lvl + "  (Major: " + character.majorLvl + "  Minor: " + character.minorLvl + ")");
+                                System.out.println("Cultivation: " + (int)character.cultivation + " / " + (int)character.cultivationBaseMax);
+                                System.out.println("Potential: " + character.potential + "  Age: " + character.age + " / " + character.maxAge);
+                                System.out.println("Affiliation: " + character.affiliation + "  Trait: " + character.getTrait());
+                                System.out.println("Profession Lvl: " + character.professionLvl);
+                                System.out.println("Wealth: " + character.ss + " SS  " + character.sc + " SC  " + character.dc + " DC  " + character.ij + " IJ");
+                                System.out.println("Weapon: " + (character.equippedWeapon != null ? character.equippedWeapon : "None"));
+                                System.out.println("Armor:  " + (character.equippedClothing != null ? character.equippedClothing : "None"));
+                                System.out.println("Martial Technique: " + character.martialTechnique + "  Movement Technique: " + character.movementTechnique);
+                                System.out.println("Kills: " + character.kills + "  Items Crafted: " + character.itemsCrafted + "  Sect Points: " + character.sectPoints);
+                                if (character.sect != null) System.out.println("Sect: " + character.sect + " [" + character.sect.getRank(character) + "]  Sect Lvl: " + character.sect.sectLvl() + "  Treasury: " + character.sect.treasury.size() + " items");
+                                character.movement('x');
+                                break;
+                            case 'l':
+                                System.out.println("=== Known Locations (" + character.knownLocations.size() + ") ===");
+                                for (Area area : character.knownLocations) {
+                                    if (area != null) {
+                                        String info = area.name + " [" + area.x * 100 + ", " + area.y * 100 + "]";
+                                        if (area.city) info += " (City)";
+                                        if (area.sect != null) info += " [Sect: " + area.sect.name + "]";
+                                        if (area.cityOwner != null) info += " [Owner: " + area.cityOwner.name + "]";
+                                        System.out.println(info);
+                                    }
+                                }
+                                character.movement('x');
+                                break;
+                            case 'r':
+                                System.out.println("=== Relationships ===");
+                                for (Relationship rel : character.relationshipList.relationships) {
+                                    Character friend = characters.get(rel.friendID);
+                                    if (friend != null && !friend.dead) {
+                                        String label = rel.value >= 3 ? "Best Friend" :
+                                                       rel.value == 2 ? "Close Friend" :
+                                                       rel.value == 1 ? "Friend" :
+                                                       rel.value == 0 ? "Acquaintance" :
+                                                       rel.value == -1 ? "Dislike" :
+                                                       rel.value == -2 ? "Rival" : "Arch-Enemy";
+                                        System.out.println(friend.name + " " + friend.lastName + " — " + label + " (" + rel.value + ")");
+                                    }
+                                }
+                                if (character.spouse != null) System.out.println("Spouse: " + character.spouse.name + " " + character.spouse.lastName);
+                                character.movement('x');
+                                break;
+                            case 'q':
+                                System.out.println("=== Quests ===");
+                                if (character.currentQuest != null) System.out.println("Active: " + character.currentQuest);
+                                System.out.println("Target quests (" + character.targetQuests.size() + "):");
+                                for (Quest q : character.targetQuests) System.out.println("  " + q);
+                                System.out.println("Spot quests (" + character.spotQuests.size() + "):");
+                                for (Quest q : character.spotQuests) System.out.println("  " + q);
+                                character.movement('x');
+                                break;
+                            case 'e':
+                                System.out.println("=== Character Editor ===");
+                                editCharacterInteractive(character);
+                                character.movement('x');
+                                break;
+                            case 'z':
+                                handleCheatMenu(character);
+                                character.movement('x');
+                                break;
+                            case 'f':
+                                save();
+                                character.movement('x');
+                                break;
+                            case 'p':
+                                paused = !paused;
+                                System.out.println(paused ? "--- PAUSED --- (press 'p' again to resume)" : "--- RESUMED ---");
+                                character.movement('x');
+                                break;
+                            case 'o':
+                                System.out.println("Auto-move options:");
+                                System.out.println("  x — Wait N turns (quest auto-runs)");
+                                System.out.println("  w/a/s/d — Move in direction N turns");
+                                System.out.println("  c — Move toward coordinate N turns");
+                                System.out.println("  m — Random movement N turns");
+                                char moveOpt = readInput().charAt(0);
+                                switch (moveOpt) {
+                                    case 'x':
+                                        character.movement = 'x';
+                                        System.out.println("How many turns?");
+                                        character.skipping = readInt() - 1;
+                                        character.movement('x');
+                                        break;
+                                    case 'w': case 'a': case 's': case 'd':
+                                        character.movement = moveOpt;
+                                        System.out.println("How many turns?");
+                                        character.skipping = readInt() - 1;
+                                        character.movement(moveOpt);
+                                        break;
+                                    case 'c':
+                                        System.out.println("Target tile X Y (0-" + (Map.range-1) + ", e.g. '15 15'):");
+                                        character.autoX = readInt();
+                                        character.autoY = readInt();
+                                        character.movement = 'c';
+                                        System.out.println("How many turns?");
+                                        character.skipping = readInt() - 1;
+                                        // first step toward coord
+                                        int dx0 = character.autoX - character.location.x;
+                                        int dy0 = character.autoY - character.location.y;
+                                        if (dx0 == 0 && dy0 == 0) { character.autoX = -1; character.autoY = -1; character.movement = 'x'; character.movement('x'); }
+                                        else if (Math.abs(dx0) >= Math.abs(dy0)) character.movement(dx0 > 0 ? 'd' : 'a');
+                                        else character.movement(dy0 > 0 ? 's' : 'w');
+                                        break;
+                                    case 'm':
+                                        character.movement = 'm';
+                                        System.out.println("How many turns?");
+                                        character.skipping = readInt() - 1;
+                                        character.movement();
+                                        break;
+                                    default:
+                                        character.movement('x');
+                                }
+                                break;
+                            default:
+                                character.movement('x');
+                                break;
                         }
-                        // Bloodline bonus (inherited from high-realm parents)
-                        for (int _bl = 0; _bl < character.bloodlineBonus; _bl++) {
-                            character.cultivate();
+                    } else {
+                        character.skipping--;
+                        if (character.movement == 'm') {
+                            character.movement();
+                        } else if (character.movement == 'c' && character.autoX >= 0) {
+                            int dxc = character.autoX - character.location.x;
+                            int dyc = character.autoY - character.location.y;
+                            if (dxc == 0 && dyc == 0) {
+                                character.autoX = -1; character.autoY = -1;
+                                character.movement = 'x';
+                                character.movement('x');
+                            } else if (Math.abs(dxc) >= Math.abs(dyc)) {
+                                character.movement(dxc > 0 ? 'd' : 'a');
+                            } else {
+                                character.movement(dyc > 0 ? 's' : 'w');
+                            }
+                        } else {
+                            character.movement(character.movement);
+                        }
+                    }
+                        if (character.skipping <= 0) {
+                            System.out.println("" + character + character.location);
+                        }
+                    } // end else (non-followMode)
+                    character.quest();
+                } else {
+                    character.quest();
+                }
+                // Mother sync for player characters
+                if (character.gender.equals("Female") && !character.children.isEmpty()) {
+                    for (Character child : character.children) {
+                        if (child.age < 8) {
+                            child.location.characters.remove(child);
+                            child.location = child.mother.location;
+                            if (!child.location.characters.contains(child)) {
+                                child.location.characters.add(child);
+                            }
+                            if (!child.knownLocations.contains(child.location)) {
+                                child.knownLocations.add(child.location);
+                            }
                         }
                     }
                 }
             }
 
-            // Causes Players to Move and Go Through Events
-
-            for (Character character : new ArrayList<>(characters)) {
-                if (character == null) continue;
-                currentCharacter = character;
-                if (!character.dead && character.born) {
-                    if (character.player >= 1 && character.age >= 8) {
-                        if (character.player == 2) {
-                            character.movement();
-                            System.out.println("[Follow] " + character + character.location);
-                        } else {
-                        if (character.skipping <= 0) {
-                            System.out.println(character.backpack + "\n" + character.materialBag + "\n" + character.pillBag);
-                            if (character.spouse != null) {
-                                System.out.println("" + character.spouse + character.spouse.location);
-                            }
-
-                            switch (readInput().charAt(0)) {
-                                case 'w':
-                                    character.movement('w');
-                                    break;
-                                case 'a':
-                                    character.movement('a');
-                                    break;
-                                case 's':
-                                    character.movement('s');
-                                    break;
-                                case 'd':
-                                    character.movement('d');
-                                    break;
-                                case 'i':
-                                    System.out.println("=== " + character.name + " " + character.lastName + " ===");
-                                    System.out.println("Level: " + character.lvl + "  (Major: " + character.majorLvl + "  Minor: " + character.minorLvl + ")");
-                                    System.out.println("Cultivation: " + (int)character.cultivation + " / " + (int)character.cultivationBaseMax);
-                                    System.out.println("Potential: " + character.potential + "  Age: " + character.age + " / " + character.maxAge);
-                                    System.out.println("Affiliation: " + character.affiliation + "  Trait: " + character.getTrait());
-                                    System.out.println("Profession Lvl: " + character.professionLvl);
-                                    System.out.println("Wealth: " + character.ss + " SS  " + character.sc + " SC  " + character.dc + " DC  " + character.ij + " IJ");
-                                    System.out.println("Weapon: " + (character.equippedWeapon != null ? character.equippedWeapon : "None"));
-                                    System.out.println("Armor:  " + (character.equippedClothing != null ? character.equippedClothing : "None"));
-                                    System.out.println("Martial Technique: " + character.martialTechnique + "  Movement Technique: " + character.movementTechnique);
-                                    System.out.println("Kills: " + character.kills + "  Items Crafted: " + character.itemsCrafted + "  Sect Points: " + character.sectPoints);
-                                    if (character.sect != null) System.out.println("Sect: " + character.sect + " [" + character.sect.getRank(character) + "]  Sect Lvl: " + character.sect.sectLvl() + "  Treasury: " + character.sect.treasury.size() + " items");
-                                    character.movement('x');
-                                    break;
-                                case 'l':
-                                    System.out.println("=== Known Locations (" + character.knownLocations.size() + ") ===");
-                                    for (Area area : character.knownLocations) {
-                                        if (area != null) {
-                                            String info = area.name + " [" + area.x * 100 + ", " + area.y * 100 + "]";
-                                            if (area.city) info += " (City)";
-                                            if (area.sect != null) info += " [Sect: " + area.sect.name + "]";
-                                            if (area.cityOwner != null) info += " [Owner: " + area.cityOwner.name + "]";
-                                            System.out.println(info);
-                                        }
-                                    }
-                                    character.movement('x');
-                                    break;
-                                case 'r':
-                                    System.out.println("=== Relationships ===");
-                                    for (Relationship rel : character.relationshipList.relationships) {
-                                        Character friend = characters.get(rel.friendID);
-                                        if (friend != null && !friend.dead) {
-                                            String label = rel.value >= 3 ? "Best Friend" :
-                                                           rel.value == 2 ? "Close Friend" :
-                                                           rel.value == 1 ? "Friend" :
-                                                           rel.value == 0 ? "Acquaintance" :
-                                                           rel.value == -1 ? "Dislike" :
-                                                           rel.value == -2 ? "Rival" : "Arch-Enemy";
-                                            System.out.println(friend.name + " " + friend.lastName + " — " + label + " (" + rel.value + ")");
-                                        }
-                                    }
-                                    if (character.spouse != null) System.out.println("Spouse: " + character.spouse.name + " " + character.spouse.lastName);
-                                    character.movement('x');
-                                    break;
-                                case 'q':
-                                    System.out.println("=== Quests ===");
-                                    if (character.currentQuest != null) System.out.println("Active: " + character.currentQuest);
-                                    System.out.println("Target quests (" + character.targetQuests.size() + "):");
-                                    for (Quest q : character.targetQuests) System.out.println("  " + q);
-                                    System.out.println("Spot quests (" + character.spotQuests.size() + "):");
-                                    for (Quest q : character.spotQuests) System.out.println("  " + q);
-                                    character.movement('x');
-                                    break;
-                                case 'e':
-                                    System.out.println("=== Character Editor ===");
-                                    editCharacterInteractive(character);
-                                    character.movement('x');
-                                    break;
-                                case 'z':
-                                    handleCheatMenu(character);
-                                    character.movement('x');
-                                    break;
-                                case 'f':
-                                    save();
-                                    character.movement('x');
-                                    break;
-                                case 'p':
-                                    paused = !paused;
-                                    System.out.println(paused ? "--- PAUSED --- (press 'p' again to resume)" : "--- RESUMED ---");
-                                    character.movement('x');
-                                    break;
-                                case 'o':
-                                    System.out.println("Auto-move options:");
-                                    System.out.println("  x — Wait N turns (quest auto-runs)");
-                                    System.out.println("  w/a/s/d — Move in direction N turns");
-                                    System.out.println("  c — Move toward coordinate N turns");
-                                    System.out.println("  m — Random movement N turns");
-                                    char moveOpt = readInput().charAt(0);
-                                    switch (moveOpt) {
-                                        case 'x':
-                                            character.movement = 'x';
-                                            System.out.println("How many turns?");
-                                            character.skipping = readInt() - 1;
-                                            character.movement('x');
-                                            break;
-                                        case 'w': case 'a': case 's': case 'd':
-                                            character.movement = moveOpt;
-                                            System.out.println("How many turns?");
-                                            character.skipping = readInt() - 1;
-                                            character.movement(moveOpt);
-                                            break;
-                                        case 'c':
-                                            System.out.println("Target tile X Y (0-" + (Map.range-1) + ", e.g. '15 15'):");
-                                            character.autoX = readInt();
-                                            character.autoY = readInt();
-                                            character.movement = 'c';
-                                            System.out.println("How many turns?");
-                                            character.skipping = readInt() - 1;
-                                            // first step toward coord
-                                            int dx0 = character.autoX - character.location.x;
-                                            int dy0 = character.autoY - character.location.y;
-                                            if (dx0 == 0 && dy0 == 0) { character.autoX = -1; character.autoY = -1; character.movement = 'x'; character.movement('x'); }
-                                            else if (Math.abs(dx0) >= Math.abs(dy0)) character.movement(dx0 > 0 ? 'd' : 'a');
-                                            else character.movement(dy0 > 0 ? 's' : 'w');
-                                            break;
-                                        case 'm':
-                                            character.movement = 'm';
-                                            System.out.println("How many turns?");
-                                            character.skipping = readInt() - 1;
-                                            character.movement();
-                                            break;
-                                        default:
-                                            character.movement('x');
-                                    }
-                                    break;
-                                default:
-                                    character.movement('x');
-                                    break;
-                            }
-                        } else {
-                            character.skipping--;
-                            if (character.movement == 'm') {
-                                character.movement();
-                            } else if (character.movement == 'c' && character.autoX >= 0) {
-                                int dxc = character.autoX - character.location.x;
-                                int dyc = character.autoY - character.location.y;
-                                if (dxc == 0 && dyc == 0) {
-                                    character.autoX = -1; character.autoY = -1;
-                                    character.movement = 'x';
-                                    character.movement('x');
-                                } else if (Math.abs(dxc) >= Math.abs(dyc)) {
-                                    character.movement(dxc > 0 ? 'd' : 'a');
-                                } else {
-                                    character.movement(dyc > 0 ? 's' : 'w');
-                                }
+            // Phase 2B: parallel NPC processing — grouped by tile for spatial locality
+            java.util.Map<Area, java.util.List<Character>> byArea = new java.util.HashMap<>();
+            for (Character character : tickSnap) {
+                if (character == null || character.dead || !character.born || character.player >= 1) continue;
+                Area tile = character.location;
+                if (tile != null) byArea.computeIfAbsent(tile, k -> new java.util.ArrayList<>()).add(character);
+            }
+            try {
+                tickPool.submit(() ->
+                    byArea.entrySet().parallelStream().forEach(entry -> {
+                        for (Character npc : entry.getValue()) {
+                            if (npc.dead) continue;
+                            currentCharacter = npc;
+                            if (npc.age >= 8) {
+                                npc.movement();
+                                npc.quest();
                             } else {
-                                character.movement(character.movement);
+                                npc.quest();
                             }
-                        }
-                            if (character.skipping <= 0) {
-                                System.out.println("" + character + character.location);
-                            }
-                        } // end else (non-followMode)
-                        character.quest();
-                    }
-                    else if (character.age >= 8) {
-                        character.movement();
-                        character.quest();
-                    }
-                    else {
-                        character.quest();
-                    }
-
-                    // For Mothers
-                    if (character.gender.equals("Female") && !character.children.isEmpty()) {
-                        for (Character child : character.children) {
-                            if (child.age < 8) {
-                                child.location.characters.remove(child);
-                                child.location = child.mother.location;
-                                if (!child.location.characters.contains(child)) {
-                                    child.location.characters.add(child);
-                                }
-                                if (!child.knownLocations.contains(child.location)) {
-                                    child.knownLocations.add(child.location);
+                            // Mother sync for NPC mothers
+                            if (npc.gender.equals("Female") && !npc.children.isEmpty()) {
+                                for (Character child : npc.children) {
+                                    if (child.age < 8) {
+                                        child.location.characters.remove(child);
+                                        child.location = child.mother.location;
+                                        if (!child.location.characters.contains(child)) {
+                                            child.location.characters.add(child);
+                                        }
+                                        if (!child.knownLocations.contains(child.location)) {
+                                            child.knownLocations.add(child.location);
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                }
+                    })
+                ).get();
+            } catch (Exception _ex) {
+                System.err.println("[WARN] Parallel NPC phase error: " + _ex.getMessage());
             }
 
             // Handle reincarnation for any player character that died this tick

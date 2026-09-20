@@ -511,60 +511,38 @@ public class Character implements java.io.Serializable {
         }
         movement(move);
     }
+    /** Thread-safe tile creation: double-checked lock prevents two threads creating the same tile. */
+    private Area ensureTile(int x, int y, char dir) {
+        if (tiles[x][y] == null) {
+            synchronized (tileLock) {
+                if (tiles[x][y] == null) tiles[x][y] = new Area(location, dir);
+            }
+        }
+        return tiles[x][y];
+    }
+
     public void movement(char temp) { // a = west, d = east, w = north, s = south
         location.characters.remove(this); // Removes This Character From The Character List of the "Old" Location
         switch (temp) /* Creates New Area and/or Moves This Character*/ {
             case 'd':
-                if (location.x >= range - 1) {
-                    if (tiles[0][location.y] == null) {
-                        tiles[0][location.y] = new Area(location, 'e');
-                    }
-                    location = tiles[0][location.y];
-                    break;
-                }
-                if (tiles[(location.x) + 1][location.y] == null) {
-                    tiles[(location.x) + 1][location.y] = new Area(location, 'e');
-                }
-                location = tiles[(location.x) + 1][location.y];
+                location = (location.x >= range - 1)
+                    ? ensureTile(0, location.y, 'e')
+                    : ensureTile(location.x + 1, location.y, 'e');
                 break;
             case 'a':
-                if (location.x <= 0) {
-                    if (tiles[(range-1)][location.y] == null) {
-                        tiles[(range-1)][location.y] = new Area(location, 'w');
-                    }
-                    location = tiles[(range-1)][location.y];
-                    break;
-                }
-                if (tiles[(location.x) - 1][location.y] == null) {
-                    tiles[(location.x) - 1][location.y] = new Area(location, 'w');
-                }
-                location = tiles[(location.x) - 1][location.y];
+                location = (location.x <= 0)
+                    ? ensureTile(range - 1, location.y, 'w')
+                    : ensureTile(location.x - 1, location.y, 'w');
                 break;
             case 'w':
-                if (location.y >= range - 1) {
-                    if (tiles[(location.x)][0] == null) {
-                        tiles[(location.x)][0] = new Area(location, 'n');
-                    }
-                    location = tiles[(location.x)][0];
-                    break;
-                }
-                if (tiles[(location.x)][(location.y) + 1] == null) {
-                    tiles[(location.x)][(location.y) + 1] = new Area(location, 'n');
-                }
-                location = tiles[(location.x)][(location.y) + 1];
+                location = (location.y >= range - 1)
+                    ? ensureTile(location.x, 0, 'n')
+                    : ensureTile(location.x, location.y + 1, 'n');
                 break;
             case 's':
-                if (location.y <= 0) {
-                    if (tiles[(location.x)][(range-1)] == null) {
-                        tiles[(location.x)][(range-1)] = new Area(location, 's');
-                    }
-                    location = tiles[(location.x)][(range-1)];
-                    break;
-                }
-                if (tiles[(location.x)][(location.y) - 1] == null) {
-                    tiles[(location.x)][(location.y) - 1] = new Area(location, 's');
-                }
-                location = tiles[(location.x)][(location.y) - 1];
+                location = (location.y <= 0)
+                    ? ensureTile(location.x, range - 1, 's')
+                    : ensureTile(location.x, location.y - 1, 's');
                 break;
             default:
                 break;
@@ -767,9 +745,9 @@ public class Character implements java.io.Serializable {
                 }
                 // Hero threshold: first cultivator of any kind to reach each apex realm
                 if (majorLvl == preMajor + 1) {
-                    if (majorLvl == 5 && !heroEnsoulment) { heroEnsoulment = true; System.out.println("[HERO] " + this + " is the first to reach Ensoulment! The heavens take notice."); }
-                    if (majorLvl == 7 && !heroAscension) { heroAscension = true; System.out.println("[HERO] " + this + " is the first to reach Ascension! An era-defining cultivator has emerged."); }
-                    if (majorLvl == 9 && !heroPseudoImmortal) { heroPseudoImmortal = true; System.out.println("[HERO] " + this + " is the first to reach Pseudo Immortal! Immortality approaches."); }
+                    if (majorLvl == 5 && !heroEnsoulment) { synchronized(Map.class) { if (!heroEnsoulment) { heroEnsoulment = true; System.out.println("[HERO] " + this + " is the first to reach Ensoulment! The heavens take notice."); } } }
+                    if (majorLvl == 7 && !heroAscension) { synchronized(Map.class) { if (!heroAscension) { heroAscension = true; System.out.println("[HERO] " + this + " is the first to reach Ascension! An era-defining cultivator has emerged."); } } }
+                    if (majorLvl == 9 && !heroPseudoImmortal) { synchronized(Map.class) { if (!heroPseudoImmortal) { heroPseudoImmortal = true; System.out.println("[HERO] " + this + " is the first to reach Pseudo Immortal! Immortality approaches."); } } }
                 }
             }
         }
@@ -798,14 +776,14 @@ public class Character implements java.io.Serializable {
             dead = true;
             location.characters.remove(this);
             location.deadCharacters.add(this);
-            remCharacters.add(this); // null out characters slot; GameDriver skips population-- for monsters
+            addRem(this); // null out characters slot; GameDriver skips population-- for monsters
             return;
         }
         dead = true;
         if (player >= 1 && trait != Traits.Ghost) needsReincarnation = true;
         if (majorLvl >= 7) {
             String legend = name + " " + lastName;
-            if (!legacyTitles.contains(legend)) { legacyTitles.add(legend); legacyLvls.add(lvl); }
+            if (!legacyTitles.contains(legend)) { addLegacy(legend, lvl); }
         }
         if (spouse != null) {
             spouse.spouse = null;
@@ -844,7 +822,7 @@ public class Character implements java.io.Serializable {
                 child.targetQuests.add(new Quest("Find Parent's Body", false, 25, 0, 45, location));
             }
         }
-        remCharacters.add(this);
+        addRem(this);
         location.characters.remove(this);
         location.deadCharacters.add(this);
 
@@ -919,13 +897,13 @@ public class Character implements java.io.Serializable {
                     child.targetQuests.add(new Quest("Find Parent's Body", false, 25, 0, 45, location));
                 }
             }
-            remCharacters.add(this); //Removes a cultivator from the characters Array after the round is done
+            addRem(this); //Removes a cultivator from the characters Array after the round is done
             location.characters.remove(this); //Removes a cultivator from the location
         }
 
         if (killer.trait == Traits.Beast || killer.trait == Traits.Monster) {
             if (killer.trait == Traits.Beast && !monstersList.contains(killer)) {
-                monstersList.add(killer);
+                addMonster(killer);
             }
             location.deadCharacters.add(this);
             killer.kills++;
@@ -940,7 +918,7 @@ public class Character implements java.io.Serializable {
             killer.ss += this.ss;
             this.ss = 0;
             if (monstersList.contains(this)) {
-                remCharacters.add(this); //Removes monster from monstersList after round is done
+                addRem(this); //Removes monster from monstersList after round is done
             }
             return;
         }
@@ -985,7 +963,7 @@ public class Character implements java.io.Serializable {
             // Legacy: record high-level cultivators who fall in battle
             if (majorLvl >= 7) {
                 String legend = name + " " + lastName;
-                if (!legacyTitles.contains(legend)) { legacyTitles.add(legend); legacyLvls.add(lvl); }
+                if (!legacyTitles.contains(legend)) { addLegacy(legend, lvl); }
             }
             // Cultivation XP for Monster kills
             if (killer.trait == Traits.Monster) {
@@ -2326,7 +2304,7 @@ public class Character implements java.io.Serializable {
                 if (location == partner.location) {
                     if (!pregnant && rand.nextInt(10) == 0) {
                         pregnant = true;
-                        tempCharacters.add(new Character(this));
+                        addTemp(new Character(this));
                         if (player > 0 && skipping <= 0) System.out.println("You are now pregnant with " + partner + "'s child!");
                     }
                     return 1;
@@ -2360,7 +2338,7 @@ public class Character implements java.io.Serializable {
                     if (player > 0 || mother.player > 0) System.out.println(this + " possesses " + mother + "'s unborn child! (was: " + unborn.originalName + ")");
                     // Ghost dies permanently
                     dead = true;
-                    remCharacters.add(this);
+                    addRem(this);
                     location.characters.remove(this);
                     return 1;
                 }
@@ -2374,10 +2352,10 @@ public class Character implements java.io.Serializable {
                 rebirth.originalName = (originalName != null ? originalName + " → " : "") + name + " " + lastName;
                 if (player == 1) { rebirth.player = 1; player = 0; }
                 else if (player == 2) { rebirth.player = 2; player = 0; }
-                tempCharacters.add(rebirth);
+                addTemp(rebirth);
                 if (player > 0 || rebirth.player > 0) System.out.println(this + " is reborn as " + rebirth + " in " + location.name + "! (was: " + rebirth.originalName + ")");
                 dead = true;
-                remCharacters.add(this);
+                addRem(this);
                 location.characters.remove(this);
                 return 1;
             }
@@ -3010,7 +2988,7 @@ public class Character implements java.io.Serializable {
             }
             if (!temp.pregnant && rand.nextInt(10) == 0) {
                 temp.pregnant = true;
-                tempCharacters.add(new Character(temp));
+                addTemp(new Character(temp));
             }
         }
     }

@@ -1,6 +1,8 @@
 package Game;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static Game.GameDriver.*;
 import static Game.Dictionary.*;
@@ -40,7 +42,7 @@ public class Area implements java.io.Serializable {
 
     ArrayList<Shop> shops = new ArrayList<>();
     ArrayList<Quest> bounties = new ArrayList<>();
-    ArrayList<Character> characters = new ArrayList<Character>();
+    List<Character> characters = new CopyOnWriteArrayList<>();
     transient ArrayList<Character> deadCharacters = new ArrayList<>();
 
     // Tournament registration
@@ -70,7 +72,7 @@ public class Area implements java.io.Serializable {
         pillBag = new ArrayList<>();
         arrayBag = new ArrayList<>();
         libraries.add(new Library(this));
-        createdAreas.add(this);
+        addCreatedArea(this);
     }
     public Area(Area area, char dir) { // dir stands for direction. Ex: East, West, South, North
         switch (dir) {
@@ -264,12 +266,16 @@ public class Area implements java.io.Serializable {
         materialBag = new ArrayList<>();
         pillBag = new ArrayList<>();
         arrayBag = new ArrayList<>();
-        createdAreas.add(this);
+        addCreatedArea(this);
     }
 
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();
         if (deadCharacters == null) deadCharacters = new ArrayList<>();
+        // Migrate characters list if deserialised from an old save (ArrayList → CopyOnWriteArrayList)
+        if (!(characters instanceof CopyOnWriteArrayList)) {
+            characters = new CopyOnWriteArrayList<>(characters != null ? characters : new ArrayList<>());
+        }
     }
 
     public void age() {
