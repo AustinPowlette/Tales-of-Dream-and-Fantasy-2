@@ -1,5 +1,15 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (Save / Load System)
+- Added: `SaveData.java` — serializable wrapper capturing all static state from `Map` and `GameDriver` (`SaveData.java`)
+- Added: `save()` and `load()` in GameDriver — serialize/deserialize full world state to `save.dat` (`GameDriver.java:save`, `GameDriver.java:load`)
+- Added: Load check at startup — detects existing `save.dat` and prompts Y/n to resume (`GameDriver.java:main`)
+- Added: Auto-save every 10 in-game years (`GameDriver.java`) and manual 'f' key save
+- Added: Save button in MapViewer GUI — runs save on background thread to avoid EDT block (`MapViewer.java`)
+- Added: `implements Serializable + serialVersionUID` on all 10 game data classes: `Character`, `Area`, `Organization`, `Quest`, `Technique`, `Item`, `Library`, `Shop`, `Relationship`, `RelationshipList`
+- Added: `Area.deadCharacters` marked `transient` + custom `readObject()` to reinitialize after load (`Area.java`)
+- Tested: Auto-save fires at year 10; load path restores year/population and resumes without error
+
 ## 2026-09-19 (Feature Batch: Startup Flow, GUI Enhancements, Cheat Menu, Reincarnation)
 - Added: Startup mode select — Single Player / Multiplayer (2-4 players) / Watch (spectate); each player gets an editable generated character (`GameDriver.java:main`)
 - Added: Full character editor at startup and in-game ('e' key) — name, trait (all 17 variants), potential, affiliation, gender via `editCharacterInteractive()` (`GameDriver.java`)

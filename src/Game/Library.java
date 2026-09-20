@@ -5,7 +5,8 @@ import java.util.ArrayList;
 // TODO: Flesh out further — Family technique inheritance (at birth / major realm milestone),
 //       Sect Contribution Point earning (missions, gifts from superiors), mastery levelling during
 //       cultivation/events, technique rarity tiers, and per-technique access restrictions.
-public class Library {
+public class Library implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
 
     Character owner;        // null for sect/city libraries
     Area location;

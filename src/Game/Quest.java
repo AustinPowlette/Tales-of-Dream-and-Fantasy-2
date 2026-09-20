@@ -1,6 +1,7 @@
 package Game;
 
-public class Quest implements Comparable<Quest> {
+public class Quest implements Comparable<Quest>, java.io.Serializable {
+    static final long serialVersionUID = 1L;
     enum QuestCategory {
     Area, Character, Spot
 }

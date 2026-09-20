@@ -1,7 +1,8 @@
 package Game;
 import static Game.GameDriver.*;
 import static Game.Dictionary.*;
-public class Item {
+public class Item implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
 
     enum ItemType{
         Pill,

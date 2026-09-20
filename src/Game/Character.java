@@ -9,7 +9,8 @@ import static Game.GameDriver.*;
 import static Game.Dictionary.*;
 import static Game.Map.*;
 
-public class Character {
+public class Character implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
     enum Traits {
         Leader,
         Blacksmith,

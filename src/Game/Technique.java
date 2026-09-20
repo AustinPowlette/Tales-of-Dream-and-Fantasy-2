@@ -1,7 +1,8 @@
 package Game;
 
 import static Game.GameDriver.rand;
-public class Technique {
+public class Technique implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
     enum techniqueType {
         Movement,
         Martial

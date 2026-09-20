@@ -2,7 +2,8 @@ package Game;
 
 import java.util.ArrayList;
 
-public class Shop {
+public class Shop implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
     Character owner;
     Area location;
     ArrayList<Item> inventory = new ArrayList<>();

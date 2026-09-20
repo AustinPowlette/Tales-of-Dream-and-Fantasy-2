@@ -236,6 +236,13 @@ public class MapViewer extends JFrame {
         row6.add(makeBtn("Edit Self", () -> queueInput("e")));
         row6.add(makeBtn("Cheats", () -> queueInput("z")));
 
+        JPanel row7 = row(new Color(20, 20, 35));
+        JButton saveBtn = makeBtn("💾 Save", () -> {
+            new Thread(GameDriver::save).start();
+        });
+        saveBtn.setForeground(new Color(100, 220, 100));
+        row7.add(saveBtn);
+
         JButton moveHere = makeBtn("▶ Move to Selected Tile", () -> {
             if (selX >= 0 && selY >= 0) {
                 Character pl = findPlayer();
@@ -251,6 +258,8 @@ public class MapViewer extends JFrame {
         p.add(row1); p.add(row2); p.add(row3);
         p.add(Box.createVerticalStrut(3));
         p.add(row4); p.add(row5); p.add(row6);
+        p.add(Box.createVerticalStrut(3));
+        p.add(row7);
         p.add(Box.createVerticalStrut(5));
         p.add(moveHere);
         return p;

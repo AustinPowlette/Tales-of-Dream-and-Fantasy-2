@@ -2,7 +2,8 @@ package Game;
 
 import java.util.ArrayList;
 
-public class RelationshipList {
+public class RelationshipList implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
     ArrayList<Relationship> relationships = null;
 
     public RelationshipList() {

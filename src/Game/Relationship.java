@@ -1,6 +1,7 @@
 package Game;
 
-public class Relationship {
+public class Relationship implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
     int friendID;
     int value;
 

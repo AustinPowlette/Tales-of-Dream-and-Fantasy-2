@@ -3,8 +3,8 @@ package Game;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-public class Organization {
-
+public class Organization implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
     enum SectRank { OUTER_DISCIPLE, INNER_DISCIPLE, ELDER, MASTER, FOUNDER }
 
     String name = "";

@@ -23,8 +23,9 @@ public class GameDriver {
     static List<String> eventLog = Collections.synchronizedList(new ArrayList<>());
     static List<String> historyLog = Collections.synchronizedList(new ArrayList<>());
     static int currentSeason = 0; // 0=Spring 1=Summer 2=Autumn 3=Winter
-    static volatile int tickDelayMs = 500;  // adjustable tick speed
+    static volatile int tickDelayMs = 500;  // adjustable tick speed (ms per tick)
     static volatile boolean paused = false; // pause flag for GUI speed controls
+    static int time = 0;                    // global week counter (static so save/load can access it)
 
     static String readInput() {
         if (guiEnabled) {
@@ -279,10 +280,73 @@ public class GameDriver {
     }
 
 
+    static final String SAVE_FILE = "save.dat";
+
+    static void save() {
+        SaveData d = new SaveData();
+        d.population      = population;
+        d.tiles           = tiles;
+        d.characters      = characters;
+        d.createdAreas    = createdAreas;
+        d.cityAreas       = cityAreas;
+        d.monstersList    = monstersList;
+        d.hotspotAreas    = hotspotAreas;
+        d.legacyTitles    = legacyTitles;
+        d.legacyLvls      = legacyLvls;
+        d.heroEnsoulment  = heroEnsoulment;
+        d.heroAscension   = heroAscension;
+        d.heroPseudoImmortal = heroPseudoImmortal;
+        d.trackedCharacters  = trackedCharacters;
+        d.areaUindex      = Area.uindex;
+        d.time            = time;
+        d.currentSeason   = currentSeason;
+        d.uid             = UID;
+        d.historyLog      = new ArrayList<>(historyLog);
+        d.tickDelayMs     = tickDelayMs;
+        try (java.io.ObjectOutputStream oos = new java.io.ObjectOutputStream(
+                new java.io.FileOutputStream(SAVE_FILE))) {
+            oos.writeObject(d);
+            System.out.println("[SAVE] Game saved to " + SAVE_FILE + " (Year " + (time / 52 + 1) + ").");
+        } catch (Exception e) {
+            System.out.println("[SAVE ERROR] " + e.getMessage());
+        }
+    }
+
+    static boolean load() {
+        java.io.File f = new java.io.File(SAVE_FILE);
+        if (!f.exists()) return false;
+        try (java.io.ObjectInputStream ois = new java.io.ObjectInputStream(
+                new java.io.FileInputStream(f))) {
+            SaveData d = (SaveData) ois.readObject();
+            population       = d.population;
+            tiles            = d.tiles;
+            characters       = d.characters;
+            createdAreas     = d.createdAreas;
+            cityAreas        = d.cityAreas;
+            monstersList     = d.monstersList;
+            hotspotAreas     = d.hotspotAreas;
+            legacyTitles     = d.legacyTitles;
+            legacyLvls       = d.legacyLvls;
+            heroEnsoulment   = d.heroEnsoulment;
+            heroAscension    = d.heroAscension;
+            heroPseudoImmortal = d.heroPseudoImmortal;
+            trackedCharacters  = d.trackedCharacters;
+            Area.uindex      = d.areaUindex;
+            time             = d.time;
+            currentSeason    = d.currentSeason;
+            UID              = d.uid;
+            historyLog.clear(); historyLog.addAll(d.historyLog);
+            tickDelayMs      = d.tickDelayMs;
+            System.out.println("[LOAD] Save loaded. Year " + (time / 52 + 1) + ", Population: " + population);
+            return true;
+        } catch (Exception e) {
+            System.out.println("[LOAD ERROR] Could not load save: " + e.getMessage());
+            return false;
+        }
+    }
+
     public static void main(String[] args) throws InterruptedException, IOException {
         System.setOut(new TeeStream(System.out));
-        Map map = new Map();
-        int time = 0; // In Weeks
 
         System.out.println("Enable map viewer? Y/n");
         char guiInput = scan.next().charAt(0);
@@ -296,7 +360,25 @@ public class GameDriver {
             }
         }
 
-        // ── Startup flow ───────────────────────────────────────────────────────
+        // ── Load existing save or start fresh ─────────────────────────────────
+        boolean loaded = false;
+        if (new java.io.File(SAVE_FILE).exists()) {
+            System.out.println("Save file found. Load it? Y/n");
+            char loadChoice = scan.next().charAt(0);
+            if (loadChoice == 'Y' || loadChoice == 'y') {
+                loaded = load();
+            }
+        }
+        if (loaded) {
+            System.out.println("Resuming. Player characters in world: "
+                    + characters.stream().filter(c -> c != null && c.player >= 1 && !c.dead).count());
+        } else {
+            new Map(); // initialize the world
+        }
+        if (loaded) { while (true) { /* jump straight to main loop below */ break; } }
+
+        // ── Startup flow (new game only) ───────────────────────────────────────
+        if (!loaded) {
         System.out.println("Mode: (S)ingle Player | (M)ultiplayer | (W)atch / Spectate");
         char modeInput = scan.next().charAt(0);
         int playerCount = 0;
@@ -330,6 +412,7 @@ public class GameDriver {
         for (int i = 0; i < startingPopulation; i++) {
             characters.add(new Character(tiles[range / 2][range / 2]));
         }
+        } // end if (!loaded)
 
 
         while (true) {
@@ -580,6 +663,8 @@ public class GameDriver {
                 for (Character _cc : characters) {
                     if (_cc != null && !_cc.dead && _cc.born) _cc.updateRepTitle();
                 }
+                // Auto-save every 10 years
+                if (_year % 10 == 0) save();
             }
             // Tournament timer countdown and resolution (every tick)
             for (Area area : createdAreas) {
@@ -715,6 +800,10 @@ public class GameDriver {
                                     break;
                                 case 'z':
                                     handleCheatMenu(character);
+                                    character.movement('x');
+                                    break;
+                                case 'f':
+                                    save();
                                     character.movement('x');
                                     break;
                                 case 'p':

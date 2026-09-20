@@ -6,8 +6,8 @@ import static Game.GameDriver.*;
 import static Game.Dictionary.*;
 import static Game.Map.*;
 
-public class Area {
-
+public class Area implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
     enum DungeonType { LOST_RUINS, BEAST_LAIR, MARTIAL_TRIAL, HAUNTED_GROUNDS, CELESTIAL_TRIAL }
 
     static int uindex = 1;
@@ -41,7 +41,7 @@ public class Area {
     ArrayList<Shop> shops = new ArrayList<>();
     ArrayList<Quest> bounties = new ArrayList<>();
     ArrayList<Character> characters = new ArrayList<Character>();
-    ArrayList<Character> deadCharacters = new ArrayList<>();
+    transient ArrayList<Character> deadCharacters = new ArrayList<>();
 
     // Tournament registration
     ArrayList<Character> tournamentRegistrants = new ArrayList<>();
@@ -265,6 +265,11 @@ public class Area {
         pillBag = new ArrayList<>();
         arrayBag = new ArrayList<>();
         createdAreas.add(this);
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        if (deadCharacters == null) deadCharacters = new ArrayList<>();
     }
 
     public void age() {
