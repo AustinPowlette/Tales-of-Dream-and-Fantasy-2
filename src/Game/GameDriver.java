@@ -63,6 +63,92 @@ public class GameDriver {
 
     /** Interactive character editing; used at startup and in-game via 'e'. */
     static void editCharacterInteractive(Character c) {
+        if (guiEnabled && mapViewer != null) {
+            boolean editing = true;
+            while (editing) {
+                String info = "Editing: " + c.name + " " + c.lastName
+                        + "\nTrait: " + c.getTrait() + "  Potential: " + c.potential
+                        + "\nAffiliation: " + c.affiliation + "  Gender: " + c.gender;
+                String[] topOpts = {"Name", "Trait", "Potential", "Affiliation", "Gender", "Done"};
+                final int[] sel = {5};
+                try {
+                    SwingUtilities.invokeAndWait(() ->
+                        sel[0] = javax.swing.JOptionPane.showOptionDialog(mapViewer, info, "Edit Character",
+                            javax.swing.JOptionPane.DEFAULT_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE,
+                            null, topOpts, topOpts[5]));
+                } catch (Exception ignored) {}
+                switch (sel[0]) {
+                    case 0: { // Name
+                        final String[] nm = {c.name, c.lastName};
+                        try {
+                            SwingUtilities.invokeAndWait(() -> {
+                                String fn = javax.swing.JOptionPane.showInputDialog(mapViewer, "First name:", c.name);
+                                if (fn != null && !fn.trim().isEmpty()) nm[0] = fn.trim();
+                                String ln = javax.swing.JOptionPane.showInputDialog(mapViewer, "Last name:", c.lastName);
+                                if (ln != null && !ln.trim().isEmpty()) nm[1] = ln.trim();
+                            });
+                        } catch (Exception ignored) {}
+                        c.name = nm[0]; c.lastName = nm[1];
+                        break;
+                    }
+                    case 1: { // Trait
+                        Character.Traits[] allTraits = Character.Traits.values();
+                        String[] traitNames = new String[allTraits.length];
+                        for (int _i = 0; _i < allTraits.length; _i++) traitNames[_i] = allTraits[_i].toString();
+                        final int[] tr = {-1};
+                        try {
+                            SwingUtilities.invokeAndWait(() ->
+                                tr[0] = javax.swing.JOptionPane.showOptionDialog(mapViewer, "Choose trait:", "Trait",
+                                    javax.swing.JOptionPane.DEFAULT_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE,
+                                    null, traitNames, c.getTrait()));
+                        } catch (Exception ignored) {}
+                        if (tr[0] >= 0 && tr[0] < allTraits.length) c.trait = allTraits[tr[0]];
+                        break;
+                    }
+                    case 2: { // Potential
+                        final String[] potStr = {String.valueOf(c.potential)};
+                        try {
+                            SwingUtilities.invokeAndWait(() -> {
+                                String s = javax.swing.JOptionPane.showInputDialog(mapViewer, "Potential (1-100):", c.potential);
+                                if (s != null && !s.trim().isEmpty()) potStr[0] = s.trim();
+                            });
+                        } catch (Exception ignored) {}
+                        try { c.potential = Math.min(100, Math.max(1, Integer.parseInt(potStr[0]))); } catch (Exception ignored) {}
+                        break;
+                    }
+                    case 3: { // Affiliation
+                        String[] affOpts = {"Good", "Neutral", "Evil"};
+                        final int[] aff = {1};
+                        try {
+                            SwingUtilities.invokeAndWait(() ->
+                                aff[0] = javax.swing.JOptionPane.showOptionDialog(mapViewer, "Affiliation:", "Affiliation",
+                                    javax.swing.JOptionPane.DEFAULT_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE,
+                                    null, affOpts, c.affiliation));
+                        } catch (Exception ignored) {}
+                        if (aff[0] == 0) c.affiliation = "Good";
+                        else if (aff[0] == 2) c.affiliation = "Evil";
+                        else c.affiliation = "Neutral";
+                        break;
+                    }
+                    case 4: { // Gender
+                        String[] genOpts = {"Male", "Female"};
+                        final int[] gen = {0};
+                        try {
+                            SwingUtilities.invokeAndWait(() ->
+                                gen[0] = javax.swing.JOptionPane.showOptionDialog(mapViewer, "Gender:", "Gender",
+                                    javax.swing.JOptionPane.DEFAULT_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE,
+                                    null, genOpts, c.gender));
+                        } catch (Exception ignored) {}
+                        if (gen[0] == 0) c.gender = "Male";
+                        else if (gen[0] == 1) c.gender = "Female";
+                        break;
+                    }
+                    default: editing = false; break;
+                }
+            }
+            return;
+        }
+        // Terminal mode
         boolean editing = true;
         while (editing) {
             System.out.println("Edit: (N)ame (T)rait (P)otential (A)ffiliation (G)ender (D)one");

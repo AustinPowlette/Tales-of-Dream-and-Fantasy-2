@@ -1,5 +1,10 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-20 (GUI — Larger Fonts, Edit Self Fix, Button Debug Prints)
+- Changed: All MapViewer fonts 14pt→16pt, 15pt→17pt for readability (`MapViewer.java`)
+- Fixed: Edit Self ('e' button) now opens JOptionPane dialogs in GUI mode — previously `editCharacterInteractive` called `readInput()` which blocks on `guiInputQueue` (GUI button presses), so terminal keypresses (N/T/P etc.) were silently ignored; GUI branch now uses `showOptionDialog`/`showInputDialog` matching the reincarnation fix pattern (`GameDriver.java:editCharacterInteractive`)
+- Added: `queueInput()` now prints `[GUI] queued: <cmd>` to terminal on every button press; click-to-move prints `[GUI] click-move → x,y` (`MapViewer.java`)
+
 ## 2026-09-20 (Threading Fix — Revert CopyOnWriteArrayList, Serial Phase 2B)
 - Reverted: `Area.characters` back to `ArrayList<Character>` — `CopyOnWriteArrayList` caused O(n) copy overhead on every `add`/`remove` during NPC movement, catastrophically slowing Phase 2B (`Area.java`)
 - Changed: Phase 2B (NPC quest/movement) reverted from parallel `byArea.entrySet().parallelStream()` to simple serial loop — quest targeting reads `location.characters` directly (not a snapshot), making safe parallelism complex without a deeper refactor; Phase 1b parallel `cultivate()` kept (`GameDriver.java`)
