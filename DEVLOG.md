@@ -1,5 +1,8 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-19 (Simulation Audit — 233-year run)
+- Fixed: Beast Tide message now always prints when a lair overflows, not only when it strikes a populated city (`GameDriver.java:504`) — tides were silently firing 2–5 times/year with no output; city-strike follow-up line preserved
+
 ## 2026-09-19 (Save / Load System)
 - Added: `SaveData.java` — serializable wrapper capturing all static state from `Map` and `GameDriver` (`SaveData.java`)
 - Added: `save()` and `load()` in GameDriver — serialize/deserialize full world state to `save.dat` (`GameDriver.java:save`, `GameDriver.java:load`)

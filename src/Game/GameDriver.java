@@ -506,6 +506,7 @@ public class GameDriver {
                 int[] btDy = {0, 0, -1, 1};
                 for (Area area : new ArrayList<>(createdAreas)) {
                     if (area.dungeonType == Area.DungeonType.BEAST_LAIR && area.monsters > area.lvl * 2000) {
+                        System.out.println("A Beast Tide erupts from " + area.name + "! Monsters spill into the surrounding lands.");
                         int spread = area.monsters / 4;
                         for (int _d = 0; _d < 4; _d++) {
                             int nx = area.x + btDx[_d], ny = area.y + btDy[_d];
@@ -524,7 +525,7 @@ public class GameDriver {
                                     casualties -= saved;
                                     nbr.population = (int) Math.max(1, nbr.population - casualties);
                                     String defMsg = (saved > 0) ? " (" + saved + " saved by " + defPower + " power of defenders)" : "";
-                                    System.out.println("Beast Tide erupts from " + area.name + " and strikes " + nbr.name + "! -" + casualties + " population" + defMsg);
+                                    System.out.println("The tide strikes " + nbr.name + "! -" + casualties + " population" + defMsg);
                                 }
                             }
                         }
