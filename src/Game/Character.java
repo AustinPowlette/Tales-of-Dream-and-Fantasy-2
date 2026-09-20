@@ -2409,6 +2409,8 @@ public class Character implements java.io.Serializable {
     }
 
     public int pathfinder (Area destination) {
+        // Human player in manual control provides their own movement; don't override it
+        if (player >= 1 && skipping <= 0) return (location == destination) ? 1 : 0;
 
         int xDiff = location.x - destination.x;
         int yDiff = location.y - destination.y;

@@ -243,9 +243,44 @@ public class GameDriver {
         int spectateOpt = opt;
         System.out.println("  " + opt + ". Spectate (follow mode on nearby NPC)");
 
-        System.out.println("Choice:");
+        // Flush stale GUI inputs so movement button presses don't pollute this prompt
+        if (guiEnabled) guiInputQueue.clear();
+
         int choice;
-        try { choice = Integer.parseInt(readInput()); } catch (Exception e) { choice = spectateOpt; }
+        if (guiEnabled && mapViewer != null) {
+            // Build option labels for the GUI dialog
+            java.util.List<String> btnLabels = new java.util.ArrayList<>();
+            if (killerOpt > 0 && killer != null)
+                btnLabels.add(killerOpt + ". Take over killer: " + killer.name + " " + killer.lastName + " Lv." + killer.lvl);
+            if (childOpt > 0 && !aliveChildren.isEmpty())
+                btnLabels.add(childOpt + ". Take over child: " + aliveChildren.get(0).name + " " + aliveChildren.get(0).lastName + " Lv." + aliveChildren.get(0).lvl);
+            btnLabels.add(npcsOpt + ". Choose any living NPC (enter ID)");
+            btnLabels.add(spectateOpt + ". Spectate");
+            final int[] result = {spectateOpt};
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    int idx = javax.swing.JOptionPane.showOptionDialog(mapViewer,
+                        dead.name + " " + dead.lastName + " has died!\nAge " + dead.age + ", Realm " + dead.majorLvl
+                        + "\n\nChoose what happens next:",
+                        "Reincarnation",
+                        javax.swing.JOptionPane.DEFAULT_OPTION,
+                        javax.swing.JOptionPane.QUESTION_MESSAGE,
+                        null,
+                        btnLabels.toArray(),
+                        btnLabels.get(btnLabels.size() - 1));
+                    if (idx >= 0) {
+                        // Map button index back to option number
+                        String label = btnLabels.get(idx);
+                        try { result[0] = Integer.parseInt(label.substring(0, label.indexOf('.'))); }
+                        catch (Exception ignored) { result[0] = spectateOpt; }
+                    }
+                });
+            } catch (Exception ignored) {}
+            choice = result[0];
+        } else {
+            System.out.println("Choice:");
+            try { choice = Integer.parseInt(readInput()); } catch (Exception e) { choice = spectateOpt; }
+        }
 
         Character newChar = null;
         if (choice == killerOpt && killerOpt > 0 && killer != null) {
@@ -253,14 +288,26 @@ public class GameDriver {
         } else if (choice == childOpt && childOpt > 0 && !aliveChildren.isEmpty()) {
             newChar = aliveChildren.get(0);
         } else if (choice == npcsOpt) {
-            System.out.println("Enter character ID:");
-            try {
-                int cid = Integer.parseInt(readInput());
-                if (cid >= 0 && cid < characters.size()) {
-                    Character c = characters.get(cid);
-                    if (c != null && !c.dead && c.trait != Character.Traits.Ghost) newChar = c;
-                }
-            } catch (Exception ignored) {}
+            if (guiEnabled && mapViewer != null) {
+                String idStr = javax.swing.JOptionPane.showInputDialog(mapViewer,
+                    "Enter character ID (0 – " + (characters.size() - 1) + "):", "Choose NPC", javax.swing.JOptionPane.PLAIN_MESSAGE);
+                try {
+                    int cid = Integer.parseInt(idStr == null ? "" : idStr.trim());
+                    if (cid >= 0 && cid < characters.size()) {
+                        Character c = characters.get(cid);
+                        if (c != null && !c.dead && c.trait != Character.Traits.Ghost) newChar = c;
+                    }
+                } catch (Exception ignored) {}
+            } else {
+                System.out.println("Enter character ID:");
+                try {
+                    int cid = Integer.parseInt(readInput());
+                    if (cid >= 0 && cid < characters.size()) {
+                        Character c = characters.get(cid);
+                        if (c != null && !c.dead && c.trait != Character.Traits.Ghost) newChar = c;
+                    }
+                } catch (Exception ignored) {}
+            }
             if (newChar == null) System.out.println("Invalid ID, switching to spectate.");
         }
 
@@ -578,8 +625,8 @@ public class GameDriver {
                         System.out.println("Heaven's Will descends! A heavenly technique has appeared at " + htArea.name + " [" + htArea.x + "," + htArea.y + "]!");
                     }
                 }
-                // Heaven Calamities (10% chance per year — storm, plague, or heaven fire)
-                if (rand.nextInt(10) == 0 && !createdAreas.isEmpty()) {
+                // Heaven Calamities (10% chance per year — storm, plague, or heaven fire; grace period first 18 years)
+                if (_year > 18 && rand.nextInt(10) == 0 && !createdAreas.isEmpty()) {
                     switch (rand.nextInt(3)) {
                         case 0: { // Spiritual Storm — random area level surge
                             Area stormArea = createdAreas.get(rand.nextInt(createdAreas.size()));

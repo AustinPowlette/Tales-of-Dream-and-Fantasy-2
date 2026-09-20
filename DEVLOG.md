@@ -1,5 +1,12 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-20 (GUI Fixes — Scalability, Movement, Reincarnation, Calamity Grace)
+- Fixed: GUI window opens at 85% of screen size instead of fixed 800×650; map tiles scale dynamically with panel size; ComponentListener triggers repaint on resize (`MapViewer.java`)
+- Fixed: `pathfinder()` now returns early when `player >= 1 && skipping <= 0`, preventing quest auto-navigation from overwriting human player's manual movement (`Character.java:pathfinder`)
+- Fixed: Reincarnation dialog uses `JOptionPane.showOptionDialog` via `invokeAndWait` when `guiEnabled`; `guiInputQueue.clear()` flushes stale movement button presses before prompting; NPC-by-ID sub-option uses `showInputDialog` (`GameDriver.java:handleReincarnation`)
+- Fixed: Calamities (heaven fire, plague) gated behind `_year > 18` to give players an 18-year grace period at game start (`GameDriver.java`)
+- Increased: All GUI font sizes from 10–11pt to 12–13pt throughout `MapViewer.java` for readability
+
 ## 2026-09-19 (Simulation Audit — 233-year run)
 - Fixed: Beast Tide message now always prints when a lair overflows, not only when it strikes a populated city (`GameDriver.java:504`) — tides were silently firing 2–5 times/year with no output; city-strike follow-up line preserved
 
