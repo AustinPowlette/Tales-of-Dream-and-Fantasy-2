@@ -2,7 +2,6 @@ package Game;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import static Game.GameDriver.*;
 import static Game.Dictionary.*;
@@ -42,7 +41,7 @@ public class Area implements java.io.Serializable {
 
     ArrayList<Shop> shops = new ArrayList<>();
     ArrayList<Quest> bounties = new ArrayList<>();
-    List<Character> characters = new CopyOnWriteArrayList<>();
+    ArrayList<Character> characters = new ArrayList<>();
     transient ArrayList<Character> deadCharacters = new ArrayList<>();
 
     // Tournament registration
@@ -272,10 +271,7 @@ public class Area implements java.io.Serializable {
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();
         if (deadCharacters == null) deadCharacters = new ArrayList<>();
-        // Migrate characters list if deserialised from an old save (ArrayList → CopyOnWriteArrayList)
-        if (!(characters instanceof CopyOnWriteArrayList)) {
-            characters = new CopyOnWriteArrayList<>(characters != null ? characters : new ArrayList<>());
-        }
+        if (characters == null) characters = new ArrayList<>();
     }
 
     public void age() {

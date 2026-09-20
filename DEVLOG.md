@@ -1,5 +1,11 @@
 # Development Log — Tales of Dream and Fantasy 2
 
+## 2026-09-20 (Threading Fix — Revert CopyOnWriteArrayList, Serial Phase 2B)
+- Reverted: `Area.characters` back to `ArrayList<Character>` — `CopyOnWriteArrayList` caused O(n) copy overhead on every `add`/`remove` during NPC movement, catastrophically slowing Phase 2B (`Area.java`)
+- Changed: Phase 2B (NPC quest/movement) reverted from parallel `byArea.entrySet().parallelStream()` to simple serial loop — quest targeting reads `location.characters` directly (not a snapshot), making safe parallelism complex without a deeper refactor; Phase 1b parallel `cultivate()` kept (`GameDriver.java`)
+- Changed: `tickDelayMs` default set to `0` for maximum simulation speed; adjustable in-game via speed buttons (`GameDriver.java`)
+- Tested: 354-year stability run with 500 NPCs, 0 exceptions, 0 errors; population dynamics, beast tides, monster ecosystem all functioning correctly
+
 ## 2026-09-20 (Multithreading — Parallel Cultivate + Spatial NPC Batching)
 - Added: `Map.tickPool` (`ForkJoinPool`, all cores), `Map.tileLock`, `volatile` hero flags, synchronized `addTemp/addRem/addMonster/addCreatedArea/addLegacy` helpers (`Map.java`)
 - Changed: `Area.characters` is now `List<Character>` backed by `CopyOnWriteArrayList` for thread-safe parallel iteration; `readObject()` migrates old saves; both `createdAreas.add(this)` calls replaced with `addCreatedArea(this)` (`Area.java`)

@@ -23,7 +23,7 @@ public class GameDriver {
     static List<String> eventLog = Collections.synchronizedList(new ArrayList<>());
     static List<String> historyLog = Collections.synchronizedList(new ArrayList<>());
     static int currentSeason = 0; // 0=Spring 1=Summer 2=Autumn 3=Winter
-    static volatile int tickDelayMs = 500;  // adjustable tick speed (ms per tick)
+    static volatile int tickDelayMs = 0;  // adjustable tick speed (ms per tick)
     static volatile boolean paused = false; // pause flag for GUI speed controls
     static int time = 0;                    // global week counter (static so save/load can access it)
 
@@ -958,45 +958,31 @@ public class GameDriver {
                 }
             }
 
-            // Phase 2B: parallel NPC processing — grouped by tile for spatial locality
-            java.util.Map<Area, java.util.List<Character>> byArea = new java.util.HashMap<>();
-            for (Character character : tickSnap) {
-                if (character == null || character.dead || !character.born || character.player >= 1) continue;
-                Area tile = character.location;
-                if (tile != null) byArea.computeIfAbsent(tile, k -> new java.util.ArrayList<>()).add(character);
-            }
-            try {
-                tickPool.submit(() ->
-                    byArea.entrySet().parallelStream().forEach(entry -> {
-                        for (Character npc : entry.getValue()) {
-                            if (npc.dead) continue;
-                            currentCharacter = npc;
-                            if (npc.age >= 8) {
-                                npc.movement();
-                                npc.quest();
-                            } else {
-                                npc.quest();
+            // Phase 2B: serial NPC processing
+            for (Character npc : tickSnap) {
+                if (npc == null || npc.dead || !npc.born || npc.player >= 1) continue;
+                currentCharacter = npc;
+                if (npc.age >= 8) {
+                    npc.movement();
+                    npc.quest();
+                } else {
+                    npc.quest();
+                }
+                // Mother sync for NPC mothers
+                if (npc.gender.equals("Female") && !npc.children.isEmpty()) {
+                    for (Character child : npc.children) {
+                        if (child.age < 8) {
+                            child.location.characters.remove(child);
+                            child.location = child.mother.location;
+                            if (!child.location.characters.contains(child)) {
+                                child.location.characters.add(child);
                             }
-                            // Mother sync for NPC mothers
-                            if (npc.gender.equals("Female") && !npc.children.isEmpty()) {
-                                for (Character child : npc.children) {
-                                    if (child.age < 8) {
-                                        child.location.characters.remove(child);
-                                        child.location = child.mother.location;
-                                        if (!child.location.characters.contains(child)) {
-                                            child.location.characters.add(child);
-                                        }
-                                        if (!child.knownLocations.contains(child.location)) {
-                                            child.knownLocations.add(child.location);
-                                        }
-                                    }
-                                }
+                            if (!child.knownLocations.contains(child.location)) {
+                                child.knownLocations.add(child.location);
                             }
                         }
-                    })
-                ).get();
-            } catch (Exception _ex) {
-                System.err.println("[WARN] Parallel NPC phase error: " + _ex.getMessage());
+                    }
+                }
             }
 
             // Handle reincarnation for any player character that died this tick
