@@ -6,6 +6,12 @@ Java xianxia cultivation simulation. 100K+ NPC world, turn-based (weekly ticks),
 ## Key Documentation
 - [Game Info.md](Game Info.md) — Full technical deep-dive: systems, combat formulas, bugs, class reference
 - [Game Outline.md](Game Outline.md) — ✅/🟡/❌ checklist of every feature (implemented / partial / not started)
+- [Naming Review.md](Naming Review.md) — dictionary audit, name engines, terminal/GUI ideas (all implemented)
+- [Character Starts.md](Character Starts.md) — start kinds, stories, difficulty tiers (implemented)
+- [Balance Plan.md](Balance Plan.md) — measured balance problems (massacre of children at start, steep progression, inflation, few settlements) and the phased plan; `tools/BalProbe.java` measures them
+- [Lore Design.md](Lore Design.md) — the Palace of the Oldest Order story (implemented; all text is data in `LoreText.java`); open questions for the author at the end
+- [Performance Report.md](Performance Report.md) — what takes the time and the memory after 10-50 years, what was fixed, what is left
+- [planning.md](planning.md) — Player-control system design and implementation notes (manual / auto / hybrid modes, quest tools, decision broker, scripts); implemented
 - Design docs: `src/Game/CultivationGame2.txt`, `src/Game/CultivationGame2Recent.txt`, `src/Game/Cultivation Game 2 Temp.txt`
 
 ## Current State (as of 2026-09-19)
@@ -18,6 +24,19 @@ All systems are now implemented. The simulation runs a full autonomous loop with
 - **Cultivation depth** — complete. Breakthrough Tribulations (majorLvl 3/5/7/9), Dual Cultivation (spouse/friend bonus), Legacy Titles (meditation on fallen legends), Forbidden Technique (existing).
 - **World events** — complete. Beast Tides (yearly overflow from Beast Lairs), Celestial Trials (temporary lvl≥20 dungeon, 10-tick timer), Heaven-Sent Treasure (every 3 years, claimed via target quest), Hotspot faction wars (threshold 4).
 - **Items** — complete. Weapon Enchantments (Innovative 5%/turn, +1–5 bonus to tempLvl).
+- **Player control** — complete. Human characters run in MANUAL / AUTO / HYBRID (`PlayerControl`, `PlayerCommands`, `DecisionBroker`, `PlayerScript`, `QuestQueue`); type `help` in-game for the command list.
+- **Names, art, music (2026-10-04)** — `Naming` (recipes, vintages, pet names, clans, festivals, tournaments, wars, eras), `Regions` (named seas/ranges/rivers from terrain), `ArtCity` (painted Originis, skylines, sect halls, seasons), `Ambient`+`MidiOut` (composed music, built-in stereo synth or a SoundFont from `soundfonts/`), `GuiSheets` (readable non-modal windows, grouped Me tab).
+- **Play helpers (2026-10-05)** — diagonal moves, `goquest`/`chase`, `quit`, mature start, sect cap, war life cycle, treachery, squad caps; `ArtMore` (portraits, seals, icons, painted map, event art, weather). `Playtest Plan.md` + `tools/PlaytestProbe.java` describe the next bug and balance pass.
+- **Story, reports, windows (2026-10-06)** — `Lore*` (Palace of the Oldest Order at Originis, master "???", Convocation, nine places, crossing at level 101; `settings lore`), `FightReport` (+10% feud penalty), `SectPolitics` (bullying, murder, theft, coups), spoilage, logo + `tools/make-exe.bat`, the dock rebuilt (`GuiDock`: Move buttons, one Quest Log, Duties window, Keys sheet, "?" on every window), the illustrated Help (`GuiHelp`, `HelpPages*`, `assets/help`, `tools/HelpShots.java`), terminal status block / help categories / did-you-mean (`Term*`), `Perf` timing. Probes: `SimProbeX`, `LoreProbe` (scratchpad `ag/probes`).
+- **Economy (2026-10-03)** — `Treasure` (a Heaven-Sent treasure every year, 8 kinds), `Auctions` (consigned luxuries only: Heaven-Sent items, Potential Pills, vintage goods; 5 lots or 6 weeks), Refine Blood quest, library one-book rule (20% fee, seller loses it), shops without a stock cap, manual duties walk only on `watch` turns. Probes `EconProbe`, `MoveProbe`, `EconSim`.
+- **Look** — FlatLaf (`lib/`) + ink & jade theme (`Theme`), dock layout, painted place art (`ArtGen`). The jar is optional at compile time (reflection); run from the repo root (or keep `lib/` next to `src`).
+- **Quality of life** — complete. Save slots + backups + crash slot (`SaveManager`), Settings, Notifications/Hints/Recap, combat preview, confirmations, family/relationship windows, search/follow/control, exports, tutorial. GUI/game race-freedom via `World` (see Architecture Notes).
+- **Starts / difficulty** — complete. Protagonist, Standard (NPC curve, one re-roll, hidden potential), custom, ten Stories with objective chains; Story / Hard / Brutal (permadeath). NPC first generation has prehistory.
+- **Naming** — complete. `Naming` engine + regenerated `Dictionary`; unique names; `Area.geoName` for pictures.
+- **Settlements** — cities/sects scale with population (`Settlements.yearly`).
+- **Reincarnation / Taming / Life arts / Music** — complete. `Reincarnation` (rope = level cap of the potential, "Reincarnate" quest, +5 potential, the same character reborn at 18), `Taming` (Major Lvl + 1 companions), `Life` (food, wine, poison, instruments, five new traits), `Ambient` (generated music).
+- **Terrain / sects / run** — `BiomeGen` (coherent noise terrain), sect recruitment rules, `RunStats` (+ hall of fame), `Seasonal` (festivals, sect diplomacy), cities founded at Major Lvl 2.
+- **Chronicle + tools** — `Chronicle`, `TextTools` (map, route, time, watch, journal, history, notes, dash, equip/compare/techniques), `GuiMore` (Backpack, Chronicle, Biography, Notes, World overview, Dashboard), auto-pause rules, high-contrast theme.
 - **MapViewer GUI** — complete. Optional Swing window (Y/n prompt at startup); 31×31 color-coded map; click-to-inspect tile; refreshes each tick.
 
 ## Known Bugs (Active)
@@ -33,6 +52,9 @@ None as of 2026-09-19. (Items 1–4 — herb/metal off-by-one, Quest.targetArea 
 - `Map.awakenedMonsters` accumulates Beasts that awakened to Monster NPCs this tick; removed from `monstersList` (but NOT nulled from `characters`) at end of tick. Direct `characters.add()` is used instead of tempCharacters to avoid inflating population count.
 - `currentCharacter` (static on Map) is set per-character during the action loop. Some methods rely on it (notably `Area` constructor uses it for level seeding).
 - `character.id == index into Map.characters` — this identity is load-bearing for quests, relationships, and death removal. Do not change.
+
+- **Threading**: the game thread owns `World.lock` and releases it at every wait and at the end of each tick; GUI code must read state only inside `World.read/readWait`, never write game state from the EDT (queue a command with `MapViewer.queueInput`), and never block on the game thread while holding the lock. `GameDriver.frozenNpcs` is a test-only hook. Commands prefixed with `!` skip confirmations.
+- Tests are probes in `tools/probes/` (see its README: headless and GUI regression, long run `tools/PlaytestProbe.java`, screenshots `tools/HelpShots.java`); run them from an empty scratch dir with a 3,000-person copy of the sources (a leftover save adds a start-up menu).
 
 ## Priorities for Next Development
 
@@ -56,8 +78,8 @@ All planned features from the design documents are now implemented. The simulati
 - **Propose the change to the user first** — describe what you plan to change, what files/lines are affected, why, and what edge cases you considered. Wait for explicit approval before editing any `.java` file.
 
 ### After Any Code Change
-1. **Compile**: Run `javac -cp src src/Game/*.java` from the repo root using Bash. Fix all errors before proceeding.
-2. **Smoke test**: Run `echo "n" | timeout 15 java -cp src Game.GameDriver 2>&1` — answer 'n' to skip player creation, let it run 15 seconds, scan output for stack traces. A timeout exit (no crash output) is a pass.
+1. **Compile**: Run `javac --release 8 -encoding UTF-8 -cp "src;lib/flatlaf-3.7.2.jar" -d /tmp/r8 src/Game/*.java` from the repo root using Bash. **The IntelliJ project uses JDK 1.8** (`.idea/misc.xml`): no `String.repeat`, `strip*`, `isBlank`, `List.of`, `var`, text blocks, `viewToModel2D` etc. Fix all errors before proceeding.
+2. **Smoke test**: Run `(printf "n\nN\nw\n"; sleep 40) | timeout 40 java -cp "src;lib/flatlaf-3.7.2.jar" -Djava.awt.headless=true Game.GameDriver 2>&1` — 'n' = no map window, 'N' = new game (only asked when a save exists), 'w' = watch mode (no player); scan output for stack traces and check no `crash.log` appears; delete `saves/`, `settings.properties` and `crash.log` afterwards. A timeout exit with no crash output is a pass.
 3. **Update `DEVLOG.md`** — append a dated entry (see format below).
 4. **Update `Game Outline.md`** — flip ❌→🟡→✅ for any feature whose status changed.
 5. **Update `Game Info.md`** — update any class reference, formula, or system description affected by the change.

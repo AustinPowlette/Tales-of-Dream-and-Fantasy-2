@@ -11,7 +11,11 @@ public class Item implements java.io.Serializable {
         Clothing,
         Herb,
         Metal,
-        Blood
+        Blood,
+        Food,
+        Wine,
+        Poison,
+        Instrument
 
     }
     enum WeaponType{
@@ -29,6 +33,7 @@ public class Item implements java.io.Serializable {
     //int id = iUID++;
     String maker;
     int makerID;
+    String brand;   // the house a pill came from ("Hopkins Pill House"); shown next to the name, not part of it (stacks merge by kind and level)
     int vendorID;
     ItemType itemType;
     WeaponType weaponType;
@@ -38,15 +43,25 @@ public class Item implements java.io.Serializable {
     boolean stackable = false;
     String enchantment = null;
     int enchantBonus = 0;
+    boolean heavenSent = false;   // a Heaven-Sent treasure (see Treasure): it is auctioned, never sold to a shop
+    int consignorId = -1;         // who put this lot on a city's auction block (paid 90% when it sells); -1 = nobody
 
+    // Constructor for food, wine and poison (stackable goods; see Life)
+    public Item(ItemType itemType, int lvl, int quantity, String name) {
+        this.itemType = itemType;
+        this.lvl = lvl;
+        this.quantity = quantity;
+        this.name = name;
+        stackable = true;
+    }
     // Constructor for Herbs and Metals
     public Item(ItemType itemType, int lvl, int quantity) {
         switch (itemType) {
             case Herb:
-                name = ("Herb Lvl: " + lvl);
+                name = Naming.herb(lvl);
                 break;
             case Metal:
-                name = ("Metal Lvl: " + lvl);
+                name = Naming.metal(lvl);
                 break;
         }
         this.itemType = itemType;
@@ -62,7 +77,7 @@ public class Item implements java.io.Serializable {
         this.maker = maker.name + " " + maker.lastName;
         this.makerID = maker.id;
         stackable = false;
-        name = weaponAdjectives[rand.nextInt(weaponAdjectives.length)] + " " + getWeaponType();
+        name = Naming.weapon(lvl, getWeaponType());
 
     }
 
@@ -74,11 +89,15 @@ public class Item implements java.io.Serializable {
         stackable = false;
         if (itemType == ItemType.Array) {
             this.itemType = ItemType.Array;
-            name = arrayAdjectives[rand.nextInt(arrayAdjectives.length)] + " " + arrayTypes[rand.nextInt(arrayTypes.length)];
+            name = Naming.array(lvl, arrayTypes[rand.nextInt(arrayTypes.length)]);
+        }
+        else if (itemType == ItemType.Instrument) {
+            this.itemType = ItemType.Instrument;
+            name = Naming.instrument(lvl);
         }
         else if (itemType == ItemType.Clothing) {
             this.itemType = ItemType.Clothing;
-            name = clothingAdjectives[rand.nextInt(clothingAdjectives.length)] + " " + clothingNames[rand.nextInt(clothingNames.length)];
+            name = Naming.clothing(lvl, clothingNames[rand.nextInt(clothingNames.length)]);
         }
 
     }
@@ -162,7 +181,7 @@ public class Item implements java.io.Serializable {
     }
 
     public void deconstructor() {
-        name = null;
+        name = "Shattered relic"; // never null: merge/stack code calls name.equals() on anything found in a bag or pool
         //id = iUID++;
         maker = null;
         makerID = 0;
@@ -173,8 +192,11 @@ public class Item implements java.io.Serializable {
         lvl = 0;
     }
     public String toString() {
+        if (itemType == ItemType.Food || itemType == ItemType.Wine || itemType == ItemType.Poison) {
+            return name + " x" + quantity;
+        }
         if (stackable) {
-            return (name + " Quantity: " + quantity);
+            return (name + (brand != null && itemType == ItemType.Pill ? " (" + brand + ")" : "") + " Quantity: " + quantity);
         }
         else {
             String enchStr = enchantment != null ? " [" + enchantment + " +" + enchantBonus + "]" : "";

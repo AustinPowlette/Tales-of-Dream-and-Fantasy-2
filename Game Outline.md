@@ -19,7 +19,7 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Difficulty scaling — new areas spawn at `currentCharacter.lvl`; explorers naturally push into harder territory as they grow; Originis fixed at level 1
 - ✅ Dungeon types — LOST_RUINS (treasure+technique), BEAST_LAIR (3× beasts), MARTIAL_TRIAL (technique upgrade), HAUNTED_GROUNDS (potential gain), CELESTIAL_TRIAL (temporary 10-tick event; 3 boss fights + 20 cultivate + 25% potential + 10% technique); 5% spawn chance per area
 - ✅ Beast Tides — yearly: Beast Lairs with monsters > lvl*2000 overflow to 4 cardinal neighbors; neighboring cities lose up to 10% population
-- ✅ Heaven-Sent Treasure — every 3 years a high-potential technique appears in a random wilderness area; notifies characters within 20 tiles; "Heaven Treasure" priority-70 target quest; technique is first-come-first-served via `area.heavenlyTechnique`
+- ✅ Heaven-Sent Treasure — every year one treasure (technique, instrument, poison, Potential Pill, regular pill, clothes, weapon, array; `Treasure`) appears in a random wilderness area; claimed items can be auctioned; notifies characters within 20 tiles; "Heaven Treasure" priority-70 target quest; technique is first-come-first-served via `area.heavenlyTechnique`
 
 ### Character Creation
 - ✅ NPC constructor (`Character(Area)`)
@@ -84,8 +84,8 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `installArray(Area)` — any character can install an array at a location; Scribes auto-install on craft
 - ✅ Array combat — `arrayBreakAttempt()`: attacker fights strongest array first; array removed on break; 5% death on loss; defender gets `bestArrayLvl/10+1` tempLvl boost; beasts blocked entirely; array stronger than attacker → defender won't interfere
 - ✅ `technique()` — Innovative trait creates new techniques
-- ✅ `cityLeadership()` — Leader creates city (1M ss)
-- ✅ `sectLeadership()` — Leader creates sect (1B ss)
+- ✅ `cityLeadership()` — Leader creates city (Major Lvl ≥ 3)
+- ✅ `sectLeadership()` — Leader creates sect (Major Lvl ≥ 2)
 - ✅ Profession exp + level cap at 100
 - ✅ `professionPicker()` dispatch — fall-throughs fixed (Friendly/Tailor breaks added)
 - ✅ Merchant profession — Shop.java; sets up shops, restocks local pool, equips from own stock; city-to-city arbitrage: buys cargo at 30% → carries to demand city → sells at 100% via "Sell Stock" quest
@@ -94,6 +94,11 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Crafting level cap — items capped at `(majorLvl + 1) * 10` capped at 100 max; crafter can make 1 realm above their cultivation
 - ✅ Selling excess items — Go Sell quest at backpack > 20; `sell()` transfers surplus to city pool
 - ✅ Technique selling (Innovative only) — "Sell Technique" spot/area quest; travels to city library; `Library.sellTechnique()` pays seller; auto-donates copy to sect library 20% chance
+- ✅ Library (2026-10-03) — one book for each (type, potential); a sale pays a 20% fee and the seller loses the technique (the new book replaces the old); potential < 4 and equipped techniques are never sold; GUI sort and filter, terminal `library` filters
+- ✅ Auctions (2026-10-03, `Auctions`) — only luxuries (Heaven-Sent items, Potential Pills, vintage goods); consigned by `sell` (90% to the consignor); held when 5 lots wait or 6 weeks after the first; NPCs bid for what they want; Potential Pills are never sold in shops
+- ✅ Refine Blood (2026-10-03) — a non-alchemist takes 1,000+ Blood to an alchemist for Potential Pills (fee = the pill's price)
+- ✅ Shops without a stock cap (2026-10-03) — a shop buys anything its owner can afford
+- ✅ Manual duties (2026-10-03) — duty quests walk a MANUAL player only on `watch` turns; actions, `stay`, `wait` and the arrival of a walk never move you
 
 ---
 
@@ -108,7 +113,13 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ `spotQuests()` dispatcher — Random, Profession, Hunt, Interact, Test
 - ✅ `targetQuests()` dispatcher — Find Person
 - ✅ "Find Person" quest created for every new relationship
-- ✅ Priority increment per tick (`priorityDiff`)
+- ✅ Priority increment per tick (`priorityDiff`) via `Character.bump()` — clamped to `maxPriority`, heap rebuilt; repeating quests release after success
+- ✅ Relationship quest tiers — weak ties capped at 4 and replaced with new cultivators; strong ties persist; target queue capped at 50 with 10-year expiry for one-time quests
+- ✅ "Meditate" low-priority spot quest (replaced "Test")
+- ✅ City levels from treasury; shop slots (3/level) and shop level cap; epoch purge at 200k
+- ✅ Crowd hotspots — tiles over 2% of the starting population (map-area scaled, cities 4x) get beast ambushes until thinned; Originis exempt; "Disperse" quest
+- ✅ Sect raid cooldown (13 weeks per sect); bounded city population / overflow stoppers
+- ✅ Full-codebase review pass (2026-09-29) — 40+ defects fixed, see DEVLOG
 - ✅ `spotQuests()` return value fixed — now returns `questSuccess`
 - ✅ Quest target area refreshed from live character location before each pathfinder call
 - ✅ `currentQuest` null-check added in `changeRelationship()`
@@ -219,4 +230,72 @@ Legend: ✅ Implemented | 🟡 Partial / Skeleton | ❌ Not Started
 - ✅ Known locations display ('l' key) — all known areas with coordinates, city/sect flags
 - ✅ Relationship list ('r' key) — all living relationships with label and value
 - ✅ Auto-movement — 'o' menu: wait N turns, directional N turns, coordinate pathfind (X Y then N turns), random N turns; `autoX`/`autoY` fields track coordinate target
+- ✅ Player-control modes — MANUAL / AUTO / HYBRID per human character (`PlayerControl`); `auto [n]`, `manual`, `stop`; tracked NPCs (`player == 2`) run the NPC pipeline
+- ✅ Manual-mode quest suppression + alerts — routine quests ignored, notable ones announced with target/coordinates/distance/reason (`inbox`); "Do Quest" (`qdo`) checks viability and location before running the real handler
+- ✅ Quest tools — numbered view, pinned (non-aging) priorities, delete, mute, waypoint quests
+- ✅ Managed duties — ten toggles + master `duties all on|off`; "Get Pregnant" displays as "Have Child"
+- ✅ Decision prompts — kill/spare, flee, forbidden technique, accept/evade duel via `DecisionBroker`, with policies for AUTO/HYBRID
+- ✅ Manual verb set — movement, info screens, social, work, city/sect management, `do <quest>`, parties, library, shop pricing (`PlayerCommands`)
+- ✅ Hybrid scripts — goto/wait/forage/mine/craft/meditate/hunt/sell/quest/repeat/if/mode with interrupts (`PlayerScript`)
+- ✅ Selection lists — filter/sort/limit lists of cultivators, monsters, shop stock, backpack and places (terminal `list`, GUI Browse window); pick by list number or `#id`; `seek` quests; `buy`/`sell` by item
+- ✅ Map drawn north-up
+- ✅ Place pictures with mood/season/level/hotspot tints and overlays (user-made art in git-ignored `images/`)
+- ✅ GUI windows: quest panel, duties & policies, manage shops/city/sect, rankings & charts, market; status bar; map layers (fog, crowd, quest pins, path); log filters; keyboard shortcuts
+- ✅ Player-control GUI — buttons for modes/alerts/Do Quest/duties/help, command box, and a script editor window
+- ✅ Hand-bidding at yearly auctions, per-character decision timeout
+- ✅ Race-free GUI — `World` lock released at every wait, buffered map painting, GUI only queues commands (stress-tested at 0 ms with every window open)
+- ✅ Save slots — named saves, `.bak` of the previous copy, CRC check with backup fallback, rotating autosaves, crash slot + `crash.log`, start-up load menu, Saves window, save indicator
+- ✅ Settings window/command — autosave, text size, colour-blind map, pictures, tooltips, hints, confirmations, notifications, recap
+- ✅ Notifications (log, history, toasts, bell, sound), one-time hints, tutorial + first-run welcome, periodic recap popup
+- ✅ Combat preview (`preview`, shown inside duel/flee prompts) and undo-safe confirmations (`!cmd` = confirmed)
+- ✅ Family tree + relationship graph windows; `find`/`follow`/`control` and the Browse "Search anyone" tab
+- ✅ FlatLaf + xianxia "ink & jade" theme (run-time loaded; Nimbus fallback)
+- ✅ Main window redesign — header, action dock in tabs, centred map with hover tooltip and legend popup
+- ✅ Painted place pictures for every noun/biome, unique per place, re-rollable (`ArtGen`)
+- ✅ Balance step 1 — first generation starts at 18, first-year Originis truce, fight death roll actually applied (population at year 30: 73% of start in the scale model)
+- ✅ Luck trait — cultivation, loot, fortune events, social favour
+- ✅ Painted art reads number words, level and mood words from the place name
+- ✅ Dictionary/name overhaul and name engines for people, beasts, places, cities, sects, dungeons, shops, libraries, techniques, titles, items (`Naming.java`, `Naming Review.md`)
+- ✅ Character starts (protagonist, standard roll, custom, ten stories with objective chains), difficulty tiers (Story / Hard / Brutal with permadeath), hidden potential, NPC prehistory (`Starts.java`, `Character Starts.md`)
+- ✅ Settlements scale with population (`Settlements.java`)
+- ✅ Cave pictures painted from inside; pine-bough frames removed
+- ✅ World chronicle, death causes, life samples, notes (`Chronicle.java`)
+- ✅ Terminal tools: map, route, time, watch, journal, history, notes, dash, equip/compare/techniques, help topics
+- ✅ GUI windows: Backpack, Chronicle + hall of legends, Biography charts, Notes, World overview, Dashboard tab, log hover cards, auto-pause rules, high-contrast theme
+- ✅ Reincarnation — a spot quest at the end of your rope (Major Lvl 3+): the same character, a second youth at 18, level 1, potential +5, past lives kept
+- ✅ Beast Taming (Tamer trait) — up to Major Lvl + 1 companions that follow, fight with you and level
+- ✅ Goods economy — city goods markets, NPC buying and selling, festival trade quests, spoilage; the five life-art traits own their arts
+- ✅ City-born cultivators arrive at 18 at the level their potential earned
+- ✅ Food, Wine (Drunken), Poison and Music — goods, effects, five new traits, NPC professions
+- ✅ Generated ambient music — composed pieces with titles, motifs and sections, seven moods, stereo synth or SoundFont (`soundfonts/`)
+- ✅ Painted Originis, town/city skylines, sect halls, rivers and seasons (`ArtCity`)
+- ✅ Name engines: recipes and vintages, pet names, clans, festivals, tournaments, wars, tides, eras, regions and rivers (`Naming`, `Regions`)
+- ✅ Challenge limit for strangers, start-zone spread, readable non-modal Me-tab windows (`GuiSheets`)
+- ✅ Weather, portraits, sect seals, item icons, a painted world map, event illustrations (`ArtMore`)
+- ✅ Pill brands (`Item.brand`) and region-flavoured person names
+- ✅ Diagonal moves, go-to-quest, chase, quit, mature player start, sect member cap, war life cycle, treachery, squad caps
+- ✅ Playtest pass: plan (`Playtest Plan.md`), long-run tool (`tools/PlaytestProbe.java`), results recorded (2026-10-05, 2026-10-06)
+- ✅ Fight reports (terminal + notices + chronicle): odds, fled / forbidden technique / won / killed / spared / injured, loot, array attempts, tag-team; `fights [n]` (`FightReport`)
+- ✅ Non-lethal losers with bad blood pay the winner 10% of their wealth (negative relationship, bounty or war; sparring never)
+- ✅ Sect villainy (`SectPolitics`): inner disciples bully outer ones, Evil elders murder weaker disciples for gear, steal from the treasury, poison and frame rivals, plot coups against the master; Evil acts most, Neutral less, Good never; humans are warned and asked first
+- ✅ Spoilage: food, wine and poison rot in markets, shelves, pantries and bags; a hoard is capped (`Life.spoil`, `HOLD_CAP`)
+- ✅ Logo: emblem in the window / taskbar, `assets/logo/*.png|.ico`, `tools/MakeLogo.java`, `tools/make-exe.bat` (jpackage .exe)
+- ✅ GUI overhaul: one Quest Log window, Duties & Policies window, themed key-cap Keys sheet, command buttons on the Move tab (walk, work, quests, people), Help on the Move tab, a "?" in every window opening its Help page (`GuiDock`, `GuiQuests`, `GuiDuties`, `GuiCards`, `GuiHub`)
+- ✅ Interactive illustrated Help (F1, `?`): ~50 pages with screenshots, search, tree, links, tour (`GuiHelp`, `HelpContent`, `HelpPages*`, `assets/help`, `tools/HelpShots.java`)
+- ✅ Terminal: status block before each prompt, categorised `help`, did-you-mean, unambiguous prefixes, tables, safe number parsing (`TermHelp`, `TermHud`, `TermInput`, `TermFormat`, `TermView`)
+- ✅ Lore: the Palace of the Oldest Order at Originis (virtual master ???), the Convocation of the First Gate, seven acts, nine places, the Nine Lamps, ??? scenes and whispers, the crossing at level 101 (`Lore*`, `GuiLore`, `Lore Design.md`)
+- 🟡 Performance: hotspots measured (`Performance Report.md`); the two biggest per-turn scans fixed; more is possible (see report)
+- ✅ City and sect detail views (terminal and GUI)
+- ✅ Manual mode no longer swaps your gear behind your back
+- ✅ Coherent biome generation from seeded noise fields (continents, beaches, climate bands, rivers, terrain-aware names and resources)
+- ✅ Sect recruitment rules (craft, potential, level, alignment, gender, family name)
+- ✅ Run statistics, hall of fame, retire
+- ✅ Beasts remember a reincarnated master and the reborn gets a quest to find them
+- ✅ Seasonal festivals, sect diplomacy events, bounties on poisoners
+- ✅ Terminal map layers, watch triggers, digest; GUI relationship web of anyone, Rivalries tab, Digest, save thumbnails
+- ✅ Cities are founded at Major Lvl 2
+- 🟡 Balance — measured and planned (`Balance Plan.md`); no rebalancing done yet
+- ✅ Export: map PNG, window screenshot, chart PNG, CSV of any list / rankings / history, event log text
 - ✅ MapViewer GUI — optional Swing window (prompt at startup "Enable map viewer? Y/n"); 31×31 color-coded tile grid; click to select tile with info panel (area stats, top characters, bounties); refreshes each game tick; biome-based palette + special colors for Cities/Sects/Dungeons; Monsters shown in red
+- ✅ Endings of the story (rewritten 2026-10-02): the Old Man (the Gardener, Outside) explains, then Stay (Good Steward / Evil Usurper / Neutral Idler; undoable with `lore leave`) or Leave (lamp-bearer, strike at the Gardener with a stacking +5-potential blood bonus, walk out to one of 12 Outside branches); nine lamps cap the lamp-bearer ending; hidden ending kills the Gardener and ends the Garden; the world's end offers the Outside or the dark; NPC seekers make the same choices; funny credits, Hall of Fame with scores, Roll of the Crossed (`LoreEndings`)
+- ✅ Wandering Immortals, blessed descendants (+5 strength and potential per soldier in the line), NPC seekers, Giant Footprints (`LoreEndings`, `LoreSites`)

@@ -13,6 +13,13 @@ int priorityDiff;
 int maxPriority;
 Area targetArea;
 int targetCharacter;
+int createdAt = GameDriver.time; // game week the quest was posted (0 on old saves = unknown, never expires)
+boolean pinned = false;      // player-set priority: never ages, is never clamped, expires or gets shed
+int pinnedPriority = 0;      // the priority a pinned quest holds (and returns to after a repeating quest runs)
+boolean userCreated = false; // a player-authored waypoint quest (never muted, never expires)
+int uid = ++nextUid;         // stable id so the GUI and `qp #uid` / `qd #uid` / `qdo #uid` can name a quest (list numbers shift)
+static int nextUid = 0;
+boolean bounty = false;      // Hunt Beast posted on a city bounty board (a "bounty" duty for player characters)
 
 
     public Quest (String name, boolean oneTime, int priority, int priorityDiff, int maxPriority) {
@@ -50,7 +57,24 @@ public void questDeconstructor () {
     targetArea = null;
 }
 
+    // Player-set priority: holds the value forever (priorityDiff 0, maxPriority = value)
+    public void pin(int value) {
+        pinned = true;
+        pinnedPriority = value;
+        priority = value;
+        priorityDiff = 0;
+        maxPriority = value;
+    }
 
+    // Priority a repeating quest drops to after it runs (a pinned quest keeps its player-set value)
+    public void resetPriority() {
+        priority = pinned ? pinnedPriority : 0;
+    }
+
+    // Name shown to the player (the internal quest name stays stable)
+    public String displayName() {
+        return "Get Pregnant".equals(name) ? "Have Child" : name;
+    }
 
     @Override
     public int compareTo(Quest o) {
@@ -59,10 +83,11 @@ public void questDeconstructor () {
     }
 
     public String toString() {
+        String pin = pinned ? " [pinned]" : "";
         if (category == QuestCategory.Character){
-            return "" + name + " [" + Map.characters.get(targetCharacter) + "] / " + priorityDiff;
+            return "" + displayName() + " [" + Character.charById(targetCharacter) + "] " + priority + pin;
         }
-        return "" + name + " " + priority;
+        return "" + displayName() + " " + priority + pin;
     }
 
 

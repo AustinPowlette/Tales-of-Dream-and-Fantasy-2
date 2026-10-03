@@ -11,6 +11,7 @@ public class Map {
     //static final int range = 100 + 1; //Large
 
     public static Area[][] tiles = new Area[range][range];
+    public static long worldSeed = Long.getLong("tdf.seed") != null ? Long.getLong("tdf.seed") * 31 + 7 : new java.util.Random().nextLong() | 1L; // seeds the terrain fields (BiomeGen); saved with the world
     public static ArrayList<Area> createdAreas = new ArrayList<>();
     public static ArrayList<Area> cityAreas = new ArrayList<>();
     public static ArrayList<Character> characters = new ArrayList<>();
@@ -20,6 +21,7 @@ public class Map {
     public static ArrayList<Character> awakenedMonsters = new ArrayList<>();
     public static ArrayList<Area> hotspotAreas = new ArrayList<>();
     public static Character currentCharacter;
+    public static volatile boolean heavenExists = false; // a Heaven-Sent Treasure lies unclaimed somewhere (refreshed at the start of every tick; gates the per-character quest scan)
     public static ArrayList<String> legacyTitles = new ArrayList<>();
     public static ArrayList<Integer> legacyLvls = new ArrayList<>();
 
@@ -36,7 +38,7 @@ public class Map {
 
     // Shared thread pool for parallel tick phases; sized to all available cores
     public static final ForkJoinPool tickPool =
-            new ForkJoinPool(Runtime.getRuntime().availableProcessors());
+            new ForkJoinPool(Integer.getInteger("tdf.threads", Runtime.getRuntime().availableProcessors()));
 
     // Synchronized add helpers — called from parallel threads in Character/Area code
     public static synchronized void addTemp(Character c)               { tempCharacters.add(c); }
@@ -46,6 +48,7 @@ public class Map {
     public static synchronized void addLegacy(String title, int lvl)   { legacyTitles.add(title); legacyLvls.add(lvl); }
 
     public Map(){
+        if (Long.getLong("tdf.seed") == null) worldSeed = new java.util.Random().nextLong() | 1L; // a new world gets its own terrain
         tiles[range / 2][range / 2] = new Area(); // Starting Point of the World
     }
 }

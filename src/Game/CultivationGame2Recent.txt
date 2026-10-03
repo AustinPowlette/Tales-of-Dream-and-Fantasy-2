@@ -207,3 +207,116 @@ Depth mechanics batch (IMPLEMENTED 2026-09-19 Batch 18):
   Color-codes by biome/feature. Click to select tile; info panel shows stats, top chars, bounties.
   Refreshes via SwingUtilities.invokeLater() at end of each game tick. Future: area image view
   and cultivator/beast sprite overlays (planned, not started).
+
+
+[2026-09-28 economy/parties]
+- Cities and sects founded at Major Lvl 2 (Leaders); ownerless cities (e.g. Originis) still function as markets.
+- Beast loot follows item price scale (lvl^2.5*10*(1+pot/100)); city owners earn yearly tax only (pop/500, half to city treasury).
+- Cultivators hunt beasts from own major realm down to 2 realms below; same-realm hunts form parties (friends + non-hostile strangers within 1 realm); parties persist across repeated hunts.
+- Buy Gear travel only when a shop stocks an affordable upgrade (avoids everyone clustering at the shop city).
+
+[2026-09-29 quest queue / cities / population]
+- Quest queue: repeating quests release after each success; priorities age via Character.bump() (clamped to maxPriority, heap rebuilt). Social quests sit in the lowest band (10-48): Like/Dislike capped at 4 one-time each and replaced by a different cultivator of the same relationship value; Friend/Close Friend/Rival/Arch-Enemy persist. Target queue hard-capped at 50; one-time quests expire after 10 years.
+- Spot quest "Test" replaced by "Meditate" (extra cultivation tick, low priority).
+- City level = clamp(floor((treasury/10)^0.4 / 10), 1, 10); 3 shops per city level; shop level = min(city level, owner major realm) and stocks items up to level*10.
+- Population: tiles over 100 residents (cities 400) lose 30% of the excess yearly (births untouched, after year 10); at 200k living, 10% of each major level dies in batches (levels under 10 spared).
+
+[2026-09-29 crowd hotspots / city economy]
+- Overcrowding: a tile over capacity (100, cities 400, after year 10) becomes a hotspot; beasts ambush its cultivators each tick regardless of level and kill any they defeat, until the tile is under 80% of capacity. Cultivators there get a "Disperse" quest to a quieter nearby tile. Births are never reduced.
+- Sect raids: one per sect per 13 weeks. City population is bounded (cap 100k x cityLevel^2, 0.1%/tick growth); yearly tax 1% of population.
+
+[2026-09-29 player control]
+- Human characters have three modes: MANUAL (commands only), AUTO (NPC pipeline + decision policies), HYBRID (script). Info/setup commands cost no time.
+- Quests are classified routine / alert / duty. MANUAL ignores routine ones, announces alerts (target, coordinates, distance, reason), and runs duty quests only when that duty toggle is on. Ten duty toggles plus a master all on/off.
+- Player-set quest priorities are pinned (never age, clamp, expire or get shed); deleted quests can be muted so triggers do not repost them; "Do Quest" runs a queued quest only at its target tile.
+- Kill or spare (spare = don't kill) is asked only for cultivators; flee, forbidden technique and duel acceptance are also decisions; non-MANUAL characters use policies (default: spare, flee, no forbidden technique, accept duels).
+- Players set their shops' buy/sell/restock rates within safe bounds; "Get Pregnant" is displayed as "Have Child".
+
+[2026-09-30 crowd threshold / auctions]
+- Crowd capacity = 2% of the STARTING population scaled by map area (31x31 reference), cities 4x, floor 20; never scales with the current population. Originis is exempt from crowd hotspots.
+- Humans in a city bid by hand at the yearly auction (max bid per lot, winner pays runner-up); prompts can time out to the policy answer (`policy timeout`).
+
+
+== QoL pass 2026-09-30 (design decisions) ==
+- Concurrency: game thread owns World.lock, released at every wait + end of tick; GUI reads via tryLock(timeout) and skips a refresh rather than block; GUI never writes game state (queues commands).
+- Saves: newest autosave is auto-1 (auto-0 is only the temp write before rotation); every save keeps a .bak; load falls back to .bak when the CRC fails; crash writes crash-<time>.
+- Confirmations: risky commands ask (default No); "!cmd" = already confirmed; script/AUTO commands count as confirmed (written on purpose). GUI asks itself, then sends "!cmd".
+- Level-up notices start muted; the recap fires every 52 weeks by default (0 = off).
+- Control switch keeps the duty/policy setup (inheritFrom); the old character becomes a tracked NPC (player == 2).
+
+[2026-09-30 look / art]
+- Place pictures: hand-made art in images/places wins; otherwise ArtGen paints one (noun = scene, biome = palette, seed = composition). Big views unique per tile, thumbnails shared per noun+biome. Settings: paintedArt, artFresh, re-roll.
+- Theme: FlatLaf loaded by reflection from lib/ (no compile dependency); ink & jade palette; all colours/fonts come from Theme.
+- Balance: see Balance Plan.md. No gameplay numbers were changed in this pass.
+
+[2026-09-30 balance decisions]
+- Leveling is meant to be brutal and slow (perfect cultivator ~2,600 yrs to Major 10 is fine); most cultivators stay low, few reach the top via potential, time, luck or wealth. Do not speed up the XP curve.
+- Early massacre too brutal: aim for about a 33% population drop at most. NPCs and monsters must be able to reach top realms.
+- inhibitor = injury from a failed breakthrough; a low-potential failure soft-caps growth. Money: scarce and plentiful at once; gear one Major above costs a significant sum; money flows (beast loot -> trades); prices and income follow the same polynomial curve as leveling.
+
+[2026-09-30 starts / naming / settlements / tools]
+- Cities and sects scale with population (1 city per 1,000 cultivators, 1 sect per 300); population is left to cull itself through the epoch and hotspot density. M10 around year 4,000 is accepted.
+- Starts: Protagonist (potential 100), Standard = NPC curve with one re-roll under potential 20 and potential shown as a word until the first breakthrough, Standard custom = exact potential/everything, ten Stories with a chain of quests. NPCs start at the level a cultivator of 18 would have; the player starts at level 1.
+- Difficulty: Story / Hard / Brutal change money, gear, potential and world hostility; Brutal death offers nothing (no rebirth, no body takeover); some Brutal stories keep their hook, others are pure survival.
+- Naming: one engine for every name; cities and sects get unique names, tiles keep their geographic name for pictures; caves are painted from the inside; no pine-bough frames.
+- Tools: chronicle of notable events + death causes + life samples + notes saved with the world; watch = fast-forward until a notice/alert/attack; auto-pause rules and a high-contrast theme are Settings.
+
+[2026-10-03 traits, reincarnation, economy]
+- The five life-art traits (Tamer, Poisoner, Drunken, Chef, Musician) own their arts: nobody else can tame, mix/use poison, brew, cook or play (anyone can eat/drink/be affected).
+- Reincarnation keeps the SAME character: second youth at 18 (not 0: a baby cannot act), level 1, cultivation 0, realms' lifespan and injuries reset, potential +5; everything else stays; companions beyond the new cap wait and get a quest.
+- City-born cultivators arrive at 18 with the level their potential earned since 8 (like the first generation). Ghost city rebirth also at 18.
+- Goods are part of the economy: a city goods market, NPC buying/selling, festival trade quests, spoilage.
+
+[2026-10-02 rules and world]
+- Cities are founded at Major Lvl 2 (sects too).
+- Reincarnation also needs Major Lvl 3 (Soul Wandering): low-potential cultivators must raise their potential (Potential Pills, insights) before reincarnation can help them; the +5 stays. Literal "level = potential" is unreachable because the realm gates cap a level below its potential.
+- A tamed beast remembers the soul: it waits where its master was reborn, the reborn gets "Find Lost Beast"; Ghost trait works in every difficulty (Brutal included).
+- Sects ask things of recruits: craft, potential, level, alignment, gender, family name.
+- Terrain comes from seeded tileable noise (BiomeGen), not from the order of exploration; rivers, beaches, climate bands, highlands; names and resources follow it.
+- Run statistics per playthrough and a hall of fame; festivals each season, sect diplomacy yearly, bounties on poisoners.
+- Clicking a map tile only selects it; the Move Here button walks.
+
+[2026-10-01 reincarnation / taming / life arts / music]
+- Reincarnation is a reward for reaching beyond your rope, not for dying: quest at the last level the potential allows (gates 20/37/52/65/76/85/92/97/100 -> 9/19/.../89), +5 potential, reborn into your own family at 8, half wealth, items kept; whole climb 20 -> 100 is ~16 lives / ~4,000 years. Brutal does not refuse it, it only refuses a second life at death.
+- Beast taming: at most Major Lvl + 1 companions, they follow their master (always in his party), add level/10 to his fighting level, level on their own, go wild when the master dies or reincarnates.
+- Life arts: food (nourished), wine (drunk: clumsy, the Drunken fight better), poison (weaker, slower, can kill; food cures it), music (instrument; inspires listeners, tips); five new traits Tamer, Poisoner, Drunken, Chef, Musician.
+- In MANUAL mode the human picks their gear (autoequip setting); no auto eating/drinking either.
+- Ambient music is generated live (never the same), follows the player's tile, off by default.
+- Project builds with JDK 1.8: compile with --release 8.
+
+[2026-09-30 balance step 1]
+- First generation starts at 18; first-year truce in Originis (no non-spar fights there until week 52). deathCheck now decides whether a lost cultivator fight is fatal (it was ignored); non-lethal loss = injured (cultivation x0.7 until next level-up); a human winner may choose to kill.
+- Luck: +10% cultivation on average, +25% loot, fortune event ~once a decade, liked more easily (x1.5); Friendly x2 (either side). Beasts kill only when they out-level by 6+ or ambush.
+- Cities earn passive income from their population variable; cultivators pay no tax. Monsters awaken at the level of the beast they were. Rebirth (reset gates, raise potential) is a future feature.
+- Painted art reads the name: number word = count, mood words = motifs, level = glow/islets.
+
+[2026-10-04]
+- Strangers/dislikers may challenge a human at most Settings.maxRandomChallenges times per week; rivals, arch-enemies, party and sect-war fights are never limited. NPCs are not limited.
+- First generation spreads over the 9 start-zone tiles (faster first tick); the first-year truce covers the zone.
+- Anyone may tame one beast and use poison/wine/food; only the traits make goods or play; Tamer gets Major Lvl + 1 companions.
+- Goods are traded through shop shelves, auction lots, sect delivery missions and Poisoner contracts.
+- Music is composed (titles, motifs, four sections, chords) and can be played by a SoundFont from soundfonts/; names for regions, rivers, festivals, tournaments, wars, tides and eras are deterministic from the world seed.
+
+[2026-10-05]
+- Players move diagonally (one turn); go-to uses the shortest way on the wrapping world; chasing re-aims every turn and gives up after 150 turns.
+- New humans (not Story starts) start with their first ten years of cultivation (stops below Major Lvl 3); toggle: settings maturestart.
+- Sect cap = 20 + 8 per sect level + 15 per master realm. Wars last at least two years, then end with a rising yearly chance; at 5 years the declarer renews (40%) or the war ends; disciples of warring sects fight on contact. A disciple may turn on their master (treachery).
+- Squads: Leaders without a throne hold up to 12, everyone else 4; companion beasts do not count. At most two Hunt Beast bounties per character.
+- Winning a non-sparring fight: only a kill takes the loser's spirit stones and items (all of them); a spared or non-lethal loser keeps everything. Human winners can always choose Kill or Spare.
+
+[2026-10-06]
+- Fights a human is in end with a written report (who fled, forbidden technique, win / loss, kill / spare / injury, loot). A non-lethal loser with bad blood (negative relationship, bounty, revenge, war between their sects) pays the winner 10% of their wealth; strangers and sparring cost nothing; a kill still takes everything.
+- Sect villainy: only Evil (full) and Neutral (about a third) members, never Good. Inner disciples bully outer disciples; Evil elders murder a weaker disciple for a better item (40% found out -> cast out with a bounty); they steal from the treasury, poison, frame; Evil / Neutral elders plot coups (the strongest surviving plotter inherits); a human target is always told and asked.
+- Food, wine and poison spoil more (55% / 15% / 20% a year at grade 1, more for big stacks), everywhere; a character keeps at most 200 portions. The population is not capped: the epoch handles that.
+- One quest window (Quest Log); the Help button lives on the Move tab; every window has a "?" that opens its Help page; the Help is one illustrated interactive document.
+- Lore: the world is the inner garden of a far stronger cultivator who is losing a war; ??? is his image, left to run the Palace of the Oldest Order at Originis (same name every world, master "???" is not a Character, master duties are done by the game). Entrance: the Convocation of the First Gate each New Year. Every human follows the same seven acts, nine hidden places, ends by crossing the Seam at level 101 (Major 10). Everything is data in `LoreText`; `settings lore off` removes it.
+- Only a WALK is a lore quest (a waypoint); objectives with nowhere to go live in the Journal (they used to be re-created as quests and spammed alerts).
+
+[2026-10-07]
+- Story endings: stay (Good Steward / Evil Usurper / Neutral Idler), become a soldier (true ending: Wandering Immortal, descendants +5 strength +5 potential stacking per soldier), leave alone (random Outside branch), try to kill ??? (50/50). The choice changes the player's alignment. Hidden ending: potential 200 on the dark path, `lore usurp`. Every ending: story stub, funny credits, Hall of Fame line with a score, Roll of the Crossed.
+- NPCs the Convocation admits are seekers and may reach the same endings; the Hollow Court is never a world threat; the player is never destroyed by the epoch.
+- Giant Footprints: six places near the Thin Sky and the Garrison, remnants of battles on the inner world of ???, a short clue and a rare relic each.
+
+2026-10-02 endings (user's lore): ??? is only the Gardener's image (cannot leave the Garden, does not fight). The Old Man = the Gardener (Outside), array master: nine great lamps need strong carriers; the Garden grows lamp-bearers. Beats: Seam -> Old Man -> Stay (Good/Evil/Neutral, undoable with lore leave) or Leave (final: lamp-bearer / strike (50/50, always death when 9 lamps are carried; blood = +5 potential for all, stacking, births too) / walk out alone). Nine lamps full: soldier ending closed, hidden ending locked. Hidden ending kills the Gardener = the Garden is destroyed (game ends). World's end = the Gardener dies: those who can cross choose Outside or the dark. NPC seekers make the same choices. Wandering Immortals are soul-imprinted by the Gardener and can return to the Garden.
+
+2026-10-03 economy (user's design): Heaven-Sent treasures come once a year in 8 kinds (technique, instrument, poison, Potential Pill, regular pill, clothes, weapon, array). Only Heaven-Sent items, Potential Pills and vintage food/wine/poison are auctioned (consigned by selling in a city; 90% to the consignor); an auction is held when 5 lots wait or 6 weeks after the first. Potential Pills are never on shelves. Non-alchemists take Blood to an alchemist (Refine Blood quest, fee = pill price). Shops have no stock cap; melting unsellable gear into metal is on hold. Library: one book per (type, potential); a sale pays 20%, the new book replaces the old and the seller loses the technique (never the equipped four; potential < 4 not sold). Manual play: duty quests walk the player only on `watch` turns, never after an action, `stay`, `wait` or arrival.

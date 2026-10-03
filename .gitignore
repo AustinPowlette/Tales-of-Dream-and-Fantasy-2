@@ -1,0 +1,7 @@
+# Place images are user-made art (images/places/*.png + optional images/moods.txt); keep them out of git
+images/
+saves/
+settings.properties
+exports/
+crash.log
+/soundfonts/

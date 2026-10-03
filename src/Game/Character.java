@@ -30,7 +30,12 @@ public class Character implements java.io.Serializable {
         SpiritVein,
         HeavenlyRoot,
         Monster,
-        Beast
+        Beast,
+        Tamer,
+        Poisoner,
+        Drunken,
+        Chef,
+        Musician
     }
     int id;
     String name = "";
@@ -63,11 +68,39 @@ public class Character implements java.io.Serializable {
     boolean isGhostForm = false;
     String originalName = null; // chain of prior names for Ghost rebirths
     int bloodlineBonus = 0;
+    Life.Fx fx = null;                  // food / wine / music / poison conditions (null for most characters)
+    ArrayList<Item> goods = null;       // food, wine and poison (see Life)
+    ArrayList<Integer> beastIds = null; // tamed beasts (see Taming)
+    int masterId = -1;                  // for a tamed beast: its master
+    boolean wasTamed = false;           // this beast was tamed once (its list slot is cleared by hand when it is freed or dies)
+    ArrayList<String> pastLives = null; // earlier lives of a reincarnated soul (see Reincarnation)
+    int lives = 0;                      // how many times this soul has been reincarnated
+    int soulId = -1;                    // id of this soul's first body (shared by every life of a reincarnated soul)
+    ArrayList<Integer> lostBeastIds = null; // companions that stayed behind when this soul was reborn and wait for it (see Taming.waitFor)
+    int waitingSoul = -1;               // for a beast: the soul it is waiting for (it has no turn and stays where its master left it)
+    int reincarnTry = -1000;            // week of the last reincarnation attempt that found no family (retried yearly)
+    transient boolean equipNow = false;  // the player asked for the best gear right now (the `equip` command / Equip best button)
+    boolean reincarnating = false;      // the body is being left behind by a reincarnation (not a death)
+    Starts.State story = null;        // the chain of objectives of a Story start (null otherwise)
+    boolean potentialHidden = false;  // shown to its owner as a word until the first breakthrough
+    boolean storyNpc = false;         // a character that belongs to somebody's story and stays in Originis
+    /** Potential as the owner sees it: the number, or a word while it is still a rumour. */
+    String potentialLabel() { return potentialHidden ? Starts.potentialWord(potential) : String.valueOf(potential); }
     boolean needsReincarnation = false; // set when a player character dies; resolved by GameDriver
+    int blessing = 0;                    // fighting level (tempLvl) and potential a soldier's descendants carry: +5 per soldier in the line (see LoreEndings)
+    boolean wanderingImmortal = false;   // a soldier who came back: cannot die, gives hints and gifts (see LoreEndings.wanderTurn)
     Character reincarnationKiller = null; // the killer, if any, for the reincarnation menu
+    String deathCause = "natural causes"; // shown in the reincarnation screen
     String repTitle = null;
     int exhaustionPenalty = 0;
+    int partyLeaderId = -1;
+    int exploreTicks = 0;
+    char exploreDir = 'x';
+    boolean forbiddenDeclined = false; // the last forbiddenCheck() was declined by a human (so the technique was not used)
+    boolean ambusher = false; // a crowd-hotspot beast: kills any cultivator it defeats and never triggers awakening/city destruction
     int autoX = -1;
+    int chaseId = -1;    // a human's "go there" is chasing this cultivator (see PlayerCommands.stepAuto); -1 = walking to fixed coordinates
+    int chaseTurns = 0;
     int autoY = -1;
     double cultivationBase = 0;
     double cultivationBaseMax = Math.pow(lvl, 3) * (((70.+1./3.) + ((11./6.) * lvl)) / 25.);
@@ -85,6 +118,7 @@ public class Character implements java.io.Serializable {
     PriorityQueue<Quest> spotQuests = null;
     PriorityQueue<Quest> targetQuests = null;
     Quest currentQuest = null;
+    PlayerControl pc = null; // player-control state (human characters only; created on first use, see pc())
     ArrayList<Shop> ownedShops = null;
     // Relationship variables
     RelationshipList relationshipList;
@@ -94,6 +128,7 @@ public class Character implements java.io.Serializable {
     ArrayList<Character> siblings;
     ArrayList<Character> children;
     Area location = null;
+    int areaIdx = -1; // index in location.characters for O(1) swap-remove
     ArrayList<Area> knownLocations;
     // Make a Place Class and a City Class Maybe and then make a known Place/City variable
     ArrayList<Item> backpack;
@@ -129,21 +164,18 @@ public class Character implements java.io.Serializable {
         techniqueList = new ArrayList<>();
 
         location = area;
-        location.characters.add(this);
+        location.addChar(this);
         knownLocations.add(location);
         id = UID++;
 
         // Gender and Name Picker
         {
-            if (rand.nextInt(2) == 0) {
-            name = Dictionary.maleNames[rand.nextInt(Dictionary.maleNames.length)];
-            gender = "Male";
+            boolean female = rand.nextInt(2) != 0;
+            gender = female ? "Female" : "Male";
+            String[] full = Naming.person(female, location); // avoids a namesake among the living where it can; the region's culture favours its own names
+            name = full[0];
+            lastName = full[1];
         }
-        else {
-            name = Dictionary.femaleNames[rand.nextInt(Dictionary.femaleNames.length)];
-            gender = "Female";
-        }
-        lastName = Dictionary.lastNames[rand.nextInt(Dictionary.lastNames.length)];}
 
         potential = (int)(101 - Math.sqrt(rand.nextInt(10000) + 1));
         cultivation = (Math.pow(potential,2)  * Math.sqrt(lvl) / (52. * Math.sqrt(potential)));
@@ -216,6 +248,9 @@ public class Character implements java.io.Serializable {
             }
         }
 
+        age = 8; // the constructor's default: the world's starting population and city births set the real starting age (Starts.prehistoryOne)
+
+        trait = Life.rollTrait(trait);
         // Quest Initialization
         questInitializer();
     }
@@ -240,6 +275,7 @@ public class Character implements java.io.Serializable {
         techniqueList = new ArrayList<>();
         affiliationNum = 0; // default neutral; overwritten below in affiliation block
 
+        id = UID++; // must be assigned before changeRelationship() below, which builds the reciprocal entries from this.id
         this.mother = mother;
         this.father = mother.spouse;
         siblings.addAll(mother.children);
@@ -258,9 +294,8 @@ public class Character implements java.io.Serializable {
         changeRelationship(mother, 3);
 
         location = mother.location;
-        location.characters.add(this);
+        location.addChar(this);
         knownLocations.add(location);
-        id = UID++;
         time = -40;
         mother.pregnant = true;
         born = false;
@@ -269,14 +304,14 @@ public class Character implements java.io.Serializable {
         // Gender and Name Picker
         {
             if (rand.nextInt(2) == 0) {
-                name = Dictionary.maleNames[rand.nextInt(Dictionary.maleNames.length)];
+                name = Naming.firstFor(false, father.lastName);
                 gender = "Male";
                 temp = father;
                 if (father.sect != null) {
                     father.sect.join(this);
                 }
             } else {
-                name = Dictionary.femaleNames[rand.nextInt(Dictionary.femaleNames.length)];
+                name = Naming.firstFor(true, father.lastName);
                 gender = "Female";
                 temp = mother;
                 if (mother.sect != null) {
@@ -304,6 +339,9 @@ public class Character implements java.io.Serializable {
             if (potential < limiter) {
                 potential = limiter;
             }
+            blessing = LoreEndings.inheritedBlessing(mother, father); // descendants of soldiers are born stronger
+            if (blessing > 0) potential = Math.min(100, potential + blessing);
+            if (LoreEndings.bloodBonus() > 0) potential = Math.min(100, potential + LoreEndings.bloodBonus()); // the blood that went back to the Garden
             cultivation = (Math.pow(potential, 2) * Math.sqrt(lvl) / (52. * Math.sqrt(potential)));
         }
         // Bloodline bonus: each parent at Soul Wandering+ (majorLvl >= 3) grants +1 bonus cultivate/tick
@@ -393,6 +431,7 @@ public class Character implements java.io.Serializable {
             }
         }
 
+        trait = Life.rollTrait(trait);
         // Quest Initialization
         questInitializer();
 
@@ -434,9 +473,9 @@ public class Character implements java.io.Serializable {
                 break;
         }
 
-        name = adjectivesEntities[rand.nextInt(adjectivesEntities.length)];
-        lastName = monsters[rand.nextInt(monsters.length)];
+        name = Naming.beastAdjective();
         lvl = rand.nextInt(location.lvl) + 1;
+        lastName = Naming.beastSpecies(lvl); // the species follows the beast's level tier
         tempLvl = lvl;
         majorLvl = lvl/10;
         minorLvl = lvl%10;
@@ -449,20 +488,22 @@ public class Character implements java.io.Serializable {
         cultivation = (Math.pow(potential,2)  * Math.sqrt(lvl) / (52. * Math.sqrt(potential)));
         cultivationBaseMax = Math.pow(lvl, 3) * (((70.+1./3.) + ((11./6.) * lvl)) / 25.);
         trait = Traits.Beast;
-        ss = (long)Math.pow(100, (lvl+potential)/20.);
+        // Loot scales with item prices (lvl^2.5 * 10) so hunting funds gear at the same tier instead of exploding exponentially
+        ss = (long)(Math.pow(lvl, 2.5) * 10 * (1 + potential / 100.));
+        age = rand.nextInt(maxAge * 3 / 4);
     }
 
     public void questInitializer () {
         Quest random     = new Quest("Random", false, 35, 2, 90);
         Quest profession = new Quest("Profession", false, 30, 3, 70);
         Quest hunt       = new Quest("Hunt", false, 30, 5, 50);
-        Quest test = new Quest("Test", false, 45, 5, 10);
+        Quest meditate   = new Quest("Meditate", false, 15, 2, 40); // low-priority rest: an extra cultivation tick
 
 
         spotQuests.add(random);
         spotQuests.add(profession);
         spotQuests.add(hunt);
-        spotQuests.add(test);
+        spotQuests.add(meditate);
     }
 
     // Monster NPCs: primarily hunt, occasionally explore via Random events
@@ -480,12 +521,15 @@ public class Character implements java.io.Serializable {
         String[] titles = {"Ancient", "Dread", "Elder", "Primordial", "Titan", "Sovereign", "Infernal"};
         name = titles[rand.nextInt(titles.length)] + " " + name;
         id = UID++;
-        age = 8;
+        age = rand.nextInt(Math.max(1, maxAge * 3 / 4));
         time = 0;
-        location.characters.add(this);
+        location.addChar(this);
         if (!knownLocations.contains(location)) knownLocations.add(location);
         monsterQuestInitializer();
-        characters.add(this);
+        // Queue through tempCharacters so ids stay equal to list indices even when births are already pending this tick
+        // (the merge counts every temp entry as a birth, so pre-subtract this one from the population)
+        population--;
+        addTemp(this);
         awakenedMonsters.add(this);
         System.out.println(name + " " + lastName + " has awakened as a Monster! The wilds tremble.");
     }
@@ -511,18 +555,29 @@ public class Character implements java.io.Serializable {
         }
         movement(move);
     }
-    /** Thread-safe tile creation: double-checked lock prevents two threads creating the same tile. */
+    /** Thread-safe tile creation: double-checked lock prevents two threads creating the same tile.
+     *  Sets currentCharacter inside the lock so Area constructor seeds level correctly. */
     private Area ensureTile(int x, int y, char dir) {
         if (tiles[x][y] == null) {
             synchronized (tileLock) {
-                if (tiles[x][y] == null) tiles[x][y] = new Area(location, dir);
+                if (tiles[x][y] == null) {
+                    currentCharacter = this;
+                    tiles[x][y] = new Area(location, dir);
+                }
             }
         }
         return tiles[x][y];
     }
 
-    public void movement(char temp) { // a = west, d = east, w = north, s = south
-        location.characters.remove(this); // Removes This Character From The Character List of the "Old" Location
+    public void movement(char temp) { // a = west, d = east, w = north, s = south; Q E Z C = north-west, north-east, south-west, south-east (one turn, like the pathfinder's two-axis step)
+        switch (temp) {
+            case 'Q': movement('a'); movement('w'); return;
+            case 'E': movement('d'); movement('w'); return;
+            case 'Z': movement('a'); movement('s'); return;
+            case 'C': movement('d'); movement('s'); return;
+            default: break;
+        }
+        location.removeChar(this); // Removes This Character From The Character List of the "Old" Location
         switch (temp) /* Creates New Area and/or Moves This Character*/ {
             case 'd':
                 location = (location.x >= range - 1)
@@ -547,8 +602,8 @@ public class Character implements java.io.Serializable {
             default:
                 break;
         }
-        if (trait != Traits.Beast && !location.characters.contains(this)) {
-            location.characters.add(this); // Adds This Character to the Character List of the New Location
+        if (trait != Traits.Beast && areaIdx < 0) {
+            location.addChar(this); // Adds This Character to the Character List of the New Location
         }
         if (trait != Traits.Beast && !knownLocations.contains(location)) {
             knownLocations.add(location); // Adds New Location to knownLocations
@@ -557,11 +612,17 @@ public class Character implements java.io.Serializable {
 
     public void practice() {
         cultivate();
-        if (martialTechnique != null && rand.nextInt(10) == 0) martialTechnique.upgrade(this);
+        if (rand.nextInt(10) == 0) {
+            if (martialTechnique != null) martialTechnique.upgrade(this);
+            if (martialTechnique2 != null) martialTechnique2.upgrade(this);
+            if (movementTechnique2 != null) movementTechnique2.upgrade(this);
+        }
     }
 
     public void cultivate() {
         double spiritVeinBonus = (trait == Traits.SpiritVein) ? 1.5 : 1.0;
+        if (trait == Traits.Lucky && rand.nextInt(10) == 0) spiritVeinBonus *= 2; // fortune: about +10% cultivation on average
+        if (fx != null) spiritVeinBonus *= Life.cultMult(this); // food, wine, music, poison
         cultivationBase += cultivation * spiritVeinBonus;
         if (cultivationBase >= cultivationBaseMax) {
             cultivationBase -= cultivationBaseMax;
@@ -571,6 +632,7 @@ public class Character implements java.io.Serializable {
             cultivation = ((Math.pow(potential,2) * Math.sqrt(lvl) * 10.) / (52. * Math.sqrt(potential) * Math.pow(2,inhibitor)));
             if ((minorLvl >= 11 && majorLvl < 10)) {
                 int preMajor = majorLvl;
+                final int maxAgeBefore = maxAge, totalAgeBefore = totalAgeGained; // restored if the tribulation below fails
                 majorLvl++;
                 minorLvl = 1;
 
@@ -737,14 +799,19 @@ public class Character implements java.io.Serializable {
                         // Fail — pushed back
                         majorLvl = preMajor;
                         minorLvl = 8;
-                        lvl -= (lvl - preMajor * 10);
+                        lvl = preMajor * 10 + minorLvl; // lvl == 10*majorLvl + minorLvl everywhere else
+                        maxAge = maxAgeBefore;          // the lifespan bonus of the failed realm is not kept (nor re-earned on each retry)
+                        totalAgeGained = totalAgeBefore;
                         inhibitor++;
+                        cultivationBaseMax = Math.pow(lvl, 3) * (((70.+1./3.) + ((11./6.) * lvl)) / 25.);
+                        cultivation = ((Math.pow(potential,2) * Math.sqrt(lvl) * 10.) / (52. * Math.sqrt(potential) * Math.pow(2,inhibitor)));
                         if (printBreakthroughs || (player > 0 && skipping <= 0))
                             System.out.println(this + " failed the realm tribulation! Cultivation regressed.");
                     }
                 }
                 // Hero threshold: first cultivator of any kind to reach each apex realm
                 if (majorLvl == preMajor + 1) {
+                    Chronicle.breakthrough(this);
                     if (majorLvl == 5 && !heroEnsoulment) { synchronized(Map.class) { if (!heroEnsoulment) { heroEnsoulment = true; System.out.println("[HERO] " + this + " is the first to reach Ensoulment! The heavens take notice."); } } }
                     if (majorLvl == 7 && !heroAscension) { synchronized(Map.class) { if (!heroAscension) { heroAscension = true; System.out.println("[HERO] " + this + " is the first to reach Ascension! An era-defining cultivator has emerged."); } } }
                     if (majorLvl == 9 && !heroPseudoImmortal) { synchronized(Map.class) { if (!heroPseudoImmortal) { heroPseudoImmortal = true; System.out.println("[HERO] " + this + " is the first to reach Pseudo Immortal! Immortality approaches."); } } }
@@ -753,7 +820,37 @@ public class Character implements java.io.Serializable {
         }
     }
 
+    /** Lucky cultivators stumble into fortune about once a decade: a flash of insight (+1 potential), a piece of gear one Major above them,
+     *  a windfall of spiritual energy, or a technique breakthrough. */
+    private void fortuneEvent() {
+        int roll = rand.nextInt(100);
+        String what;
+        if (roll < 25 && potential < 100) {
+            potential++;
+            what = "a sudden insight: potential is now " + potential;
+        } else if (roll < 55) {
+            int gear = Math.max(1, Math.min(10, majorLvl + 1));
+            Item found = rand.nextBoolean() ? new Item(this, Item.WeaponType.values()[rand.nextInt(Item.WeaponType.values().length)], gear) : new Item(this, gear, Item.ItemType.Clothing);
+            backpack.add(found);
+            equip();
+            what = "a hidden cache: " + found.name + " (Lv." + gear + ")";
+        } else if (roll < 85) {
+            int weeks = 10 + rand.nextInt(21);
+            for (int i = 0; i < weeks; i++) cultivate();
+            what = "a windfall of spiritual energy (" + weeks + " weeks of cultivation in a moment)";
+        } else {
+            if (martialTechnique != null) martialTechnique.upgrade(this);
+            what = "a martial insight that improves their technique";
+        }
+        if (player == 1 && skipping <= 0) {
+            System.out.println("Fortune smiles on " + name + ": " + what + ".");
+            Notifications.post("fortune", "Fortune smiles on you: " + what + ".", -1, id);
+        }
+    }
+
     public void time() {
+        if (fx != null) Life.tick(this);
+        if (trait == Traits.Lucky && born && !dead && rand.nextInt(520) == 0) fortuneEvent();
         time++;
         if (time >= 52) {
             age++;
@@ -764,23 +861,32 @@ public class Character implements java.io.Serializable {
             born = true;
             mother.pregnant = false;
             if (printBreakthroughs || (player > 0 && skipping <= 0)) System.out.println(this + " has been born to " + mother + " and " + father);
+            Notifications.onBirth(this, mother, father);
         }
         if (age > maxAge) {
+            deathCause = "old age (lived " + age + " years)";
             dead();
         }
     }
 
     public void dead() {
         if (dead) return;
+        if (wanderingImmortal) { return; } // the Wandering Immortals do not die
+        leaveParty();
+        dissolveParty();
         if (trait == Traits.Beast || trait == Traits.Monster) {
             dead = true;
-            location.characters.remove(this);
-            location.deadCharacters.add(this);
+            location.removeChar(this);
+            if (masterId >= 0 || waitingSoul >= 0) { Taming.onBeastDeath(this); return; } // a tamed (or waiting) beast: no corpse, no list entry left behind
+            location.addDead(this);
             addRem(this); // null out characters slot; GameDriver skips population-- for monsters
             return;
         }
         dead = true;
-        if (player >= 1 && trait != Traits.Ghost) needsReincarnation = true;
+        Naming.releaseName(name, lastName);
+        Taming.onMasterGone(this);
+        if (!reincarnating) { Chronicle.death(this, null); Notifications.onDeath(this, null); }
+        if (player >= 1 && !reincarnating) needsReincarnation = true; // a Ghost only reaches this on a true death (the first death makes the ghost form and returns earlier)
         if (majorLvl >= 7) {
             String legend = name + " " + lastName;
             if (!legacyTitles.contains(legend)) { addLegacy(legend, lvl); }
@@ -790,11 +896,7 @@ public class Character implements java.io.Serializable {
             spouse = null;
         }
         if (pregnant) {
-            for (Character child : children) {
-                if (!born) {
-                    child.dead = true;
-                }
-            }
+            for (Character child : new ArrayList<>(children)) killUnborn(child);
         }
         if (sect != null) {
             sect.resign(this);
@@ -817,23 +919,34 @@ public class Character implements java.io.Serializable {
             if (friend != null && !friend.dead) friend.relationshipList.remove(this.id);
         }
         // Notify children so they can find parent's body
-        for (Character child : children) {
+        if (!reincarnating) for (Character child : children) {
             if (child != null && !child.dead && child.born) {
-                child.targetQuests.add(new Quest("Find Parent's Body", false, 25, 0, 45, location));
+                child.targetQuests.add(new Quest("Find Parent's Body", true, 25, 0, 45, location));
             }
         }
         addRem(this);
-        location.characters.remove(this);
-        location.deadCharacters.add(this);
+        location.removeChar(this);
+        location.addDead(this);
 
         if (printBreakthroughs || player > 0) System.out.println(this + " has died");
 
     }
+
+    // A mother's death takes her unborn child with her: mark it dead, clear its sect/list entries and queue its removal
+    private void killUnborn(Character child) {
+        if (child == null || child.born || child.dead) return;
+        child.dead = true;
+        if (child.sect != null) child.sect.resign(child);
+        if (child.location != null) child.location.removeChar(child);
+        addRem(child);
+    }
+
     public void dead(Character killer) {
         if (dead) return; // already dead this tick; prevent duplicate remCharacters entry
-        if (killer == null) { dead(); return; } // array/trap death: no killer to credit
+        if (wanderingImmortal) { return; }
+        if (killer == null) { deathCause = "eliminated by an Array or Trap"; dead(); return; } // array/trap death: no killer to credit
         // True Immortal rebirth — cycles through death rather than truly dying
-        if (majorLvl == 10) {
+        if (majorLvl == 10 && trait != Traits.Beast && trait != Traits.Monster) {
             dead = false;
             time = 0;
             age = 0;
@@ -860,7 +973,8 @@ public class Character implements java.io.Serializable {
             return;
         }
         dead = true;
-        if (player >= 1 && trait != Traits.Ghost) {
+        if (trait != Traits.Beast && trait != Traits.Monster) { Naming.releaseName(name, lastName); Taming.onMasterGone(this); Chronicle.death(this, killer); Notifications.onDeath(this, killer); }
+        if (player >= 1) {
             needsReincarnation = true;
             reincarnationKiller = killer;
         }
@@ -871,11 +985,7 @@ public class Character implements java.io.Serializable {
                 spouse = null;
             }
             if (pregnant) {
-                for (Character child : children) {
-                    if (!born) {
-                        child.dead = true;
-                    }
-                }
+                for (Character child : new ArrayList<>(children)) killUnborn(child);
             }
             if (sect != null) {
                 sect.resign(this);
@@ -894,18 +1004,18 @@ public class Character implements java.io.Serializable {
             // Notify children so they can find parent's body
             for (Character child : children) {
                 if (child != null && !child.dead && child.born) {
-                    child.targetQuests.add(new Quest("Find Parent's Body", false, 25, 0, 45, location));
+                    child.targetQuests.add(new Quest("Find Parent's Body", true, 25, 0, 45, location));
                 }
             }
             addRem(this); //Removes a cultivator from the characters Array after the round is done
-            location.characters.remove(this); //Removes a cultivator from the location
+            location.removeChar(this); //Removes a cultivator from the location
         }
 
         if (killer.trait == Traits.Beast || killer.trait == Traits.Monster) {
-            if (killer.trait == Traits.Beast && !monstersList.contains(killer)) {
+            if (killer.trait == Traits.Beast && !killer.ambusher && !monstersList.contains(killer)) { // ambush beasts don't stay on as roaming predators
                 addMonster(killer);
             }
-            location.deadCharacters.add(this);
+            location.addDead(this);
             killer.kills++;
             for (int i = 0; i < lvl; i++) {
                 killer.cultivate();
@@ -915,8 +1025,9 @@ public class Character implements java.io.Serializable {
 
         if (trait == Traits.Beast || trait == Traits.Monster) {
             killer.kills++;
-            killer.ss += this.ss;
+            killer.ss += killer.trait == Traits.Lucky ? this.ss + this.ss / 4 : this.ss; // the Lucky find 25% more on every kill
             this.ss = 0;
+            location.removeChar(this); // awakened Monsters sit in location.characters; without this a slain one lingered there as a corpse
             if (monstersList.contains(this)) {
                 addRem(this); //Removes monster from monstersList after round is done
             }
@@ -928,7 +1039,7 @@ public class Character implements java.io.Serializable {
                 if (relationship.friendID < 0 || relationship.friendID >= characters.size()) continue;
                 Character friend = characters.get(relationship.friendID);
                 Integer value = relationship.value;
-                if (friend != null && !friend.dead && value >= 2) {
+                if (friend != null && !friend.dead && friend != killer && value >= 2) {
                     value -= 1;
                     friend.changeRelationship(killer, -value);
                     if (!killer.dead && friend.majorLvl >= killer.majorLvl - 1) {
@@ -956,10 +1067,12 @@ public class Character implements java.io.Serializable {
 
             // Recycling: remove this character from living characters' relationship lists
             for (Relationship rel : new ArrayList<>(relationshipList.relationships)) {
+                if (rel.friendID < 0 || rel.friendID >= characters.size()) continue;
                 Character friend = characters.get(rel.friendID);
                 if (friend != null && !friend.dead) friend.relationshipList.remove(this.id);
             }
             killer.kills++;
+            LoreEndings.onKill(killer, this); // the Usurper's hunger: each Good cultivator killed lifts the potential past 100
             // Legacy: record high-level cultivators who fall in battle
             if (majorLvl >= 7) {
                 String legend = name + " " + lastName;
@@ -991,6 +1104,7 @@ public class Character implements java.io.Serializable {
                 }
             }
             // Transers all items to the killer
+            FightReport.loot(this, killer);
             transferAllItems(killer);
 
             // Creates Blood to give to Killer
@@ -1008,15 +1122,194 @@ public class Character implements java.io.Serializable {
             }
         }
     }
+    // ---------------------------------------------------------------- player control (see planning.md)
+
+    /** Player-control state; created the first time a human-controlled character needs it. Its quest queues are swapped for
+     *  muting-aware ones so a deleted quest stays deleted when its trigger fires again. */
+    PlayerControl pc() {
+        if (pc == null && player == 1) {
+            pc = new PlayerControl();
+            targetQuests = new QuestQueue(targetQuests, pc.muted);
+            spotQuests = new QuestQueue(spotQuests, pc.muted);
+        }
+        return pc;
+    }
+
+    // A human character the player drives by hand (MANUAL, or HYBRID between script steps). Children stay on the NPC routine.
+    boolean isManualPc() {
+        return player == 1 && age >= 8 && pc().mode != PlayerControl.Mode.AUTO;
+    }
+
+    // Does the NPC-style routine for this duty run? Always for NPCs and AUTO characters; for MANUAL/HYBRID only when the duty toggle is on.
+    boolean autoActs(int duty) {
+        if (!isManualPc()) return true;
+        return duty >= 0 && pc.duties[duty];
+    }
+
+    // A human takes over another character's seat (reincarnation, ghost rebirth): settings carry over, scripts and alerts do not
+    void takeControlFrom(Character old) {
+        player = old.player;
+        old.player = 0;
+        if (player == 1) {
+            PlayerControl np = pc();
+            if (old.pc != null) np.inheritFrom(old.pc);
+        }
+    }
+
+    // Highest-priority queued quest this character may run by itself right now (NPCs and AUTO characters: the head of the queue)
+    private Quest pollAllowed(PriorityQueue<Quest> queue) {
+        if (!isManualPc()) return queue.poll();
+        Quest best = null;
+        for (Quest q : queue) if (pc.allowedToRun(this, q) && (best == null || q.priority > best.priority)) best = q;
+        if (best != null) queue.remove(best);
+        return best;
+    }
+
+    // Tile the character must reach to run this quest (null for spot quests)
+    Area questDestination(Quest q) {
+        if (q.category == Quest.QuestCategory.Character) {
+            Character t = charById(q.targetCharacter);
+            return (t != null && !t.dead) ? t.location : null;
+        }
+        return q.category == Quest.QuestCategory.Area ? q.targetArea : null;
+    }
+
+    Quest findQueuedQuest(String name) {
+        if (currentQuest != null && currentQuest.name.equalsIgnoreCase(name)) return currentQuest;
+        Quest best = null;
+        for (Quest q : targetQuests) if (q.name.equalsIgnoreCase(name) && (best == null || q.priority > best.priority)) best = q;
+        for (Quest q : spotQuests) if (q.name.equalsIgnoreCase(name) && (best == null || q.priority > best.priority)) best = q;
+        return best;
+    }
+
+    /** Do Quest: runs a queued quest right now if it can be done where the character stands, then applies the same result
+     *  handling as quest(). Returns null when the quest ran, otherwise the reason it can't be done. */
+    String doQuestNow(Quest q) {
+        if (q == null) return "No such quest.";
+        if (dead) return "You are dead.";
+        boolean queued = q == currentQuest || targetQuests.contains(q) || spotQuests.contains(q);
+        if (!queued) return "That quest is no longer in your queue.";
+        if (q.category == Quest.QuestCategory.Spot) {
+            spotQuests.remove(q);
+            int result = spotQuests(q);
+            if (dead) return null;
+            if (result < 1 && q.oneTime) { // the handler refused (can't afford, wrong place, nothing to do): keep the quest so the player can retry
+                spotQuests.add(q);
+                return q.displayName() + " couldn't be done right now (requirements not met here).";
+            }
+            finishSpot(q);
+            return null;
+        }
+        Character target = null;
+        if (q.category == Quest.QuestCategory.Character) {
+            target = charById(q.targetCharacter);
+            if (target == null || target.dead) return q.displayName() + ": the target is gone.";
+            if (target.location != location)
+                return q.displayName() + ": " + target.name + " is at " + PlayerControl.coord(target.location) + " — you are at " + PlayerControl.coord(location) + ". 'goquest #" + q.uid + "' walks there.";
+            q.targetArea = target.location;
+        } else if (q.targetArea != location) {
+            return q.displayName() + ": go to " + (q.targetArea == null ? "its target" : q.targetArea.name + " " + PlayerControl.coord(q.targetArea))
+                    + " first — you are at " + PlayerControl.coord(location) + ". 'goquest #" + q.uid + "' walks there.";
+        }
+        if (questViable(q) != 1)
+            return q.displayName() + " can't be done right now (target gone, not affordable, or its requirements are no longer met).";
+        boolean wasCurrent = q == currentQuest;
+        if (wasCurrent) currentQuest = null; else targetQuests.remove(q);
+        int result = targetQuests(q);
+        if (dead) return null; // the quest killed the character (or reincarnated them)
+        if (result == 0) { targetQuests.add(q); return null; } // in progress, nothing more to do this turn
+        finishTarget(q, result, wasCurrent);
+        return null;
+    }
+
+    // Post-execution bookkeeping for a target quest (shared by quest() and Do Quest): one-time quests are spent, repeating ones
+    // go back to the queue at their base priority and the character is released so the queue decides the next trip
+    private void finishTarget(Quest q, int result, boolean isCurrent) {
+        if (q == null) return;
+        if (result == 1 && q.oneTime) {
+            final String doneName = q.name;
+            final int doneTarget = q.targetCharacter;
+            q.questDeconstructor();
+            if (isCurrent) currentQuest = null;
+            bump(targetQuests);
+            // A finished weak-relationship quest is replaced by one aimed at a different cultivator
+            if ("Find Person".equals(doneName) || "Battle Dislike".equals(doneName)) refillWeakSocialQuests(doneTarget);
+        }
+        else if (result == -1 && "Find Person".equals(q.name)) {
+            // The relationship this quest was built on no longer exists: drop it and look for someone new
+            final int failedTarget = q.targetCharacter;
+            q.questDeconstructor();
+            if (isCurrent) currentQuest = null;
+            bump(targetQuests);
+            refillWeakSocialQuests(failedTarget);
+        }
+        else if (result == 1 || result == -1) {
+            q.resetPriority();
+            targetQuests.add(q);
+            if (isCurrent) currentQuest = null; // release: the queue's priorities decide the next trip (previously the first repeating quest locked the character in forever)
+            bump(targetQuests);
+        }
+    }
+
+    // A spot quest that has run: one-off ones are spent whether they succeeded or failed (their trigger re-posts them when conditions
+    // hold again); repeating ones return at base priority
+    private void finishSpot(Quest q) {
+        if (q == null) return;
+        if (q.oneTime) {
+            q.questDeconstructor();
+        } else {
+            q.resetPriority();
+            spotQuests.add(q);
+        }
+    }
+
     public void quest () {
-        consume(); // Consume pills IMPORTANT!!!
+        final boolean manual = isManualPc();
+        if (manual) {
+            // Whatever the player switched away from (an NPC-style trip in progress) goes back to the queue
+            if (currentQuest != null && !pc.allowedToRun(this, currentQuest)) { targetQuests.add(currentQuest); currentQuest = null; }
+        }
+        if (autoActs(PlayerControl.UPKEEP)) consume(); // Consume pills IMPORTANT!!!
+
+        // Leaders attempt founding every turn (the Profession spot quest is picked too rarely): sect at Major Lvl 2+, city at Major Lvl 2+
+        if (trait == Traits.Leader && age >= 8) {
+            if (majorLvl >= 2 && professionLvl != 50 && autoActs(PlayerControl.CITY)) cityLeadership();
+            if (majorLvl >= 2 && sect == null && autoActs(PlayerControl.SECT)) sectLeadership();
+        }
+
+        // Crafters work their trade regularly instead of relying on the rarely-picked Profession spot quest
+        if (autoActs(PlayerControl.CRAFT) && age >= 8 && (trait == Traits.Blacksmith || trait == Traits.Alchemist
+                || trait == Traits.Scribe || trait == Traits.Tailor || trait == Traits.Innovative || trait == Traits.Merchant)) {
+            // Gather raw materials directly whenever short (the queued Forage/Mine spot quests are starved by target quests)
+            boolean lowHerb = materialBag.stream().noneMatch(i -> i.itemType == Item.ItemType.Herb && i.quantity >= 1000);
+            boolean lowMetal = materialBag.stream().noneMatch(i -> i.itemType == Item.ItemType.Metal && i.quantity >= 1000);
+            if ((trait == Traits.Alchemist || trait == Traits.Tailor || trait == Traits.Scribe) && lowHerb) forage();
+            if ((trait == Traits.Blacksmith || trait == Traits.Tailor) && lowMetal) mine();
+            if (rand.nextInt(3) == 0) professionPicker();
+        }
+
+        // Wanderlust: cultivators periodically strike out in one direction for several tiles to discover new lands
+        if (!manual && age >= 8 && exploreTicks <= 0 && partyLeaderId < 0 && trait != Traits.Beast && trait != Traits.Monster
+                && rand.nextInt(60) == 0) {
+            exploreDir = "wasd".charAt(rand.nextInt(4));
+            exploreTicks = 6 + rand.nextInt(20);
+        }
+
+        // In a city with surplus goods: sell them right away (city pool / merchant shops)
+        if (autoActs(PlayerControl.UPKEEP) && age >= 8 && location.city && backpack.size() >= 5 && trait != Traits.Beast && trait != Traits.Monster
+                && rand.nextInt(5) == 0) {
+            sell(location);
+        }
 
         // Dynamic quest triggers — checked each turn
-        if (backpack.size() > 20 && targetQuests.stream().noneMatch(q -> "Go Sell".equals(q.name))
+        boolean luxury = false;
+        for (Item it : backpack) if (it.heavenSent && it != equippedWeapon && it != equippedClothing) { luxury = true; break; }
+        if (!luxury && potential >= 100) for (Item it : pillBag) if (it.pillType == Item.PillType.Potential) { luxury = true; break; }
+        if ((backpack.size() > 8 || (goods != null && Life.goodsCount(this) >= 20) || luxury) && targetQuests.stream().noneMatch(q -> "Go Sell".equals(q.name))
                 && (currentQuest == null || !"Go Sell".equals(currentQuest.name))) {
             Area targetCity = null;
             for (Area area : knownLocations) {
-                if (area != null && area.city && area.cityOwner != null) { targetCity = area; break; }
+                if (area != null && area.city && (!luxury || Auctions.hasHouse(area))) { targetCity = area; break; }
             }
             if (targetCity != null)
                 targetQuests.add(new Quest("Go Sell", true, 50, 0, 70, targetCity));
@@ -1029,7 +1322,7 @@ public class Character implements java.io.Serializable {
                 || (equippedClothing != null && equippedClothing.lvl + 10 <= lvl));
         if (gearNeeded) {
             if (location.city && !location.shops.isEmpty()) {
-                buyGear();
+                if (autoActs(PlayerControl.UPKEEP)) buyGear();
                 // If slot(s) still empty after visiting shop, can't afford — hunt beasts to earn ss
                 boolean stillMissing = equippedWeapon == null || equippedClothing == null;
                 if (stillMissing && targetQuests.stream().noneMatch(q -> "Hunt Beast".equals(q.name))
@@ -1037,15 +1330,16 @@ public class Character implements java.io.Serializable {
                     for (Area area : knownLocations) {
                         if (area != null && area.monsters > 0
                                 && area.highestLvl >= lvl - 10 && area.highestLvl <= lvl + 15) {
-                            targetQuests.add(new Quest("Hunt Beast", false, 40, 3, 65, area));
+                            targetQuests.add(new Quest("Hunt Beast", true, 40, 3, 65, area));
                             break;
                         }
                     }
                 }
-            } else if (targetQuests.stream().noneMatch(q -> "Buy Gear".equals(q.name))
+            } else if (rand.nextInt(10) == 0 && targetQuests.stream().noneMatch(q -> "Buy Gear".equals(q.name))
                     && (currentQuest == null || !"Buy Gear".equals(currentQuest.name))) {
+                // Only travel to a shop that actually stocks something I could buy — otherwise everyone gravitates to the shop city and stops exploring
                 for (Area area : knownLocations) {
-                    if (area != null && area.city && !area.shops.isEmpty()) {
+                    if (area != null && area.city && hasBuyableGear(area)) {
                         targetQuests.add(new Quest("Buy Gear", true, 30, 2, 55, area));
                         break;
                     }
@@ -1056,13 +1350,11 @@ public class Character implements java.io.Serializable {
         // Seek Potential: travel to city with potential pills when potential is too low for next breakthrough
         if (trait != Traits.Beast && trait != Traits.Monster && majorLvl < 9) {
             int potThreshold = 101 - (9 - majorLvl) * (9 - majorLvl);
-            if (potential < potThreshold
+            if (potential < potThreshold && (rand.nextInt(6) == 0 || player == 1) // a look every few turns is plenty (the scan over every known place was the biggest single cost of a tick)
                     && targetQuests.stream().noneMatch(q -> "Seek Potential".equals(q.name))
                     && (currentQuest == null || !"Seek Potential".equals(currentQuest.name))) {
                 for (Area area : knownLocations) {
-                    if (area != null && area.city && area.pillBag != null
-                            && area.pillBag.stream().anyMatch(p ->
-                                    p.itemType == Item.ItemType.Pill && p.pillType == Item.PillType.Potential)) {
+                    if (potentialPillsAt(area)) {
                         targetQuests.add(new Quest("Seek Potential", true, 35, 2, 65, area));
                         break;
                     }
@@ -1070,8 +1362,15 @@ public class Character implements java.io.Serializable {
             }
         }
 
+        // Refine Blood: a cultivator who is not an alchemist takes the Blood of the fallen to one, who turns it into Potential Pills for a fee
+        if (trait != Traits.Alchemist && trait != Traits.Beast && trait != Traits.Monster && age >= 8 && potential < 100 && rand.nextInt(20) == 0 && bloodAmount() >= 1000
+                && targetQuests.stream().noneMatch(q -> "Refine Blood".equals(q.name)) && (currentQuest == null || !"Refine Blood".equals(currentQuest.name))) {
+            Character alchemist = findAlchemist();
+            if (alchemist != null) targetQuests.add(new Quest("Refine Blood", true, 45, 3, 70, alchemist));
+        }
+
         // Buy Cultivation Pills: pick up next-realm pills when in a city (10% chance)
-        if (trait != Traits.Monster && location.city && location.pillBag != null && rand.nextInt(10) == 0) {
+        if (trait != Traits.Monster && location.city && location.pillBag != null && autoActs(PlayerControl.UPKEEP) && rand.nextInt(10) == 0) {
             for (int pi = 0; pi < location.pillBag.size(); pi++) {
                 Item pill = location.pillBag.get(pi);
                 if (pill.itemType == Item.ItemType.Pill && pill.pillType == Item.PillType.Cultivation
@@ -1079,10 +1378,7 @@ public class Character implements java.io.Serializable {
                     long price = itemPrice(pill);
                     if (canAfford(price)) {
                         deductSs(price);
-                        if (location.cityOwner != null) {
-                            location.cityOwner.ss += price;
-                            location.cityOwner.convertCurrency();
-                        }
+                        location.receivePayment(price); // a dead lord used to receive (and swallow) this
                         boolean found = false;
                         for (Item p : pillBag) {
                             if (p.name.equals(pill.name)) { p.quantity++; found = true; break; }
@@ -1095,14 +1391,32 @@ public class Character implements java.io.Serializable {
             }
         }
 
+        // Buy technique from city library when a better one is available (~2% chance per tick in city)
+        if (trait != Traits.Monster && location.city && !location.libraries.isEmpty() && autoActs(PlayerControl.UPKEEP) && rand.nextInt(52) == 0) {
+            for (Library lib : location.libraries) {
+                Technique best = null;
+                for (Technique t : lib.techniques) {
+                    int curPot = (t.type == Technique.techniqueType.Martial) ? martialTechnique.potential : movementTechnique.potential;
+                    final String techName = t.name;
+                    boolean alreadyKnown = techniqueList.stream().anyMatch(x -> x.name.equals(techName)); // a learned copy starts at low mastery, so without this the same book was re-bought every year
+                    if (!alreadyKnown && t.potential > curPot && (best == null || t.potential > best.potential)) best = t;
+                }
+                if (best != null) {
+                    lib.learnTechnique(this, best);
+                    if (player > 0 && skipping <= 0) System.out.println(this + " studied " + best + " at the library!");
+                    break;
+                }
+            }
+        }
+
         // Bully: Evil characters proactively target significantly weaker characters in same location
         if (trait != Traits.Beast && "Evil".equals(affiliation) && rand.nextInt(10) == 0
                 && !location.characters.isEmpty()) {
             for (Character c : location.characters) {
                 if (c == null || c.dead || c == this || c.trait == Traits.Beast) continue;
                 if (lvl - c.lvl >= 15
-                        && targetQuests.stream().noneMatch(q -> "Battle Dislike".equals(q.name) && q.targetCharacter == c.id)) {
-                    targetQuests.add(new Quest("Battle Dislike", true, 20, 3, 50, c));
+                        && weakSocialCount("Battle Dislike") < WEAK_SOCIAL_CAP && !hasSocialQuestFor(c.id)) {
+                    targetQuests.add(relationshipQuest(-1, c));
                     break;
                 }
             }
@@ -1119,16 +1433,27 @@ public class Character implements java.io.Serializable {
             }
         }
 
+        // Leaders without a throne keep gathering followers
+        if (trait == Traits.Leader && partyLeaderId < 0 && age >= 14 && !isRuler() && rand.nextInt(6) == 0) tryRallyParty(true);
+
         // Hunt Beast: 20% chance per turn to seek combat in a known area with level-appropriate monsters
         if (rand.nextInt(5) == 0
                 && targetQuests.stream().noneMatch(q -> "Hunt Beast".equals(q.name))
                 && (currentQuest == null || !"Hunt Beast".equals(currentQuest.name))) {
+            // Targets beasts of my own major realm down to 2 realms below, so the economy keeps flowing at every tier.
+            // One hunt per quest (oneTime) so spot quests (crafting, gathering) still get turns; the area is picked at random
+            // among eligible known areas so hunters spread out instead of all returning to the first area they ever saw.
+            Area pick = null;
+            int eligible = 0;
             for (Area area : knownLocations) {
-                if (area != null && area.monsters > 0
-                        && area.highestLvl >= lvl - 10 && area.highestLvl <= lvl + 15) {
-                    targetQuests.add(new Quest("Hunt Beast", false, 30, 2, 50, area));
-                    break;
-                }
+                if (area == null || area.monsters <= 0) continue;
+                int areaMajor = area.lvl / 10;
+                if (areaMajor >= majorLvl - 2 && areaMajor <= majorLvl && rand.nextInt(++eligible) == 0) pick = area;
+            }
+            if (pick != null) {
+                targetQuests.add(new Quest("Hunt Beast", true, 30, 2, 50, pick));
+                // Same-realm beasts are dangerous: try to hunt in a party
+                if (pick.lvl / 10 == majorLvl && partyLeaderId < 0) tryRallyParty(true);
             }
         }
 
@@ -1155,7 +1480,7 @@ public class Character implements java.io.Serializable {
             } else {
                 for (Relationship rel : relationshipList.relationships) {
                     if (rel.value >= 3) {
-                        Character friend = characters.get(rel.friendID);
+                        Character friend = charById(rel.friendID); // a newborn child (value-3 tie) may not be in the list yet
                         if (friend != null && !friend.dead && friend.location == location) {
                             cultivate();
                             friend.cultivationBase += friend.cultivation;
@@ -1176,11 +1501,11 @@ public class Character implements java.io.Serializable {
         }
 
         // Heaven Treasure: rush to claim a known heavenly technique (high priority)
-        if (trait != Traits.Beast && trait != Traits.Monster
+        if (Map.heavenExists && trait != Traits.Beast && trait != Traits.Monster // Map.heavenExists is refreshed once a tick: without it everybody scanned every place they ever saw, every turn
                 && targetQuests.stream().noneMatch(q -> "Heaven Treasure".equals(q.name))
                 && (currentQuest == null || !"Heaven Treasure".equals(currentQuest.name))) {
             for (Area a : knownLocations) {
-                if (a != null && a.heavenlyTechnique != null) {
+                if (a != null && a.hasHeaven()) {
                     targetQuests.add(new Quest("Heaven Treasure", true, 70, 5, 85, a));
                     break;
                 }
@@ -1215,7 +1540,7 @@ public class Character implements java.io.Serializable {
         if (sect != null && !sect.isMaster(this) && location != sect.location && rand.nextInt(20) == 0
                 && targetQuests.stream().noneMatch(q -> "Return to Sect".equals(q.name))
                 && (currentQuest == null || !"Return to Sect".equals(currentQuest.name))) {
-            targetQuests.add(new Quest("Return to Sect", false, 25, 1, 40, sect.location));
+            targetQuests.add(new Quest("Return to Sect", true, 25, 1, 40, sect.location)); // one trip per drift, not a permanent quest
         }
 
         // Recruit Member: sect masters actively seek eligible candidates in known locations
@@ -1231,14 +1556,36 @@ public class Character implements java.io.Serializable {
         }
 
         // Bounty Hunt: pick up posted bounties at cities within 10 levels of the target
-        if (location.city && !location.bounties.isEmpty()) {
+        long bountiesHeld = targetQuests.stream().filter(q -> "Hunt Beast".equals(q.name) && q.bounty).count() + (currentQuest != null && "Hunt Beast".equals(currentQuest.name) && currentQuest.bounty ? 1 : 0);
+        if (location.city && !location.bounties.isEmpty() && bountiesHeld < 2) { // at most two beast bounties at a time: the board used to empty into one person's queue
             for (Quest bounty : new ArrayList<>(location.bounties)) {
-                Character target = characters.get(bounty.targetCharacter);
-                if (target != null && !target.dead && Math.abs(lvl - target.lvl) <= 10
-                        && targetQuests.stream().noneMatch(q -> "Bounty Hunt".equals(q.name)
-                                && q.targetCharacter == bounty.targetCharacter)) {
-                    targetQuests.add(new Quest("Bounty Hunt", true, 40, 3, 70, target));
-                    location.bounties.remove(bounty);
+                if (bountiesHeld >= 2) break;
+                if ("Hunt Beast".equals(bounty.name)) {
+                    Area ta = bounty.targetArea;
+                    if (ta != null && ta.monsters > 0) {
+                        int areaMajorLvl = Math.max(1, ta.lvl / 10);
+                        boolean withinOneRealm = areaMajorLvl >= majorLvl - 2 && areaMajorLvl <= majorLvl + 1;
+                        boolean notAlreadyQueued = targetQuests.stream()
+                                .noneMatch(q -> "Hunt Beast".equals(q.name) && q.targetArea == ta);
+                        if (withinOneRealm && notAlreadyQueued) {
+                            Quest bountyQuest = new Quest("Hunt Beast", true, 50, 5, 70, ta);
+                            bountyQuest.bounty = true;
+                            targetQuests.add(bountyQuest);
+                            bountiesHeld++;
+                            location.bounties.remove(bounty);
+                            // Same major realm — try to form a party before departing
+                            if (areaMajorLvl == majorLvl) tryRallyParty(true);
+                        }
+                    }
+                } else {
+                    Character target = charById(bounty.targetCharacter);
+                    if (target != null && !target.dead && Math.abs(lvl - target.lvl) <= 10
+                            && targetQuests.stream().noneMatch(q -> "Bounty Hunt".equals(q.name)
+                                    && q.targetCharacter == bounty.targetCharacter)) {
+                        boolean contract = trait == Traits.Poisoner && Life.firstOf(this, Item.ItemType.Poison) != null;
+                        targetQuests.add(new Quest(contract ? "Poison Contract" : "Bounty Hunt", true, 40, 3, 70, target));
+                        location.bounties.remove(bounty);
+                    }
                 }
             }
         }
@@ -1256,8 +1603,33 @@ public class Character implements java.io.Serializable {
             }
         }
 
+        // Disperse: while beasts ravage an overcrowded hotspot, cultivators there head for a quieter tile nearby (10%/turn)
+        if (location.crowdHotspot && trait != Traits.Beast && trait != Traits.Monster && rand.nextInt(10) == 0
+                && targetQuests.stream().noneMatch(q -> "Disperse".equals(q.name))
+                && (currentQuest == null || !"Disperse".equals(currentQuest.name))) {
+            Area quiet = findQuietTile();
+            if (quiet != null) targetQuests.add(new Quest("Disperse", true, 45, 3, 70, quiet));
+        }
+
+        // War skirmish: when two sects are at war their disciples fight whenever they meet, not only the raiders sent against the enemy's home
+        if (sect != null && sect.warTarget != null && age >= 14 && trait != Traits.Beast && trait != Traits.Monster && location != null && rand.nextInt(3) == 0 && !location.characters.isEmpty()) {
+            Character foe = null;
+            int n = location.characters.size();
+            for (int i = 0; i < 12 && foe == null; i++) {
+                Character c = location.characters.get(rand.nextInt(n));
+                if (c != null && !c.dead && c != this && c.sect != null && c.sect != sect && (c.sect == sect.warTarget || c.sect.warTarget == sect) && c.age >= 14) foe = c;
+            }
+            if (foe != null) {
+                Relationship wr = relationshipList.contains(foe.id);
+                if (wr == null || wr.value > -2) changeRelationship(foe, -2); // enemies of a war are rivals: their fights can be fatal
+                partyBattleCheck(foe);
+                if (dead) return;
+            }
+        }
+
         // Sect Raid: masters and elders attack enemy sect location when at war; also opportunistic raids on crisis sects
         if (sect != null && (sect.isMaster(this) || sect.getRank(this) == Organization.SectRank.ELDER)
+                && GameDriver.time >= sect.nextRaidWeek
                 && targetQuests.stream().noneMatch(q -> "Sect Raid".equals(q.name))
                 && (currentQuest == null || !"Sect Raid".equals(currentQuest.name))) {
             Area enemyLoc = null;
@@ -1274,8 +1646,10 @@ public class Character implements java.io.Serializable {
                     }
                 }
             }
-            if (enemyLoc != null)
+            if (enemyLoc != null) {
                 targetQuests.add(new Quest("Sect Raid", true, 65, 5, 85, enemyLoc));
+                sect.nextRaidWeek = GameDriver.time + Organization.RAID_COOLDOWN_WEEKS; // one raid per sect per season
+            }
         }
 
         // Propose Alliance: sect masters seek alliances with other non-enemy sects (5% chance/turn)
@@ -1316,7 +1690,7 @@ public class Character implements java.io.Serializable {
         }
 
         // Promote Disciples: sect masters check members for rank advancement (5% chance/turn)
-        if (sect != null && sect.isMaster(this) && rand.nextInt(20) == 0) {
+        if (sect != null && sect.isMaster(this) && autoActs(PlayerControl.SECT) && rand.nextInt(20) == 0) {
             for (Character member : new ArrayList<>(sect.members)) {
                 if (member == null || member.dead) continue;
                 Organization.SectRank rank = sect.getRank(member);
@@ -1363,7 +1737,7 @@ public class Character implements java.io.Serializable {
         }
 
         // Sell Technique: Innovative chars sell techniques to city libraries (10% chance/turn)
-        if (trait == Traits.Innovative && !techniqueList.isEmpty() && rand.nextInt(10) == 0
+        if (trait == Traits.Innovative && rand.nextInt(10) == 0 && !sellableTechniques().isEmpty()
                 && spotQuests.stream().noneMatch(q -> "Sell Technique".equals(q.name))
                 && targetQuests.stream().noneMatch(q -> "Sell Technique".equals(q.name))
                 && (currentQuest == null || !"Sell Technique".equals(currentQuest.name))) {
@@ -1393,8 +1767,20 @@ public class Character implements java.io.Serializable {
                 && spotQuests.stream().noneMatch(q -> "Buy City Array".equals(q.name))) {
             int arrayLvl = Math.min(100, (majorLvl + 1) * 10);
             Item testArray = new Item(this, arrayLvl, Item.ItemType.Array);
-            if (canAfford(itemPrice(testArray))) {
+            long cost = itemPrice(testArray);
+            if (canAfford(cost) || location.cityTreasury >= cost) {
                 spotQuests.add(new Quest("Buy City Array", true, 40, 0, 60));
+            }
+        }
+
+        // Buy Sect Array: sect masters invest in sect defensive arrays (3% chance/turn)
+        if (sect != null && sect.isMaster(this) && location == sect.location && rand.nextInt(33) == 0
+                && spotQuests.stream().noneMatch(q -> "Buy Sect Array".equals(q.name))) {
+            int arrayLvl = Math.min(100, (majorLvl + 1) * 10);
+            Item testArray = new Item(this, arrayLvl, Item.ItemType.Array);
+            long cost = itemPrice(testArray);
+            if (canAfford(cost) || sect.sectCash >= cost) {
+                spotQuests.add(new Quest("Buy Sect Array", true, 40, 0, 60));
             }
         }
 
@@ -1418,9 +1804,9 @@ public class Character implements java.io.Serializable {
                  || (m.itemType == Item.ItemType.Metal && (!usesMetals || m.quantity > 5000))) { hasExtras = true; break; }
             }
             if (!hasExtras) for (Item p : pillBag) {
-                boolean stale = p.lvl <= majorLvl * 10
+                boolean stale = p.lvl <= majorLvl
                     || (p.pillType == Item.PillType.Potential && potential >= 100)
-                    || (p.pillType == Item.PillType.Cultivation && p.quantity > 5 && p.lvl > majorLvl * 10);
+                    || (p.pillType == Item.PillType.Cultivation && p.quantity > 5 && p.lvl > majorLvl);
                 if (stale) { hasExtras = true; break; }
             }
             if (hasExtras) spotQuests.add(new Quest("Donate to Sect", true, 30, 0, 50));
@@ -1488,7 +1874,15 @@ public class Character implements java.io.Serializable {
             targetQuests.add(new Quest("Get Pregnant", true, 25, 0, 45, spouse));
         }
 
-        Quest tempQuest = this.spotQuests.peek();
+        Life.upkeep(this); // eat, drink, the reincarnation call, a taming attempt
+        Life.pursueDelivery(this); // a sect delivery mission for food, wine or poison
+
+        // Player characters in MANUAL/HYBRID: announce what they won't run by themselves (once per quest)
+        if (manual && pc.scanAlerts(this)) {
+            pc.alertPending = true;
+            if (skipping > 0) skipping = 0; // a new alert wakes a character that is walking on autopilot
+        }
+
         int questCode = -2;
 
         // If currentQuest exists, make sure it's viable. If not, make it null
@@ -1501,8 +1895,9 @@ public class Character implements java.io.Serializable {
         // If currentQuest is null, go through queue until find viable quest or empty
         if (currentQuest == null) {
             while (questCode != -3 && questCode != 1) {
-                if (targetQuests.peek() != null) {
-                    currentQuest = targetQuests.poll();
+                Quest next = pollAllowed(targetQuests); // MANUAL/HYBRID: only quests whose duty is on
+                if (next != null) {
+                    currentQuest = next;
                     if (questViable(currentQuest) == 1) {
                         questCode = 1;
                     } else {
@@ -1516,58 +1911,163 @@ public class Character implements java.io.Serializable {
             }
         }
 
+        // While exploring, target-quest travel is paused (spot quests still run en route)
+        if (exploreTicks > 0) { exploreTicks--; questCode = -3; }
+
         // If currentQuest exists and is viable, do pathfinding
         if (questCode != -3) {
             if (currentQuest.category == Quest.QuestCategory.Character) {
-                Character target = characters.get(currentQuest.targetCharacter);
+                Character target = charById(currentQuest.targetCharacter);
                 if (target != null && !target.dead) {
                     currentQuest.targetArea = target.location;
                 }
             }
             questCode = pathfinder(currentQuest.targetArea);
+            if (questCode == 0 && partyLeaderId < 0 && rand.nextInt(4) == 0) {
+                tryRallyParty(); // rally allies while traveling
+            }
             if (questCode == 1) {
                 // Do Target Actions
                 questCode = targetQuests(currentQuest);
+                // Hunting parties stay together across repeated hunts (small chance to disband each round)
+                if (questCode == 1 && (currentQuest == null || !"Hunt Beast".equals(currentQuest.name) || rand.nextInt(20) == 0)) dissolveParty();
             }
         }
 
-        // If currentQuest wasn't activated, do Spot
-        if (questCode != 1) {
-            // Do Spot
-            if (tempQuest != null) {
-                tempQuest = spotQuests.poll();
-                questCode = spotQuests(tempQuest);
-            }
-            else {
-                // spotQuests queue exhausted
-            }
+        // The target quest's outcome is kept separate from the spot quest's: -3 none, 0 travelling, 1 done, -1 failed
+        final int targetResult = questCode;
+
+        // If the target quest wasn't completed this turn, do a spot quest
+        Quest tempQuest = null;
+        if (targetResult != 1) {
+            tempQuest = pollAllowed(spotQuests); // MANUAL/HYBRID: only spot quests whose duty is on
+            if (tempQuest != null) spotQuests(tempQuest);
         }
 
         if (dead) return; // died during quest execution; dead() already cleaned up quests
 
-        if (questCode == 1 && currentQuest != null && currentQuest.oneTime) {
-            currentQuest.questDeconstructor();
-            currentQuest = null;
-            targetQuests.forEach(q -> q.priority += q.priorityDiff);
+        if ((targetResult == 1 || targetResult == -1) && currentQuest != null) finishTarget(currentQuest, targetResult, true);
+        else if (targetResult == 1 || targetResult == -1) bump(targetQuests);
+
+        finishSpot(tempQuest);
+
+        // Age all spot quests
+        bump(spotQuests);
+
+        // Once a year each character prunes stale/excess quests and tops up weak social quests
+        if ((GameDriver.time + id) % 52 == 0) maintainQuests();
+    }
+
+    static final int TARGET_QUEUE_CAP = 50;      // hard cap on queued target quests per character
+    static final int WEAK_SOCIAL_CAP = 4;        // "Like" / "Dislike" quests kept at once (replaced when completed)
+    static final int QUEST_TTL_WEEKS = 520;      // one-time quests older than 10 years expire
+
+    // Ages every quest by its priorityDiff (never past maxPriority) and re-sorts the heap; editing priorities in place
+    // inside a PriorityQueue silently breaks its ordering, which used to make polling return the wrong quest.
+    static void bump(java.util.PriorityQueue<Quest> queue) {
+        if (queue.isEmpty()) return;
+        ArrayList<Quest> all = new ArrayList<>(queue);
+        for (Quest q : all) {
+            if (!q.pinned && q.priority < q.maxPriority) q.priority = Math.min(q.maxPriority, q.priority + q.priorityDiff); // pinned (player-set) priorities never age
         }
-        else if (questCode == 1 || questCode == -1) {
-            targetQuests.forEach(q -> q.priority += q.priorityDiff);
-            if (currentQuest != null) {
-                currentQuest.priority = 0;
-                targetQuests.add(currentQuest);
+        queue.clear();
+        queue.addAll(all);
+    }
+
+    // Bounds-safe lookup: null for dead slots and for ids not yet merged into the list (births are appended at end of tick)
+    static Character charById(int id) {
+        return (id >= 0 && id < characters.size()) ? characters.get(id) : null;
+    }
+
+    static boolean isSocialQuest(String name) {
+        return "Find Person".equals(name) || "Battle Dislike".equals(name)
+                || "Battle Rival".equals(name) || "Battle Arch-Enemy".equals(name);
+    }
+
+    // Relationship value -> quest. Weak ties (Like/Dislike) are one-time and capped; strong ties (Friend, Close Friend, Rival,
+    // Arch-Enemy) persist. All sit in the lowest priority band but climb to their cap, so they are still served eventually.
+    private Quest relationshipQuest(int rel, Character other) {
+        switch (rel) {
+            case 1:  return new Quest("Find Person", true, 10, 1, 34, other);
+            case 2:  return new Quest("Find Person", false, 14, 2, 40, other);
+            case 3:  return new Quest("Find Person", false, 18, 2, 46, other);
+            case -1: return new Quest("Battle Dislike", true, 10, 1, 34, other);
+            case -2: return new Quest("Battle Rival", false, 18, 2, 42, other);
+            case -3: return new Quest("Battle Arch-Enemy", false, 24, 3, 48, other);
+            default: return null;
+        }
+    }
+
+    private int weakSocialCount(String name) {
+        int n = 0;
+        for (Quest q : targetQuests) if (q.oneTime && name.equals(q.name)) n++;
+        if (currentQuest != null && currentQuest.oneTime && name.equals(currentQuest.name)) n++;
+        return n;
+    }
+
+    private boolean hasSocialQuestFor(int otherId) {
+        if (currentQuest != null && currentQuest.targetCharacter == otherId && isSocialQuest(currentQuest.name)) return true;
+        for (Quest q : targetQuests) if (q.targetCharacter == otherId && isSocialQuest(q.name)) return true;
+        return false;
+    }
+
+    // Keeps this character's social quest toward `other` in line with the current relationship value.
+    void syncSocialQuest(Character other, int rel) {
+        if (other == null || other == this) return;
+        if (currentQuest != null && currentQuest.targetCharacter == other.id && isSocialQuest(currentQuest.name)) return; // in flight
+        Quest existing = null;
+        for (Quest q : targetQuests) {
+            if (q.targetCharacter == other.id && isSocialQuest(q.name)) { existing = q; break; }
+        }
+        Quest wanted = relationshipQuest(rel, other);
+        if (existing != null && wanted != null && existing.name.equals(wanted.name)
+                && existing.oneTime == wanted.oneTime && existing.maxPriority == wanted.maxPriority) return; // same tier: keep its accrued priority
+        if (existing != null) targetQuests.remove(existing);
+        if (wanted == null) return;
+        if (wanted.oneTime && weakSocialCount(wanted.name) >= WEAK_SOCIAL_CAP) return; // at cap: refill picks it up later if a slot opens
+        targetQuests.add(wanted);
+    }
+
+    // Tops weak-tie quests back up to the cap using other cultivators with the same relationship value.
+    void refillWeakSocialQuests(int excludeId) {
+        for (int sign = 1; sign >= -1; sign -= 2) {
+            String name = sign > 0 ? "Find Person" : "Battle Dislike";
+            int need = WEAK_SOCIAL_CAP - weakSocialCount(name);
+            if (need <= 0) continue;
+            ArrayList<Relationship> cands = new ArrayList<>();
+            for (Relationship r : relationshipList.relationships) if (r.value == sign) cands.add(r);
+            java.util.Collections.shuffle(cands, rand);
+            for (Relationship r : cands) {
+                if (need <= 0) break;
+                if (r.friendID == excludeId || r.friendID < 0 || r.friendID >= characters.size()) continue;
+                Character other = characters.get(r.friendID);
+                if (other == null || other.dead || other == this || hasSocialQuestFor(other.id)) continue;
+                targetQuests.add(relationshipQuest(sign, other));
+                need--;
             }
         }
-        else if (questCode == 2 && tempQuest.oneTime) {
-            tempQuest.questDeconstructor();
-            tempQuest = null;
-        }
-        else if (questCode == 2 || questCode == -2) {
-            tempQuest.priority = 0;
-            spotQuests.add(tempQuest);
-        }
+    }
 
-        // Increase priority of all spotQuests
-        spotQuests.forEach(q -> q.priority += q.priorityDiff);
+    void maintainQuests() {
+        final int now = GameDriver.time;
+        // Clamp runaway priorities (old saves reached millions) and drop stale one-time quests
+        ArrayList<Quest> all = new ArrayList<>(targetQuests);
+        for (Quest q : all) if (!q.pinned && q.priority > q.maxPriority) q.priority = q.maxPriority;
+        targetQuests.clear();
+        for (Quest q : all) {
+            boolean stale = q.createdAt > 0 && now - q.createdAt > QUEST_TTL_WEEKS
+                    && (q.oneTime || "Find Parent's Body".equals(q.name)) && !q.pinned && !q.userCreated;
+            if (!stale) targetQuests.add(q);
+        }
+        // Hard cap: shed the lowest-priority quests first (a player's pinned quests are never shed)
+        int excess = targetQuests.size() - TARGET_QUEUE_CAP;
+        if (excess > 0) {
+            ArrayList<Quest> sorted = new ArrayList<>(targetQuests);
+            sorted.removeIf(q -> q.pinned);
+            sorted.sort((a, b) -> Integer.compare(a.priority, b.priority));
+            for (int i = 0; i < excess && i < sorted.size(); i++) targetQuests.remove(sorted.get(i));
+        }
+        refillWeakSocialQuests(-1);
     }
 
 
@@ -1578,8 +2078,16 @@ public class Character implements java.io.Serializable {
                 System.out.println("Error in questViable Spot");
                 return 0;
             case Character:
-                Character character = characters.get(quest.targetCharacter);
+                // A target born this tick sits in tempCharacters and isn't in the list yet — treat as not viable for now
+                Character character = (quest.targetCharacter >= 0 && quest.targetCharacter < characters.size())
+                        ? characters.get(quest.targetCharacter) : null;
                 if (character == null || character.dead) return 0;
+                if ("Refine Blood".equals(quest.name)) {
+                    return (character.trait == Traits.Alchemist && bloodAmount() >= 1000 && potential < 100) ? 1 : 0;
+                }
+                if ("Possess Womb".equals(quest.name)) {
+                    return (character.pregnant && lvl > character.lvl) ? 1 : 0;
+                }
                 if ("Propose Alliance".equals(quest.name)) {
                     return (sect != null && !sect.isAtWar() && character.sect != null && !sect.isAlly(character.sect)) ? 1 : 0;
                 }
@@ -1593,29 +2101,34 @@ public class Character implements java.io.Serializable {
                 }
                 return 1;
             case Area:
-                if ("Go Sell".equals(quest.name)) {
-                    return (quest.targetArea != null && quest.targetArea.city && quest.targetArea.cityOwner != null) ? 1 : 0;
+                if ("Deliver Goods".equals(quest.name)) {
+                    return (sect != null && sectMission != null && sectMission.startsWith("Deliver|")) ? 1 : 0;
+                }
+                if ("Go Sell".equals(quest.name) || "Festival Trade".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.city) ? 1 : 0;
                 }
                 if ("Hunt Beast".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.monsters > 0) ? 1 : 0;
+                }
+                if ("Find Lost Beast".equals(quest.name)) {
+                    return Taming.lostBeastAt(this, quest.targetArea) != null ? 1 : 0;
                 }
                 if ("Join Sect".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.sect != null && sect == null) ? 1 : 0;
                 }
                 if ("Restock Trip".equals(quest.name)) {
-                    return (quest.targetArea != null && quest.targetArea.city && quest.targetArea.cityOwner != null
-                            && quest.targetArea.backpack != null && !quest.targetArea.backpack.isEmpty()) ? 1 : 0;
+                    // A merchant with no shop there yet can still go to open one even if the city pool is empty (Entice Merchant relies on this)
+                    return (quest.targetArea != null && quest.targetArea.city
+                            && quest.targetArea.backpack != null
+                            && (!quest.targetArea.backpack.isEmpty()
+                                || ownedShops.stream().noneMatch(sh -> sh.location == quest.targetArea))) ? 1 : 0;
                 }
                 if ("Sell Stock".equals(quest.name)) {
-                    // Cancel if we have nothing left to sell or destination city is gone
-                    boolean hasCargoToSell = backpack.stream().anyMatch(
-                        i -> i.itemType != Item.ItemType.Weapon && i.itemType != Item.ItemType.Clothing
-                             || (i != equippedWeapon && i != equippedClothing));
-                    return (quest.targetArea != null && quest.targetArea.city
-                            && quest.targetArea.cityOwner != null && hasCargoToSell) ? 1 : 0;
+                    // Cancel if we have nothing left to sell (same definition the handler uses: spares are kept) or the destination city is gone
+                    return (quest.targetArea != null && quest.targetArea.city && !sellableCargo().isEmpty()) ? 1 : 0;
                 }
                 if ("Buy Gear".equals(quest.name)) {
-                    return (quest.targetArea != null && quest.targetArea.city && !quest.targetArea.shops.isEmpty()) ? 1 : 0;
+                    return (quest.targetArea != null && quest.targetArea.city && hasBuyableGear(quest.targetArea)) ? 1 : 0;
                 }
                 if ("Explore Dungeon".equals(quest.name)) {
                     return (quest.targetArea != null && quest.targetArea.dungeonType != null) ? 1 : 0;
@@ -1630,16 +2143,23 @@ public class Character implements java.io.Serializable {
                     return (quest.targetArea != null && quest.targetArea.city && !quest.targetArea.libraries.isEmpty()) ? 1 : 0;
                 }
                 if ("Seek Potential".equals(quest.name)) {
-                    return (quest.targetArea != null && quest.targetArea.city
-                            && quest.targetArea.pillBag != null
-                            && quest.targetArea.pillBag.stream().anyMatch(p ->
-                                    p.itemType == Item.ItemType.Pill && p.pillType == Item.PillType.Potential)) ? 1 : 0;
+                    return potentialPillsAt(quest.targetArea) ? 1 : 0;
                 }
                 if ("Return to Sect".equals(quest.name)) {
                     return (sect != null && quest.targetArea != null && quest.targetArea == sect.location) ? 1 : 0;
                 }
                 if ("Deliver Materials".equals(quest.name)) {
                     return (sect != null && sectMission != null && quest.targetArea != null && quest.targetArea == sect.location) ? 1 : 0;
+                }
+                if ("Ghost City Rebirth".equals(quest.name)) {
+                    return (quest.targetArea != null && quest.targetArea.city) ? 1 : 0; // the city may have been destroyed since
+                }
+                if ("Disperse".equals(quest.name)) {
+                    return (quest.targetArea != null && !quest.targetArea.crowdHotspot
+                            && quest.targetArea.characters.size() < quest.targetArea.crowdCapacity()) ? 1 : 0;
+                }
+                if ("Donate Array".equals(quest.name)) {
+                    return (sect != null && quest.targetArea != null && quest.targetArea == sect.location && !arrayBag.isEmpty()) ? 1 : 0;
                 }
                 return 1;
 
@@ -1660,9 +2180,10 @@ public class Character implements java.io.Serializable {
                 questSuccess = professionPicker();
                 break;
             case "Hunt":
-                beastBattleCheck();
-                if (sect != null) sectPoints += 2;
-                if (sectMission != null) {
+                boolean huntFought = beastBattleCheck(); // a mission kill only counts if a fight actually happened
+                if (!huntFought && player > 0 && skipping <= 0) System.out.println(location.monsters <= 0 ? "Hunt: no beasts here." : "Hunt: the beasts here are beyond you (area Lv " + location.lvl + "-" + location.highestLvl + ", you are Lv " + lvl + ") or you chose not to risk it.");
+                if (huntFought && sect != null) sectPoints += 2;
+                if (huntFought && sectMission != null) {
                     String[] mp = sectMission.split("\\|");
                     if (mp.length >= 4 && "Hunt".equals(mp[0]) && "Beast".equals(mp[1])) {
                         int remaining = Integer.parseInt(mp[3]) - 1;
@@ -1700,28 +2221,15 @@ public class Character implements java.io.Serializable {
             case "Forage":
                 forage();
                 if (sect != null) sectPoints += 2;
-                if (sectMission != null) {
+                if (sectMission != null && sect != null) {
                     String[] mp = sectMission.split("\\|");
                     if (mp.length >= 4 && "Forage".equals(mp[0]) && "Herb".equals(mp[1])) {
                         int missionLv = Integer.parseInt(mp[2]);
                         int missionQty = Integer.parseInt(mp[3]);
-                        boolean hasEnough = materialBag.stream().anyMatch(m ->
-                            m.itemType == Item.ItemType.Herb && m.lvl >= missionLv && m.quantity >= missionQty);
-                        if (hasEnough && sect != null) {
-                            if (location == sect.location) {
-                                String itemName = "Herb Lvl: " + missionLv;
-                                int removed = removeItems(materialBag, itemName, missionQty);
-                                if (removed > 0) {
-                                    boolean merged = false;
-                                    for (Item t : sect.treasury) { if (t.name.equals(itemName)) { t.quantity += removed; merged = true; break; } }
-                                    if (!merged) sect.treasury.add(new Item(Item.ItemType.Herb, missionLv, removed));
-                                }
-                                sectPoints += sectMissionBonus;
-                                if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
-                                sectMission = null; sectMissionBonus = 0;
-                            } else if (targetQuests.stream().noneMatch(q -> "Deliver Materials".equals(q.name))) {
-                                targetQuests.add(new Quest("Deliver Materials", false, 65, 3, 80, sect.location));
-                            }
+                        if (findMissionStack(Item.ItemType.Herb, missionLv, missionQty) != null) {
+                            if (location == sect.location) deliverMissionMaterials(Item.ItemType.Herb, missionLv, missionQty);
+                            else if (targetQuests.stream().noneMatch(q -> "Deliver Materials".equals(q.name)))
+                                targetQuests.add(new Quest("Deliver Materials", true, 65, 3, 80, sect.location));
                         }
                     }
                 }
@@ -1731,54 +2239,37 @@ public class Character implements java.io.Serializable {
             case "Mine":
                 mine();
                 if (sect != null) sectPoints += 2;
-                if (sectMission != null) {
+                if (sectMission != null && sect != null) {
                     String[] mp = sectMission.split("\\|");
                     if (mp.length >= 4 && "Mine".equals(mp[0]) && "Metal".equals(mp[1])) {
                         int missionLv = Integer.parseInt(mp[2]);
                         int missionQty = Integer.parseInt(mp[3]);
-                        boolean hasEnough = materialBag.stream().anyMatch(m ->
-                            m.itemType == Item.ItemType.Metal && m.lvl >= missionLv && m.quantity >= missionQty);
-                        if (hasEnough && sect != null) {
-                            if (location == sect.location) {
-                                String itemName = "Metal Lvl: " + missionLv;
-                                int removed = removeItems(materialBag, itemName, missionQty);
-                                if (removed > 0) {
-                                    boolean merged = false;
-                                    for (Item t : sect.treasury) { if (t.name.equals(itemName)) { t.quantity += removed; merged = true; break; } }
-                                    if (!merged) sect.treasury.add(new Item(Item.ItemType.Metal, missionLv, removed));
-                                }
-                                sectPoints += sectMissionBonus;
-                                if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
-                                sectMission = null; sectMissionBonus = 0;
-                            } else if (targetQuests.stream().noneMatch(q -> "Deliver Materials".equals(q.name))) {
-                                targetQuests.add(new Quest("Deliver Materials", false, 65, 3, 80, sect.location));
-                            }
+                        if (findMissionStack(Item.ItemType.Metal, missionLv, missionQty) != null) {
+                            if (location == sect.location) deliverMissionMaterials(Item.ItemType.Metal, missionLv, missionQty);
+                            else if (targetQuests.stream().noneMatch(q -> "Deliver Materials".equals(q.name)))
+                                targetQuests.add(new Quest("Deliver Materials", true, 65, 3, 80, sect.location));
                         }
                     }
                 }
                 questSuccess = 2;
                 break;
 
-            case "Test":
-                //System.out.println("Test completed");
+            case "Reincarnate": {
+                String why = Reincarnation.perform(this);
+                if (why != null) { if (player > 0 && skipping <= 0) System.out.println(why); questSuccess = -2; }
+                else questSuccess = 2;
+                break;
+            }
+
+            case "Test":      // legacy name kept for old saves
+            case "Meditate":
+                cultivate();
                 questSuccess = 2;
-                //Quest onetime = new Quest("One Time", true, 80, 5, 90);
-                //spotQuests.add(onetime);
                 break;
 
             case "Sell Technique": {
                 if (location.city && !location.libraries.isEmpty()) {
-                    Library lib = location.libraries.get(0);
-                    Technique best = null;
-                    for (Technique t : techniqueList) {
-                        final String tn = t.name;
-                        boolean alreadyIn = lib.techniques.stream().anyMatch(lt -> lt.name.equals(tn));
-                        if (!alreadyIn && (best == null || t.potential > best.potential)) best = t;
-                    }
-                    if (best != null) {
-                        lib.sellTechnique(this, new Technique(best));
-                        if (player > 0 && skipping <= 0) System.out.println("Sold " + best.name + " to city library");
-                    }
+                    sellBestTechnique(location.libraries.get(0));
                 }
                 questSuccess = 2;
                 break;
@@ -1805,7 +2296,8 @@ public class Character implements java.io.Serializable {
                 location.tournamentPrize = prize;
                 location.tournamentOrganizer = this;
                 location.tournamentRegistrants.clear();
-                if (player > 0 && skipping <= 0) System.out.println("=== Tournament announced at " + location.name + "! Realm " + minMajor + "-" + maxMajor + ", 8 weeks registration. Prize: " + prize + " ===");
+                location.tournamentName = Naming.tournament(location.name, GameDriver.time / 52);
+                if (player > 0 && skipping <= 0) System.out.println("=== The " + location.tournamentName + " is announced at " + location.name + "! Realm " + minMajor + "-" + maxMajor + ", 8 weeks registration. Prize: " + prize + " ===");
                 questSuccess = 2;
                 break;
             }
@@ -1828,7 +2320,10 @@ public class Character implements java.io.Serializable {
 
             case "Accept Sect Mission": {
                 if (sect == null || location != sect.location || sect.questBoard.isEmpty() || sectMission != null) { questSuccess = -2; break; }
-                sectMission = sect.questBoard.get(rand.nextInt(sect.questBoard.size()));
+                ArrayList<String> options = new ArrayList<>();
+                for (String mm : sect.questBoard) if (!mm.startsWith("Deliver|") || Life.canMake(this, mm)) options.add(mm); // only those who can make (or, for a human, buy) the goods take a delivery
+                if (options.isEmpty()) { questSuccess = -2; break; }
+                sectMission = options.get(rand.nextInt(options.size()));
                 String[] parts = sectMission.split("\\|");
                 sectMissionBonus = parts.length >= 5 ? Integer.parseInt(parts[4]) : 10;
                 if (player > 0 && skipping <= 0) System.out.println("Accepted sect mission: " + parts[0] + " " + parts[1] + " (Lv." + parts[2] + "x" + parts[3] + ") for " + sectMissionBonus + " SP bonus");
@@ -1846,10 +2341,29 @@ public class Character implements java.io.Serializable {
                 int arrayLvl = Math.min(100, (majorLvl + 1) * 10);
                 Item array = new Item(this, arrayLvl, Item.ItemType.Array);
                 long arrayCost = itemPrice(array);
-                if (!canAfford(arrayCost)) { questSuccess = -2; break; }
-                deductSs(arrayCost);
+                if (canAfford(arrayCost)) {
+                    deductSs(arrayCost);
+                } else if (location.cityTreasury >= arrayCost) {
+                    location.cityTreasury -= arrayCost;
+                } else { questSuccess = -2; break; }
                 location.arrayBag.add(array);
                 if (player > 0 && skipping <= 0) System.out.println("Installed " + array + " at " + location.name);
+                questSuccess = 2;
+                break;
+            }
+
+            case "Buy Sect Array": {
+                if (sect == null || !sect.isMaster(this) || location != sect.location) { questSuccess = -2; break; }
+                int arrayLvl = Math.min(100, (majorLvl + 1) * 10);
+                Item array = new Item(this, arrayLvl, Item.ItemType.Array);
+                long cost = itemPrice(array);
+                if (canAfford(cost)) {
+                    deductSs(cost);
+                } else if (sect.sectCash >= cost) {
+                    sect.sectCash -= cost;
+                } else { questSuccess = -2; break; }
+                location.arrayBag.add(array);
+                if (player > 0 && skipping <= 0) System.out.println("Installed " + array + " at " + sect.name + "!");
                 questSuccess = 2;
                 break;
             }
@@ -1874,6 +2388,8 @@ public class Character implements java.io.Serializable {
 
             case "Donate to Sect": {
                 if (sect == null || location != sect.location) { questSuccess = -2; break; }
+                backpack.removeIf(i -> i.itemType == null);      // purge broken (deconstructed) gear
+                sect.treasury.removeIf(t -> t.name == null);
                 int earnedPoints = 0;
                 boolean usesHerbs2  = trait == Traits.Alchemist || trait == Traits.Tailor || trait == Traits.Scribe;
                 boolean usesMetals2 = trait == Traits.Blacksmith;
@@ -1899,7 +2415,7 @@ public class Character implements java.io.Serializable {
                         if (t.name.equals(item.name)) { t.quantity += donate; merged = true; break; }
                     }
                     if (!merged) {
-                        Item copy = new Item(item.itemType, item.lvl, donate - 1); // qty = 1+(donate-1) = donate
+                        Item copy = new Item(item.itemType, item.lvl, donate); // the constructor sets quantity exactly (the old "-1" lost a unit per new stack)
                         copy.name = item.name;
                         sect.treasury.add(copy);
                     }
@@ -1908,7 +2424,7 @@ public class Character implements java.io.Serializable {
                 // Pills: donate what's no longer useful
                 for (Item pill : new ArrayList<>(pillBag)) {
                     int donate = 0;
-                    if (pill.lvl <= majorLvl * 10) {
+                    if (pill.lvl <= majorLvl) {
                         donate = pill.quantity; // realm already surpassed — all useless
                     } else if (pill.pillType == Item.PillType.Potential && potential >= 100) {
                         donate = pill.quantity; // potential maxed — potential pills useless
@@ -1935,7 +2451,11 @@ public class Character implements java.io.Serializable {
             }
 
             case "Buy from Sect": {
-                if (sect == null || location != sect.location || sect.treasury.isEmpty()) { questSuccess = -2; break; }
+                if (sect == null || location != sect.location || sect.treasury.isEmpty()) {
+                    if (player > 0 && skipping <= 0) System.out.println("Buy from Sect: " + (sect == null ? "you have no sect." : location != sect.location ? "you must be at your sect's home, " + sect.location.name + "." : "the treasury is empty."));
+                    questSuccess = -2; break;
+                }
+                boolean boughtAny = false;
                 for (Item item : new ArrayList<>(sect.treasury)) {
                     if (item.quantity <= 0) { sect.treasury.remove(item); continue; }
                     boolean wantHerb  = item.itemType == Item.ItemType.Herb
@@ -1955,11 +2475,12 @@ public class Character implements java.io.Serializable {
                                 if (m.name.equals(item.name)) { m.quantity += buyQty; merged = true; break; }
                             }
                             if (!merged) {
-                                Item copy = new Item(item.itemType, item.lvl, buyQty - 1);
+                                Item copy = new Item(item.itemType, item.lvl, buyQty);
                                 copy.name = item.name;
                                 materialBag.add(copy);
                             }
                             if (player > 0 && skipping <= 0) System.out.println("Bought " + buyQty + "x " + item.name + " from sect treasury for " + cost + " sect points.");
+                            boughtAny = true;
                             break;
                         }
                     }
@@ -1971,6 +2492,7 @@ public class Character implements java.io.Serializable {
                             backpack.add(item);
                             equip();
                             if (player > 0 && skipping <= 0) System.out.println("Bought " + item + " from sect treasury for " + cost + " sect points.");
+                            boughtAny = true;
                             break;
                         }
                     }
@@ -1982,11 +2504,13 @@ public class Character implements java.io.Serializable {
                             backpack.add(item);
                             equip();
                             if (player > 0 && skipping <= 0) System.out.println("Bought " + item + " from sect treasury for " + cost + " sect points.");
+                            boughtAny = true;
                             break;
                         }
                     }
                 }
-                questSuccess = 2;
+                if (!boughtAny && player > 0 && skipping <= 0) System.out.println("Buy from Sect: nothing in the treasury suits you (herbs or metal for your craft, or gear better than yours), or you lack sect points (you have " + sectPoints + ").");
+                questSuccess = boughtAny ? 2 : -2;
                 break;
             }
 
@@ -1998,6 +2522,8 @@ public class Character implements java.io.Serializable {
 
     public int targetQuests (Quest quest) {
         switch (quest.name) {
+            case "Find Lost Beast":
+                return Taming.reunite(this) > 0 ? 1 : -1;
             case "Find Person":
                 Character person = characters.get(quest.targetCharacter);
                 if (relationshipList.contains(person.id) != null) {
@@ -2015,26 +2541,19 @@ public class Character implements java.io.Serializable {
                     return -1;
                 }
 
+            case "Festival Trade":
+                return Life.festivalTrade(this);
+
             case "Go Sell":
-                if (location.city && location.cityOwner != null) {
+                if (location.city) {
                     sell(location);
-                    location.population += Math.max(1, (int)(ss / 1000000));
+                    location.population = (int) Math.min(Integer.MAX_VALUE, (long) location.population + Math.max(1, ss / 1000000)); // int += overflowed negative
                 }
                 return 1;
 
             case "Sell Technique": {
                 if (location.city && !location.libraries.isEmpty()) {
-                    Library lib = location.libraries.get(0);
-                    Technique best = null;
-                    for (Technique t : techniqueList) {
-                        final String tn = t.name;
-                        boolean alreadyIn = lib.techniques.stream().anyMatch(lt -> lt.name.equals(tn));
-                        if (!alreadyIn && (best == null || t.potential > best.potential)) best = t;
-                    }
-                    if (best != null) {
-                        lib.sellTechnique(this, new Technique(best));
-                        if (player > 0 && skipping <= 0) System.out.println("Sold " + best.name + " to city library");
-                    }
+                    sellBestTechnique(location.libraries.get(0));
                 }
                 return 1;
             }
@@ -2048,7 +2567,23 @@ public class Character implements java.io.Serializable {
             }
             case "Battle Rival":
             case "Battle Arch-Enemy":
-            case "Revenge":
+            case "Revenge": {
+                Character enemy = characters.get(quest.targetCharacter);
+                if (enemy != null && !enemy.dead) {
+                    partyBattleCheck(enemy);
+                }
+                return 1;
+            }
+            case "Poison Contract": {
+                Character victim = characters.get(quest.targetCharacter);
+                if (victim == null || victim.dead) return 1;
+                if (victim.location != location) return 0;
+                return Life.contract(this, victim);
+            }
+            case "Deliver Goods":
+                if (location == null || sect == null || location != sect.location) return 0;
+                Life.deliverMission(this);
+                return 1;
             case "Bounty Hunt": {
                 Character enemy = characters.get(quest.targetCharacter);
                 if (enemy != null && !enemy.dead) {
@@ -2059,7 +2594,8 @@ public class Character implements java.io.Serializable {
             case "Propose Alliance": {
                 Character target = characters.get(quest.targetCharacter);
                 if (target != null && !target.dead && target.sect != null && sect != null
-                        && !sect.isAlly(target.sect) && !sect.isAtWar()) {
+                        && !sect.isAlly(target.sect) && !sect.isAtWar()
+                        && (target.player != 1 || DecisionBroker.askYesNo(target, this + " of " + sect + " proposes an alliance with " + target.sect + ". Accept?", true))) {
                     sect.proposeAlliance(target.sect);
                     if (player > 0 || target.player > 0)
                         System.out.println(sect + " and " + target.sect + " have formed an alliance!");
@@ -2071,7 +2607,10 @@ public class Character implements java.io.Serializable {
                 if (target != null && !target.dead && target.sect != null && sect != null
                         && lvl - target.lvl >= 20) {
                     long tribute = 10000000L;
-                    if (target.canAfford(tribute)) {
+                    // A human target chooses; refusing is treated like being unable to pay (the demanding sect declares war)
+                    boolean willPay = target.canAfford(tribute)
+                            && (target.player != 1 || DecisionBroker.askYesNo(target, this + " of " + sect + " demands " + tribute + " ss in tribute. Pay? (refusing means war)", true));
+                    if (willPay) {
                         target.deductSs(tribute);
                         ss += tribute;
                         convertCurrency();
@@ -2092,6 +2631,8 @@ public class Character implements java.io.Serializable {
                 if (target != null && !target.dead && target.sect != null && sect != null && target.sect != sect) {
                     Organization oldSect = target.sect;
                     boolean accepts = rand.nextInt(100) < 40; // 40% base defection chance
+                    if (accepts && target.player == 1) // a human elder decides for themselves
+                        accepts = DecisionBroker.askYesNo(target, this + " of " + sect + " offers you a place in " + sect + ". Defect from " + oldSect + "?", false);
                     if (accepts) {
                         oldSect.resign(target);
                         target.sectPoints = 0;
@@ -2104,19 +2645,61 @@ public class Character implements java.io.Serializable {
                 return 1;
             }
             case "Hunt Beast":
-                beastBattleCheck();
+                partyBeastHunt();
                 if (sect != null) sectPoints += 5;
+                // Reward for clearing a monster bounty area
+                if (quest.targetArea != null && quest.targetArea.monsters <= 0) {
+                    long reward = (long) quest.targetArea.lvl * quest.targetArea.lvl * 50;
+                    ss += reward;
+                    convertCurrency();
+                    if (player > 0 && skipping <= 0)
+                        System.out.println(this + " cleared the monsters from " + quest.targetArea.name + " and claimed " + reward + " ss!");
+                }
+                return 1;
+            // Player-picked targets ("seek <id> friend|fight|spar"): go to that cultivator and act on them
+            case "Befriend": {
+                Character t = charById(quest.targetCharacter);
+                if (t != null && !t.dead && t != this) interact(t);
+                return 1;
+            }
+            case "Duel": {
+                Character t = charById(quest.targetCharacter);
+                if (t != null && !t.dead && t != this) partyBattleCheck(t);
+                return 1;
+            }
+            case "Spar": {
+                Character t = charById(quest.targetCharacter);
+                if (t != null && !t.dead && t != this && t.age >= 8) {
+                    sparring = true; t.sparring = true;
+                    battleCheck(t);
+                    sparring = false; t.sparring = false;
+                }
+                return 1;
+            }
+            case "Disperse":
+                return 1; // arriving at the quieter tile is the whole quest
+            case "Donate Array":
+                if (sect != null && location == sect.location && !arrayBag.isEmpty()) {
+                    int donated = arrayBag.size();
+                    while (!arrayBag.isEmpty()) installArray(location);
+                    sectPoints += donated * 10;
+                    if (player > 0 && skipping <= 0)
+                        System.out.println(this + " donated " + donated + " array(s) to " + sect.name + "! (+" + (donated * 10) + " sect points)");
+                }
                 return 1;
             case "Seek Territory":
                 beastBattleCheck();
                 return 1;
             case "Heaven Treasure": {
-                if (location.heavenlyTechnique != null) {
-                    techniqueList.add(location.heavenlyTechnique);
-                    if (player > 0 && skipping <= 0) System.out.println(this + " claimed the heavenly technique: " + location.heavenlyTechnique.name + "!");
-                    location.heavenlyTechnique = null;
+                if (location.hasHeaven()) {
+                    Treasure.claim(this, location);
                 }
                 return 1;
+            }
+            case "Refine Blood": {
+                Character alchemist = charById(quest.targetCharacter);
+                if (alchemist == null || alchemist.dead || alchemist.trait != Traits.Alchemist) return -1;
+                return refineBloodWith(alchemist) ? 1 : -1;
             }
             case "Rob Caravan": {
                 Character merchant = characters.get(quest.targetCharacter);
@@ -2135,28 +2718,19 @@ public class Character implements java.io.Serializable {
                 if (sect != null && sectMission != null) {
                     String[] mp = sectMission.split("\\|");
                     if (mp.length >= 4) {
-                        int mLv = Integer.parseInt(mp[2]);
-                        int mQty = Integer.parseInt(mp[3]);
-                        boolean isHerb = "Herb".equals(mp[1]);
-                        Item.ItemType mType = isHerb ? Item.ItemType.Herb : Item.ItemType.Metal;
-                        String itemName = (isHerb ? "Herb Lvl: " : "Metal Lvl: ") + mLv;
-                        int removed = removeItems(materialBag, itemName, mQty);
-                        if (removed > 0) {
-                            boolean merged = false;
-                            for (Item t : sect.treasury) { if (t.name.equals(itemName)) { t.quantity += removed; merged = true; break; } }
-                            if (!merged) sect.treasury.add(new Item(mType, mLv, removed));
-                            sectPoints += sectMissionBonus;
-                            if (player > 0 && skipping <= 0) System.out.println("Materials delivered to sect! +" + sectMissionBonus + " SP");
+                        Item.ItemType mType = "Herb".equals(mp[1]) ? Item.ItemType.Herb : Item.ItemType.Metal;
+                        // Paid only if the full quantity is actually handed over; otherwise the mission is abandoned without reward
+                        if (!deliverMissionMaterials(mType, Integer.parseInt(mp[2]), Integer.parseInt(mp[3]))) {
+                            sectMission = null; sectMissionBonus = 0;
                         }
-                        sectMission = null; sectMissionBonus = 0;
                     }
                 }
                 return 1;
             }
             case "Restock Trip": {
-                if (location.city && location.cityOwner != null) {
+                if (location.city) {
                     boolean hasShopHere = ownedShops.stream().anyMatch(s -> s.location == location);
-                    if (!hasShopHere && ownedShops.size() < maxShops()) {
+                    if (!hasShopHere && ownedShops.size() < maxShops() && location.shops.size() < location.maxShopSlots()) {
                         Shop shop = new Shop(this, location);
                         ownedShops.add(shop);
                         location.shops.add(shop);
@@ -2168,34 +2742,23 @@ public class Character implements java.io.Serializable {
                 return 1;
             }
             case "Sell Stock": {
-                if (!location.city || location.cityOwner == null) return 0;
+                if (!location.city) return 0;
                 // Sell all non-equipped, non-spare backpack items into this city's pool at full price
-                Item spareW = null, spareA = null;
-                for (Item i : backpack) {
-                    if (i.itemType == Item.ItemType.Weapon && i != equippedWeapon)
-                        if (spareW == null || i.lvl > spareW.lvl) spareW = i;
-                    if (i.itemType == Item.ItemType.Clothing && i != equippedClothing)
-                        if (spareA == null || i.lvl > spareA.lvl) spareA = i;
-                }
-                ArrayList<Item> cargo = new ArrayList<>();
-                for (Item i : backpack) {
-                    if (i == equippedWeapon || i == equippedClothing || i == spareW || i == spareA) continue;
-                    cargo.add(i);
-                }
+                ArrayList<Item> cargo = sellableCargo();
                 long earned = 0;
                 for (Item item : cargo) {
                     long price = itemPrice(item);
                     earned += price;
                     boolean merged = false;
                     for (Item ci : location.backpack) {
-                        if (ci.name.equals(item.name) && ci.lvl == item.lvl) { ci.quantity += item.quantity; merged = true; break; }
+                        if (item.stackable && ci.name.equals(item.name) && ci.lvl == item.lvl) { ci.quantity += item.quantity; merged = true; break; } // only stackables merge: two swords are not "a sword x2"
                     }
                     if (!merged) location.backpack.add(item);
                 }
                 backpack.removeAll(cargo);
                 ss += earned;
                 convertCurrency();
-                location.population += Math.max(1, (int)(earned / 1000000L));
+                location.population = (int) Math.min(Integer.MAX_VALUE, (long) location.population + Math.max(1L, earned / 1000000L));
                 if (player > 0 && skipping <= 0) System.out.println(this + " sold cargo at " + location.name + " for " + earned + " ss");
                 return 1;
             }
@@ -2203,7 +2766,8 @@ public class Character implements java.io.Serializable {
                 Character recruit = characters.get(quest.targetCharacter);
                 if (recruit != null && !recruit.dead && sect != null && sect.canJoin(recruit)) {
                     interact(recruit);
-                    sect.join(recruit);
+                    if (recruit.player != 1 || DecisionBroker.askYesNo(recruit, this + " invites you to join " + sect + ". Join?", true))
+                        sect.join(recruit);
                 }
                 return 1;
             }
@@ -2212,6 +2776,8 @@ public class Character implements java.io.Serializable {
                 if (dungeon == null || dungeon.dungeonType == null) return 1;
                 switch (dungeon.dungeonType) {
                     case LOST_RUINS:
+                        if (dungeon.dungeonCharges == 0)
+                            dungeon.dungeonCharges = Math.max(3, dungeon.lvl / 2 + rand.nextInt(Math.max(1, dungeon.lvl / 2 + 1)));
                         if (dungeon.monsters > 0) beastBattleCheck();
                         long treasure = (long)(dungeon.lvl) * dungeon.lvl * 100L;
                         ss += treasure; convertCurrency();
@@ -2220,9 +2786,20 @@ public class Character implements java.io.Serializable {
                             techniqueList.add(new Technique(tt, this, Math.max(1, rand.nextInt(dungeon.lvl / 2 + 1))));
                             if (player > 0 && skipping <= 0) System.out.println(this + " found an ancient technique in the Lost Ruins!");
                         }
+                        dungeon.dungeonCharges--;
+                        if (dungeon.dungeonCharges <= 0) {
+                            dungeon.dungeonType = null;
+                            if (player > 0 && skipping <= 0)
+                                System.out.println("The Lost Ruins of " + dungeon.name + " have been fully explored and fade into history.");
+                        }
                         break;
                     case BEAST_LAIR:
                         for (int i = 0; i < 3 && dungeon.monsters > 0; i++) beastBattleCheck();
+                        if (dungeon.monsters <= 0) {
+                            dungeon.dungeonType = null;
+                            if (player > 0 && skipping <= 0)
+                                System.out.println("The Beast Lair at " + dungeon.name + " has been hunted out!");
+                        }
                         break;
                     case MARTIAL_TRIAL:
                         tempLvlCheck();
@@ -2230,6 +2807,7 @@ public class Character implements java.io.Serializable {
                         int trialWin = Math.max(5, Math.min(95, 50 + 5 * (tempLvl - trialPower)));
                         if (rand.nextInt(100) < trialWin) {
                             if (martialTechnique != null) martialTechnique.upgrade(this);
+                            if (martialTechnique2 != null) martialTechnique2.upgrade(this);
                             for (int i = 0; i < 3; i++) cultivate();
                             if (player > 0 && skipping <= 0) System.out.println(this + " passed the Martial Trial!");
                         }
@@ -2263,6 +2841,7 @@ public class Character implements java.io.Serializable {
                     for (Character c : new ArrayList<>(location.characters)) {
                         if (c == null || c.dead || c == this || c.sect != location.sect) continue;
                         battleCheck(c);
+                        if (dead || sect == null) return 1; // raider fell (or was expelled) in the fight
                         raidSuccess = true;
                         // War ends if enemy sect master is dead or sect dissolved
                         if (sect.warTarget != null && (sect.warTarget.master == null || sect.warTarget.master.dead
@@ -2288,10 +2867,14 @@ public class Character implements java.io.Serializable {
                             pill = p; break;
                         }
                     }
-                    if (pill != null && canAfford(itemPrice(pill))) {
-                        deductSs(itemPrice(pill));
-                        location.pillBag.remove(pill);
-                        pillBag.add(pill);
+                    if (pill != null && pill.quantity > 0 && canAfford(itemPrice(pill))) {
+                        // Buy ONE pill for its price (the whole stack used to transfer for a single unit's cost)
+                        long potentialPrice = itemPrice(pill);
+                        deductSs(potentialPrice);
+                        pill.quantity--;
+                        if (pill.quantity <= 0) location.pillBag.remove(pill);
+                        addToBag(pillBag, new Item(Item.ItemType.Pill, Item.PillType.Potential, pill.lvl, 1));
+                        location.receivePayment(potentialPrice);
                         consume();
                     }
                 }
@@ -2316,7 +2899,7 @@ public class Character implements java.io.Serializable {
                 if (location == quest.targetArea) {
                     if (player > 0 && skipping <= 0) System.out.println("You found your parent's resting place.");
                     if (rand.nextInt(5) == 0) {
-                        potential = Math.min(100, potential + 1);
+                        potential = Math.max(potential, Math.min(100, potential + 1)); // never lowers a potential above 100 (the Usurper path)
                         if (player > 0 && skipping <= 0) System.out.println("Your grief has strengthened your resolve. (+1 Potential)");
                     }
                     return 1;
@@ -2334,12 +2917,13 @@ public class Character implements java.io.Serializable {
                     }
                     if (unborn == null) return -1;
                     unborn.trait = Traits.Ghost;
+                    if (player == 1 || player == 2) unborn.takeControlFrom(this);   // a human-controlled ghost carries on as the child
                     unborn.originalName = (originalName != null ? originalName + " → " : "") + name + " " + lastName;
                     if (player > 0 || mother.player > 0) System.out.println(this + " possesses " + mother + "'s unborn child! (was: " + unborn.originalName + ")");
                     // Ghost dies permanently
                     dead = true;
                     addRem(this);
-                    location.characters.remove(this);
+                    location.removeChar(this);
                     return 1;
                 }
                 return 0;
@@ -2348,15 +2932,22 @@ public class Character implements java.io.Serializable {
             case "Ghost City Rebirth": {
                 if (!location.city) return 0;
                 Character rebirth = new Character(location);
+                rebirth.age = GameDriver.START_AGE; // reborn at the age everyone starts at
                 rebirth.trait = Traits.Ghost;
                 rebirth.originalName = (originalName != null ? originalName + " → " : "") + name + " " + lastName;
-                if (player == 1) { rebirth.player = 1; player = 0; }
-                else if (player == 2) { rebirth.player = 2; player = 0; }
+                // Carry over technique mastery at half lvl so lifetimes of practice aren't lost
+                rebirth.martialTechnique = new Technique(martialTechnique);
+                rebirth.martialTechnique.lvl = Math.max(1, martialTechnique.lvl / 2);
+                rebirth.movementTechnique = new Technique(movementTechnique);
+                rebirth.movementTechnique.lvl = Math.max(1, movementTechnique.lvl / 2);
+                // Profession accumulates across rebirths — Ghosts grow wiser each life
+                rebirth.professionLvl = professionLvl + 1;
+                if (player == 1 || player == 2) rebirth.takeControlFrom(this);
                 addTemp(rebirth);
                 if (player > 0 || rebirth.player > 0) System.out.println(this + " is reborn as " + rebirth + " in " + location.name + "! (was: " + rebirth.originalName + ")");
                 dead = true;
                 addRem(this);
-                location.characters.remove(this);
+                location.removeChar(this);
                 return 1;
             }
 
@@ -2383,15 +2974,27 @@ public class Character implements java.io.Serializable {
             }
 
         }
+        if (quest.userCreated) { // player-authored waypoint: arriving completes it
+            if (player > 0 && skipping <= 0) System.out.println("You reached " + quest.name + ".");
+            return 1;
+        }
         return -1;
     }
 
     public int pathfinder (Area destination) {
-        // Human player in manual control provides their own movement; don't override it
-        if (player >= 1 && skipping <= 0) return (location == destination) ? 1 : 0;
+        // A player walking by hand moves themselves; a duty quest (toggled on) may only walk on ticks the player stood still
+        if (isManualPc() && pc.movedThisTick) return (location == destination) ? 1 : 0;
+        return pathfindXY(destination.x, destination.y);
+    }
 
-        int xDiff = location.x - destination.x;
-        int yDiff = location.y - destination.y;
+    // One step toward a tile coordinate (used by scripts); creates tiles on the way like any other move
+    public void stepToward(int tx, int ty) {
+        pathfindXY(tx, ty);
+    }
+
+    private int pathfindXY(int destX, int destY) {
+        int xDiff = location.x - destX;
+        int yDiff = location.y - destY;
         int divider = range / 2;
 
         if (xDiff == 0) {
@@ -2418,7 +3021,7 @@ public class Character implements java.io.Serializable {
             this.movement('w');
         }
 
-        if (location == destination) {
+        if (location.x == destX && location.y == destY) {
             return 1;
         }
         else {
@@ -2428,6 +3031,7 @@ public class Character implements java.io.Serializable {
     }
 
     public int event() {
+        if (location.characters.isEmpty()) return -2; // nobody (not even this character) is listed in the tile: nothing to happen
         Character target = location.characters.get(rand.nextInt(location.characters.size()));
         int result = -2;
         switch (eventChoosing()) {
@@ -2469,6 +3073,7 @@ public class Character implements java.io.Serializable {
                 smithing();
                 break;
             case Friendly:
+                if (location.characters.isEmpty()) break;
                 Character target = location.characters.get(rand.nextInt(location.characters.size()));
                 if (target != null) {
                     interact(target);
@@ -2492,15 +3097,23 @@ public class Character implements java.io.Serializable {
                     if (spotQuests.stream().noneMatch(q -> "Forage".equals(q.name)))
                         spotQuests.add(new Quest("Forage", false, 40, 3, 70));
                 array();
-                if (!arrayBag.isEmpty()) installArray(location);
+                if (!arrayBag.isEmpty()) {
+                    if (sect != null && location == sect.location) {
+                        // Donate all crafted arrays to sect
+                        while (!arrayBag.isEmpty()) installArray(location);
+                    } else if (sect != null) {
+                        // Queue a trip to deliver arrays to sect
+                        if (targetQuests.stream().noneMatch(q -> "Donate Array".equals(q.name))
+                                && (currentQuest == null || !"Donate Array".equals(currentQuest.name)))
+                            targetQuests.add(new Quest("Donate Array", true, 50, 5, 65, sect.location));
+                    } else {
+                        installArray(location); // no sect, install locally
+                    }
+                }
                 break;
             case Leader:
                 if (professionLvl == 1) {
-                    if (rand.nextInt(5) == 0) {
-                        cityLeadership(); // 20%: city path (sets professionLvl to 50 on success)
-                    } else {
-                        professionLvl = 50; // 80%: skip straight to sect track
-                    }
+                    cityLeadership(); // try city founding every tick; sets professionLvl=50 on success
                 }
                 if (professionLvl == 50) {
                     sectLeadership();
@@ -2518,9 +3131,9 @@ public class Character implements java.io.Serializable {
                 }
                 break;
             case Merchant:
-                if (location.city && location.cityOwner != null) {
+                if (location.city) {
                     boolean hasShopHere = ownedShops.stream().anyMatch(s -> s.location == location);
-                    if (!hasShopHere && ownedShops.size() < maxShops()) {
+                    if (!hasShopHere && ownedShops.size() < maxShops() && location.shops.size() < location.maxShopSlots()) {
                         Shop shop = new Shop(this, location);
                         ownedShops.add(shop);
                         location.shops.add(shop);
@@ -2528,6 +3141,7 @@ public class Character implements java.io.Serializable {
                     Shop myShop = ownedShops.stream().filter(s -> s.location == location).findFirst().orElse(null);
                     if (myShop != null) {
                         myShop.restockFromCity(location);
+                        Life.restockShopGoods(myShop);
                         // Cargo pickup: buy from city pool into backpack for inter-city transport
                         if (backpack.size() < 15 && location.backpack != null && !location.backpack.isEmpty()
                                 && targetQuests.stream().noneMatch(q -> "Sell Stock".equals(q.name))
@@ -2538,7 +3152,7 @@ public class Character implements java.io.Serializable {
                                 long cost = Math.max(1, (long)(itemPrice(item) * 0.30));
                                 if (canAfford(cost)) {
                                     deductSs(cost);
-                                    if (location.cityOwner != null) location.cityOwner.ss += cost;
+                                    location.receivePayment(cost);
                                     location.backpack.remove(item);
                                     backpack.add(item);
                                     pickedUp = true;
@@ -2554,13 +3168,23 @@ public class Character implements java.io.Serializable {
                         for (Item item : new ArrayList<>(myShop.inventory)) {
                             if (item.itemType == Item.ItemType.Weapon
                                     && (equippedWeapon == null || item.lvl > equippedWeapon.lvl)) {
-                                if (equippedWeapon != null) myShop.inventory.add(equippedWeapon);
+                                if (equippedWeapon != null) { // move the old one to the shelf for real (it used to end up on the shelf AND in the backpack)
+                                    final Item oldW = equippedWeapon;
+                                    equippedWeapon = null;
+                                    backpack.removeIf(i -> i == oldW);
+                                    myShop.inventory.add(oldW);
+                                }
                                 myShop.inventory.remove(item);
                                 backpack.add(item);
                                 equip();
                             } else if (item.itemType == Item.ItemType.Clothing
                                     && (equippedClothing == null || item.lvl > equippedClothing.lvl)) {
-                                if (equippedClothing != null) myShop.inventory.add(equippedClothing);
+                                if (equippedClothing != null) {
+                                    final Item oldC = equippedClothing;
+                                    equippedClothing = null;
+                                    backpack.removeIf(i -> i == oldC);
+                                    myShop.inventory.add(oldC);
+                                }
                                 myShop.inventory.remove(item);
                                 backpack.add(item);
                                 equip();
@@ -2572,6 +3196,8 @@ public class Character implements java.io.Serializable {
             case Lucky:
                 eventLootDead();
                 break;
+            case Tamer: case Poisoner: case Drunken: case Chef: case Musician:
+                return Life.profession(this);
             default:
                 break;
         }
@@ -2619,7 +3245,7 @@ public class Character implements java.io.Serializable {
         if (location.herbMaterials > 0) {
             boolean hasItem = false;
             int rewardLvl = 11 - (int)Math.sqrt(Math.sqrt(rand.nextInt(10000) + 1)); // Formula for calculating a herb's level randomly
-            int dropAmount = rand.nextInt(10) + 1;
+            int dropAmount = (rand.nextInt(10) + 1) * 10; // crafts cost 1000 materials, so gathering yields 10-100 per action
             if (dropAmount > location.herbMaterials) {
                 dropAmount = location.herbMaterials;
             }
@@ -2628,6 +3254,7 @@ public class Character implements java.io.Serializable {
                 if (item.itemType == Item.ItemType.Herb && item.lvl == rewardLvl) {
                     hasItem = true;
                     item.quantity += dropAmount;
+                    break; // one stack only (duplicate stacks each used to receive the full drop)
                 }
             }
             if (!hasItem) {
@@ -2644,7 +3271,7 @@ public class Character implements java.io.Serializable {
         if (location.metalMaterials > 0) {
             boolean hasItem = false;
             int rewardLvl = 11 - (int)Math.sqrt(Math.sqrt(rand.nextInt(10000) + 1)); // Formula for calculating a herb's level randomly
-            int dropAmount = rand.nextInt(10) + 1;
+            int dropAmount = (rand.nextInt(10) + 1) * 10;
             if (dropAmount > location.metalMaterials) {
                 dropAmount = location.metalMaterials;
             }
@@ -2653,6 +3280,7 @@ public class Character implements java.io.Serializable {
                 if (item.itemType == Item.ItemType.Metal && item.lvl == rewardLvl) {
                     hasItem = true;
                     item.quantity += dropAmount;
+                    break;
                 }
             }
             if (!hasItem) {
@@ -2665,6 +3293,83 @@ public class Character implements java.io.Serializable {
             }
         }
     }
+    /** Techniques that may be sold: not one of the four equipped, and above the default potential 3. */
+    ArrayList<Technique> sellableTechniques() {
+        ArrayList<Technique> r = new ArrayList<>();
+        if (techniqueList == null) return r;
+        for (Technique t : techniqueList) if (Library.sellable(t) && t != martialTechnique && t != martialTechnique2 && t != movementTechnique && t != movementTechnique2) r.add(t);
+        return r;
+    }
+
+    /** Sells the strongest sellable technique to a library (20% fee, the technique is gone from this character). Returns true if sold. */
+    boolean sellBestTechnique(Library lib) {
+        Technique best = null;
+        for (Technique t : sellableTechniques()) if (best == null || t.potential > best.potential) best = t;
+        if (best == null) {
+            if (player > 0 && skipping <= 0) System.out.println("Nothing to sell: the library takes techniques of potential " + Library.MIN_SELL_POTENTIAL + " or more that you do not have equipped.");
+            return false;
+        }
+        long fee = Library.sellPrice(best);
+        String name = best.name;
+        boolean ok = lib.sellTechnique(this, best);
+        if (player > 0 && skipping <= 0) System.out.println(ok ? "Sold " + name + " (potential " + best.potential + ") to the library for " + fee + " ss (a fee of 20%; the book is theirs now)." : "The library cannot pay " + fee + " ss for " + name + " right now.");
+        return ok;
+    }
+
+    /** Potential Pills waiting for a buyer in this city: on the auction block, or (old saves) on a shelf. */
+    static boolean potentialPillsAt(Area a) {
+        if (a == null || !a.city) return false;
+        if (a.pillBag != null) for (Item p : a.pillBag) if (p.itemType == Item.ItemType.Pill && p.pillType == Item.PillType.Potential) return true;
+        if (a.auctionBag != null) for (Item p : a.auctionBag) if (p.itemType == Item.ItemType.Pill && p.pillType == Item.PillType.Potential) return true;
+        return false;
+    }
+
+    /** How much Blood this character carries (1,000 make one Potential Pill). */
+    int bloodAmount() {
+        long n = 0;
+        for (Item i : materialBag) if (i.itemType == Item.ItemType.Blood) n += Math.max(0, i.quantity);
+        return (int) Math.min(Integer.MAX_VALUE, n);
+    }
+
+    /** A living alchemist who can refine Blood: here first, then in the cities this character knows. */
+    Character findAlchemist() {
+        for (Character c : new ArrayList<>(location.characters)) if (isRefiner(c)) return c;
+        int checked = 0;
+        for (Area area : knownLocations) {
+            if (area == null || !area.city || area == location) continue;
+            if (++checked > 40) break;
+            for (Character c : area.characters) if (isRefiner(c)) return c;
+        }
+        return null;
+    }
+
+    private boolean isRefiner(Character c) { return c != null && c != this && !c.dead && c.born && c.trait == Traits.Alchemist && c.age >= 8 && c.professionLvl >= 10; }
+
+    /** The alchemist turns this character's Blood into Potential Pills: one pill per 1,000 Blood (as many as the alchemist's skill allows), for a fee equal to the pill's price. Returns true if any were made. */
+    static volatile int stRefined; // playtest counter: Potential Pills refined from Blood (not saved)
+    boolean refineBloodWith(Character alchemist) {
+        Item blood = null;
+        for (Item i : materialBag) if (i.itemType == Item.ItemType.Blood && i.quantity >= 1000) { blood = i; break; }
+        if (blood == null) return false;
+        Item sample = new Item(Item.ItemType.Pill, Item.PillType.Potential, 11, 1);
+        long fee = Math.max(1, itemPrice(sample));
+        long wealth = ss + sc * 1_000_000L + dc * 1_000_000_000_000L;
+        int n = (int) Math.min(Math.min(blood.quantity / 1000, alchemist.professionLvl / 10 + 1), wealth / fee);
+        if (n <= 0) {
+            if (player > 0 && skipping <= 0) System.out.println(alchemist.name + " " + alchemist.lastName + " would refine your Blood for " + fee + " ss a pill; you cannot pay that yet.");
+            return false;
+        }
+        deductSs(fee * n);
+        alchemist.ss += fee * n; alchemist.convertCurrency();
+        blood.quantity -= 1000 * n;
+        stRefined += n;
+        if (blood.quantity <= 0) materialBag.remove(blood);
+        addToBag(pillBag, new Item(Item.ItemType.Pill, Item.PillType.Potential, 11, n));
+        if (player > 0 && skipping <= 0) System.out.println(alchemist.name + " " + alchemist.lastName + " refined your Blood into " + n + " Potential Pill(s) for " + fee * n + " ss.");
+        consume();
+        return true;
+    }
+
     public int alchemy() {
         int success = -2;
         for (int i = 0; i <= professionLvl/10; i++) {
@@ -2695,7 +3400,7 @@ public class Character implements java.io.Serializable {
             Item pill = null;
             // Creates Pill Item
             if (hasBlood) {
-                int quantity = material.quantity / 50;
+                int quantity = material.quantity / 1000; // each Potential pill costs 1000 Blood (was /50, which drove the stack negative)
                 if (quantity > (professionLvl/10) - i + 1) {
                     quantity = (professionLvl/10) - i + 1;
                 }
@@ -2725,12 +3430,14 @@ public class Character implements java.io.Serializable {
             if (pill != null) {
                 // Cycling through the pillBag to see if they have the pill. If they do, it adds to the quantity of the item. If not, the item is created and added to their inventory
                 for (Item item : pillBag) {
-                    if (item.itemType == Item.ItemType.Pill && item.lvl == pill.lvl) {
+                    if (item.itemType == Item.ItemType.Pill && item.pillType == pill.pillType && item.lvl == pill.lvl) {
                         hasItem = true;
                         item.quantity += pill.quantity;
+                        break;
                     }
                 }
                 if (!hasItem) {
+                    pill.maker = name + " " + lastName; pill.makerID = id; pill.brand = Naming.pillBrand(this);
                     pillBag.add(pill);
                 }
                 itemsCrafted++;
@@ -2774,22 +3481,28 @@ public class Character implements java.io.Serializable {
         if (this != player && !player.dead && player.time >= 0) {
 
             //Checks to see if Affiliation is the same or Good vs Evil
+            int odds = (player.player == 1 || this.player == 1) ? Math.max(30, 100 - 35 * GameDriver.difficulty) : 100; // a hostile world picks on the player more
             if (this.affiliation.equals("Evil")) {
-                if (rand.nextInt(100) == 0) {
+                if (rand.nextInt(odds) == 0) {
                     battleCheck(player);
                 }
             }
             else if ((this.affiliation.equals("Good") && player.affiliation.equals("Evil")) ) {
-                if (rand.nextInt(100) == 0) {
+                if (rand.nextInt(odds) == 0) {
                     battleCheck(player);
                 }
             }
+            if (dead || player.dead) return; // a fight may have killed either party; don't rebuild relationships with the dead
             // Sparring: close friends spar together (10% chance when rel >= 1)
             Relationship relVal = relationshipList.contains(player.id);
             if (relVal != null && relVal.value >= 1 && !sparring && !player.sparring && rand.nextInt(10) == 0) {
                 this.sparring = true;
                 player.sparring = true;
                 battleCheck(player);
+                // battle() exits early (flee, array, etc.) without clearing the flag, which used to leave friends "sparring" forever
+                this.sparring = false;
+                player.sparring = false;
+                if (dead || player.dead) return;
             }
 
             // Changes the Relationship Value of this Character and the targeted Player
@@ -2806,28 +3519,9 @@ public class Character implements java.io.Serializable {
         // Checks to see if the relationship doesn't exist. If it doesn't, it creates the relationship
         if (relationshipList.contains(player.id) == null) {
             relationshipList.add(new Relationship(player.id, 0));
-            this.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, player));
         }
         if (player.relationshipList.contains(this.id) == null) {
             player.relationshipList.add(new Relationship(this.id, 0));
-            player.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, this));
-        }
-
-        // Ensure both sides have an active Find Person quest (in targetQuests or currentQuest)
-        boolean hasQuest1 = this.targetQuests.stream()
-                .anyMatch(q -> q.targetCharacter == player.id && "Find Person".equals(q.name))
-                || (this.currentQuest != null && this.currentQuest.targetCharacter == player.id
-                    && "Find Person".equals(this.currentQuest.name));
-        boolean hasQuest2 = player.targetQuests.stream()
-                .anyMatch(q -> q.targetCharacter == this.id && "Find Person".equals(q.name))
-                || (player.currentQuest != null && player.currentQuest.targetCharacter == this.id
-                    && "Find Person".equals(player.currentQuest.name));
-
-        if (!hasQuest1) {
-            this.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, player));
-        }
-        if (!hasQuest2) {
-            player.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, this));
         }
 
         // Changes the value of the relationship in the hash table
@@ -2849,24 +3543,6 @@ public class Character implements java.io.Serializable {
         temp.changeValue(change);
         temp2.changeValue(change);
 
-        if (change < 0) {
-            final String bName;
-            final int bPriority;
-            final int bPriorityDiff;
-            final int bMaxPriority;
-            if (change == -1) {
-                bName = "Battle Dislike";   bPriority = 20; bPriorityDiff = 3; bMaxPriority = 40;
-            } else if (change == -2) {
-                bName = "Battle Rival";     bPriority = 35; bPriorityDiff = 5; bMaxPriority = 60;
-            } else {
-                bName = "Battle Arch-Enemy"; bPriority = 50; bPriorityDiff = 8; bMaxPriority = 80;
-            }
-            if (this.targetQuests.stream().noneMatch(q -> q.targetCharacter == player.id && bName.equals(q.name)))
-                this.targetQuests.add(new Quest(bName, false, bPriority, bPriorityDiff, bMaxPriority, player));
-            if (player.targetQuests.stream().noneMatch(q -> q.targetCharacter == this.id && bName.equals(q.name)))
-                player.targetQuests.add(new Quest(bName, false, bPriority, bPriorityDiff, bMaxPriority, this));
-        }
-
         checkRelationship(player);
 
         if (change == 0){
@@ -2876,6 +3552,8 @@ public class Character implements java.io.Serializable {
             temp2 = null;
         }
     }
+    private static double socialBonus(Character c) { return c.trait == Traits.Friendly ? 2.0 : c.trait == Traits.Lucky ? 1.5 : 1.0; }
+
     public int changeRelationshipUtil(Character player) {
         int random = rand.nextInt(1000000) + 1;
         int positive = 0;
@@ -2897,10 +3575,15 @@ public class Character implements java.io.Serializable {
             negative = 100000;
         }
 
-        if (this.mother == player.mother || this.father == player.father) {
+        if ((this.mother != null && this.mother == player.mother) || (this.father != null && this.father == player.father)) { // two founders with null parents are not siblings
             positive *= 2;
             negative /= 2;
         }
+
+        // Charm: a Friendly person on either side doubles good feeling and halves bad feeling; a Lucky one does so by half
+        double bond = Math.max(socialBonus(this), socialBonus(player));
+        positive = (int) (positive * bond);
+        negative = (int) (negative / bond);
 
         int gap = (this.lvl - player.lvl) / 10;
         int relationshipScore = this.relationshipList.contains(player.id).value;
@@ -2925,6 +3608,7 @@ public class Character implements java.io.Serializable {
             spouse = player;
             player.spouse = this;
             if (printBreakthroughs || this.player > 0 || player.player > 0) System.out.println(this + " and " + player + " are now married! Congratulations!");
+            Notifications.onMarriage(this, player);
             if (gender.equals("Female")) {
                 this.lastName = player.lastName;
             }
@@ -2932,50 +3616,10 @@ public class Character implements java.io.Serializable {
                 player.lastName = this.lastName;
             }
         }
-        int value = Math.abs(relationship);
-
-        if (value == 0) {
-            // Remove Find Person quests when relationship dissolves to neutral
-            targetQuests.removeIf(q -> q.targetCharacter == player.id && "Find Person".equals(q.name));
-            player.targetQuests.removeIf(q -> q.targetCharacter == this.id && "Find Person".equals(q.name));
-        }
-        else {
-            // Ensure both sides have an active Find Person quest (in targetQuests or currentQuest)
-            boolean hasQuest1 = this.targetQuests.stream()
-                    .anyMatch(q -> q.targetCharacter == player.id && "Find Person".equals(q.name))
-                    || (this.currentQuest != null && this.currentQuest.targetCharacter == player.id
-                        && "Find Person".equals(this.currentQuest.name));
-            boolean hasQuest2 = player.targetQuests.stream()
-                    .anyMatch(q -> q.targetCharacter == this.id && "Find Person".equals(q.name))
-                    || (player.currentQuest != null && player.currentQuest.targetCharacter == this.id
-                        && "Find Person".equals(player.currentQuest.name));
-
-            if (!hasQuest1) {
-                this.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, player));
-            }
-            if (!hasQuest2) {
-                player.targetQuests.add(new Quest("Find Person", false, 0, 0, 20, this));
-            }
-
-            targetQuests.forEach(q -> {
-                if (q.targetCharacter == player.id && "Find Person".equals(q.name)) {
-                    q.priorityDiff = value;
-                    q.priority = value;
-                    q.maxPriority = 20 * value;
-                }
-            });
-
-            player.targetQuests.forEach(q -> {
-                if (q.targetCharacter == this.id && "Find Person".equals(q.name)) {
-                    q.priorityDiff = value;
-                    q.priority = value;
-                    q.maxPriority = 20 * value;
-                }
-            });
-        }
-
-
-
+        // One social quest per person, matched to the relationship tier (Like/Dislike capped, stronger ties persist)
+        this.syncSocialQuest(player, relationship);
+        Relationship back = player.relationshipList.contains(this.id);
+        player.syncSocialQuest(this, back != null ? back.value : 0);
     }
     public void checkBirth(Character player) {
         if (spouse == player) {
@@ -3156,9 +3800,23 @@ public class Character implements java.io.Serializable {
     }
     public void convertCurrency() {
         final long RATE = 1_000_000L;
-        while (ss >= RATE) { sc++; ss -= RATE; }
-        while (sc >= RATE) { dc++; sc -= RATE; }
-        while (dc >= RATE) { ij++; dc -= RATE; }
+        // Division instead of one loop pass per million (a huge balance used to spin billions of iterations)
+        if (ss >= RATE) { sc += ss / RATE; ss %= RATE; }
+        if (sc >= RATE) { dc += sc / RATE; sc %= RATE; }
+        if (dc >= RATE) { ij += dc / RATE; dc %= RATE; }
+    }
+
+    // Adds an item to a bag, merging stackables into an existing stack of the same name and level (quantity clamped, never wrapped)
+    static void addToBag(ArrayList<Item> bag, Item item) {
+        if (item.stackable) {
+            for (Item t : bag) {
+                if (t.name != null && t.name.equals(item.name) && t.lvl == item.lvl) {
+                    t.quantity = (int) Math.min(Integer.MAX_VALUE, (long) t.quantity + item.quantity);
+                    return;
+                }
+            }
+        }
+        bag.add(item);
     }
 
     public boolean canAfford(long amount) {
@@ -3216,7 +3874,7 @@ public class Character implements java.io.Serializable {
         Area best = null;
         int bestScore = -1;
         for (Area area : knownLocations) {
-            if (area == null || !area.city || area.cityOwner == null || area == location) continue;
+            if (area == null || !area.city || area == location) continue;
             int poolSize = (area.backpack != null) ? area.backpack.size() : 0;
             int score = Math.max(0, 50 - poolSize);  // empty pool = max demand
             int dist = Math.abs(area.x - location.x) + Math.abs(area.y - location.y);
@@ -3231,7 +3889,7 @@ public class Character implements java.io.Serializable {
         Area best = null;
         int bestScore = -1;
         for (Area area : knownLocations) {
-            if (area == null || !area.city || area.cityOwner == null
+            if (area == null || !area.city
                     || area.backpack == null || area.backpack.isEmpty()) continue;
             int score = area.backpack.size() * 10;
             for (Shop s : ownedShops) { if (s.location == area) { score += 50; break; } }
@@ -3240,6 +3898,54 @@ public class Character implements java.io.Serializable {
             if (score > bestScore) { bestScore = score; best = area; }
         }
         return best;
+    }
+
+    // True if any shop in the city stocks a weapon/clothing upgrade this character could afford right now (mirrors buyGear's rules)
+    // Backpack items a merchant may sell as cargo: everything except the equipped gear and the best spare weapon and spare clothing
+    private ArrayList<Item> sellableCargo() {
+        Item spareW = null, spareA = null;
+        for (Item i : backpack) {
+            if (i.itemType == Item.ItemType.Weapon && i != equippedWeapon)
+                if (spareW == null || i.lvl > spareW.lvl) spareW = i;
+            if (i.itemType == Item.ItemType.Clothing && i != equippedClothing)
+                if (spareA == null || i.lvl > spareA.lvl) spareA = i;
+        }
+        ArrayList<Item> cargo = new ArrayList<>();
+        for (Item i : backpack) {
+            if (i == equippedWeapon || i == equippedClothing || i == spareW || i == spareA) continue;
+            cargo.add(i);
+        }
+        return cargo;
+    }
+
+    // A random nearby tile (within 3, else 6) that is under half its crowd capacity and not itself a hotspot
+    private Area findQuietTile() {
+        for (int radius = 3; radius <= 6; radius += 3) {
+            ArrayList<Area> options = new ArrayList<>();
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dy = -radius; dy <= radius; dy++) {
+                    int x = location.x + dx, y = location.y + dy;
+                    if ((dx == 0 && dy == 0) || x < 0 || y < 0 || x >= range || y >= range) continue;
+                    Area a = tiles[x][y];
+                    if (a != null && !a.crowdHotspot && a.characters.size() < a.crowdCapacity() / 2) options.add(a);
+                }
+            }
+            if (!options.isEmpty()) return options.get(rand.nextInt(options.size()));
+        }
+        return null;
+    }
+
+    public boolean hasBuyableGear(Area city) {
+        int curW = equippedWeapon != null ? equippedWeapon.lvl : -1;
+        int curC = equippedClothing != null ? equippedClothing.lvl : -1;
+        for (Shop shop : city.shops) {
+            for (Item item : shop.inventory) {
+                boolean weapon = item.itemType == Item.ItemType.Weapon && item.lvl > curW;
+                boolean cloth = item.itemType == Item.ItemType.Clothing && item.lvl > curC;
+                if ((weapon || cloth) && item.lvl >= lvl - 9 && canAfford(shop.sellPrice(item))) return true;
+            }
+        }
+        return false;
     }
 
     public void buyGear() {
@@ -3255,8 +3961,7 @@ public class Character implements java.io.Serializable {
                     if (item.itemType == Item.ItemType.Weapon
                             && item.lvl >= lvl - 9             // within one major realm of current level
                             && item.lvl > currentWeaponLvl    // strictly better than equipped
-                            && canAfford(price)
-                            && ss <= price * 4) {             // spend at most 25% of ss
+                            && canAfford(price)) {            // (the old "ss <= price*4" clause blocked wealthy buyers and disagreed with hasBuyableGear)
                         if (shop.sellToBuyer(this, item)) { equip(); boughtWeapon = true; break; }
                     }
                 }
@@ -3267,8 +3972,7 @@ public class Character implements java.io.Serializable {
                     if (item.itemType == Item.ItemType.Clothing
                             && item.lvl >= lvl - 9
                             && item.lvl > currentArmorLvl
-                            && canAfford(price)
-                            && ss <= price * 4) {
+                            && canAfford(price)) {
                         if (shop.sellToBuyer(this, item)) { equip(); boughtArmor = true; break; }
                     }
                 }
@@ -3286,6 +3990,8 @@ public class Character implements java.io.Serializable {
     }
 
     public void sell(Area city) {
+        backpack.removeIf(i -> i.itemType == null); // purge broken (deconstructed) gear left over from older saves
+        if (city.backpack != null) city.backpack.removeIf(i -> i.name == null);
         // Identify spare weapon/clothing to keep as backup in case equipped item breaks
         Item spareWeapon = null;
         Item spareClothing = null;
@@ -3297,10 +4003,22 @@ public class Character implements java.io.Serializable {
                 if (spareClothing == null || item.lvl > spareClothing.lvl) spareClothing = item;
             }
         }
+        Item keepInstrument = Life.bestInstrument(this);
+        // Luxuries: Heaven-Sent treasures are auctioned (never sold to a shop); a city too small for an auction house keeps them for you
+        int consignedLots = 0;
+        for (Item item : new ArrayList<>(backpack)) {
+            if (!item.heavenSent || item == equippedWeapon || item == equippedClothing) continue;
+            if (!Auctions.hasHouse(city)) continue;
+            backpack.remove(item);
+            Auctions.consign(city, item, this);
+            consignedLots++;
+        }
         ArrayList<Item> toSell = new ArrayList<>();
         for (Item item : backpack) {
             if (item == equippedWeapon || item == equippedClothing) continue;
             if (item == spareWeapon   || item == spareClothing)    continue;
+            if (item == keepInstrument) continue;
+            if (item.heavenSent) continue; // kept: this city has no auction house
             toSell.add(item);
         }
         // Find best-paying merchant shop in this city (beats city pool 0.50 rate)
@@ -3308,6 +4026,7 @@ public class Character implements java.io.Serializable {
         for (Shop shop : city.shops) {
             if (bestShop == null || shop.buyRate > bestShop.buyRate) bestShop = shop;
         }
+        if (bestShop != null && bestShop.buyRate < 0.5) bestShop = null; // a shop paying less than the city pool (0.5x) is skipped; players can set low rates
 
         // buyFromSeller() handles backpack removal and ss payment directly
         ArrayList<Item> soldToMerchant = new ArrayList<>();
@@ -3332,7 +4051,7 @@ public class Character implements java.io.Serializable {
             if (city.backpack != null) {
                 boolean merged = false;
                 for (Item cityItem : city.backpack) {
-                    if (cityItem.name.equals(item.name) && cityItem.lvl == item.lvl) {
+                    if (item.stackable && cityItem.name.equals(item.name) && cityItem.lvl == item.lvl) {
                         cityItem.quantity += item.quantity;
                         merged = true;
                         break;
@@ -3352,7 +4071,15 @@ public class Character implements java.io.Serializable {
             if (item.pillType == Item.PillType.Potential) {
                 if (potential >= 100) pillsToSell.add(item);
             } else if (item.pillType == Item.PillType.Cultivation) {
-                if (item.lvl <= majorLvl * 10) pillsToSell.add(item);
+                if (item.lvl <= majorLvl) pillsToSell.add(item); // pill levels are 1-10 (consume() needs lvl == majorLvl + 1); the old *10 sold the pill needed next
+            }
+        }
+        if (!Auctions.hasHouse(city)) pillsToSell.removeIf(p -> p.pillType == Item.PillType.Potential); // Potential Pills are only ever auctioned
+        for (Item pill : new ArrayList<>(pillsToSell)) {
+            if (pill.pillType == Item.PillType.Potential) { // put on the block: paid 90% when it sells
+                pillBag.remove(pill); pillsToSell.remove(pill);
+                Auctions.consign(city, pill, this);
+                consignedLots++;
             }
         }
         for (Item pill : pillsToSell) {
@@ -3372,9 +4099,11 @@ public class Character implements java.io.Serializable {
         pillBag.removeAll(pillsToSell);
         ss += pillEarned;
         convertCurrency();
+        Life.sellGoods(this); // food, wine and poison
         if (player > 0 && skipping <= 0 && age >= 8) {
             long totalEarned = merchantEarned + poolEarned + pillEarned;
-            System.out.println("Sold " + (toSell.size() + pillsToSell.size()) + " items for " + totalEarned + " ss at " + city.name);
+            System.out.println("Sold " + (toSell.size() + pillsToSell.size()) + " items for " + totalEarned + " ss at " + city.name
+                    + (consignedLots > 0 ? "; put " + consignedLots + " lot(s) on the auction block (held when " + Auctions.LOTS_TO_HOLD + " lots wait or " + Auctions.MAX_WAIT + " weeks pass; you get 90%)." : ""));
         }
     }
 
@@ -3420,27 +4149,63 @@ public class Character implements java.io.Serializable {
         }
     }
     public void cityLeadership() {
-        if (ss >= 1000000 && !location.city && rand.nextInt(100) == 0) {
-            location.city = true;
-            location.cityOwner = this;
-            location.population = rand.nextInt((startingPopulation * 100000) - startingPopulation + 1) + startingPopulation;
-            location.backpack = new ArrayList<>();
-            location.materialBag = new ArrayList<>();
-            location.pillBag = new ArrayList<>();
-            location.arrayBag = new ArrayList<>();
-            location.libraries.add(new Library(location));
-            professionLvl = 50;
+        if (majorLvl >= 2 && !location.city && rand.nextInt(100) == 0) {
+            establishCity();
+        } else if (majorLvl >= 2 && location.city && location.cityOwner == null && rand.nextInt(50) == 0) {
+            claimCity();
         }
     }
+    private void establishCity() {
+        location.city = true;
+        location.cityOwner = this;
+        location.population = 20_000 + rand.nextInt(180_000); // (the old formula overflowed int to ~1.4 billion)
+        location.backpack = new ArrayList<>();
+        location.materialBag = new ArrayList<>();
+        location.pillBag = new ArrayList<>();
+        location.arrayBag = new ArrayList<>();
+        location.libraries.add(new Library(location));
+        professionLvl = 50;
+        if (location.geoName == null) location.geoName = location.name;
+        if (!location.isOriginis()) location.name = Naming.city(this, location.population); // the city gets its own name; the tile keeps geoName for its picture
+        Chronicle.founded("city", "the city of " + location.name + " (population " + location.population + ")", this, location);
+        if (player > 0 && skipping <= 0) System.out.println(this + " has founded the city of " + location.name + "!");
+    }
+    private void claimCity() { // a leaderless city
+        location.cityOwner = this;
+        if (professionLvl < 50) professionLvl = 50;
+        if (player > 0 && skipping <= 0) System.out.println(this + " has claimed lordship of " + location.name + "!");
+    }
+    // Manual founding (the "found city" command): same rules as cityLeadership() without the dice. Returns null on success, else why not.
+    String foundCityNow() {
+        if (majorLvl < 2) return "Founding or claiming a city needs Major Lvl 2 (you are Major Lvl " + majorLvl + ").";
+        if (!location.city) { establishCity(); return null; }
+        if (location.cityOwner == null) { claimCity(); return null; }
+        return location.name + " is already a city" + (location.cityOwner == this ? " you rule." : " ruled by " + location.cityOwner + ".");
+    }
     public void sectLeadership(){
-        if (location.sect == null && ss >= 1000000000) {
+        if (location.sect == null && sect == null && majorLvl >= 2) {
             if (location.city || rand.nextInt(100) == 0) {
-                location.sect = new Organization(this);
-                professionLvl = 100;
+                establishSect();
             }
         }
     }
+    private void establishSect() {
+        location.sect = new Organization(this);
+        if (professionLvl != 50) professionLvl = 100;
+        Chronicle.founded("sect", location.sect.name, this, location);
+        if (player > 0 && skipping <= 0) System.out.println(this + " has founded " + location.sect.name + "!");
+    }
+    // Manual founding (the "found sect" command). Returns null on success, else why not.
+    String foundSectNow() {
+        if (majorLvl < 2) return "Founding a sect needs Major Lvl 2 (you are Major Lvl " + majorLvl + ").";
+        if (sect != null) return "You already belong to " + sect.name + ". Resign first.";
+        if (location.sect != null) return location.name + " already holds " + location.sect.name + ".";
+        establishSect();
+        return null;
+    }
     public void equip () {
+        // a human in MANUAL mode picks their own gear (Settings.autoEquipManual brings the automatic upgrade back); empty slots are still filled
+        final boolean keepMine = player == 1 && pc != null && pc.mode == PlayerControl.Mode.MANUAL && !Settings.autoEquipManual && !equipNow;
         Item tempAddWeapon = null;
         Item tempAddClothing = null;
         boolean freshWeapon = false;
@@ -3453,7 +4218,7 @@ public class Character implements java.io.Serializable {
                         freshWeapon = true;
                     }
                 }
-                else if (item.itemType == Item.ItemType.Weapon && equippedWeapon.lvl < item.lvl) {
+                else if (!keepMine && item.itemType == Item.ItemType.Weapon && equippedWeapon.lvl < item.lvl) {
                     if (tempAddWeapon == null) {
                         tempAddWeapon = equippedWeapon;
                     }
@@ -3465,7 +4230,7 @@ public class Character implements java.io.Serializable {
                         equippedClothing = item;
                         freshClothing = true;
                     }
-                } else if (item.itemType == Item.ItemType.Clothing && equippedClothing.lvl < item.lvl) {
+                } else if (!keepMine && item.itemType == Item.ItemType.Clothing && equippedClothing.lvl < item.lvl) {
                     if (tempAddClothing == null) {
                         tempAddClothing = equippedClothing;
                     }
@@ -3575,6 +4340,32 @@ public class Character implements java.io.Serializable {
         //System.out.println(this + " | " + movementTechnique + " | " + movementTechnique2 + " | " + techniqueList);
 
     }
+    // Finds the lowest-level stack of `type` with level >= minLvl holding at least qty units (null if none)
+    private Item findMissionStack(Item.ItemType type, int minLvl, int qty) {
+        Item best = null;
+        for (Item m : materialBag) {
+            if (m.itemType == type && m.lvl >= minLvl && m.quantity >= qty && (best == null || m.lvl < best.lvl)) best = m;
+        }
+        return best;
+    }
+
+    // Hands the mission quantity to the sect treasury and pays the bonus; false (nothing moved, nothing paid) if the goods aren't there
+    private boolean deliverMissionMaterials(Item.ItemType type, int minLvl, int qty) {
+        if (sect == null) return false;
+        Item stack = findMissionStack(type, minLvl, qty);
+        if (stack == null) return false;
+        final String itemName = stack.name;
+        final int stackLvl = stack.lvl;
+        int removed = removeItems(materialBag, itemName, qty);
+        boolean merged = false;
+        for (Item t : sect.treasury) { if (t.name.equals(itemName)) { t.quantity += removed; merged = true; break; } }
+        if (!merged) sect.treasury.add(new Item(type, stackLvl, removed));
+        sectPoints += sectMissionBonus;
+        if (player > 0 && skipping <= 0) System.out.println("Sect mission complete! +" + sectMissionBonus + " SP");
+        sectMission = null; sectMissionBonus = 0;
+        return true;
+    }
+
     /** Remove up to `qty` of a named stackable item from a bag. Returns the amount actually removed. */
     public static int removeItems(ArrayList<Item> bag, String name, int qty) {
         for (int i = 0; i < bag.size(); i++) {
@@ -3590,6 +4381,7 @@ public class Character implements java.io.Serializable {
     }
 
     public void transferAllItems(Character receiver) {
+        if (receiver == this) return;
         // Transfers losers items to the receiver
         for (Item item : backpack) {
             receiver.backpack.add(item);
@@ -3628,8 +4420,12 @@ public class Character implements java.io.Serializable {
         pillBag.clear();
         materialBag.clear();
         arrayBag.clear();
-        receiver.ss += this.ss;
-        this.ss = 0;
+        // All currency tiers change hands (only ss did before, so a dead tycoon's crystals vanished)
+        receiver.ss += this.ss; this.ss = 0;
+        receiver.sc += this.sc; this.sc = 0;
+        receiver.dc += this.dc; this.dc = 0;
+        receiver.ij += this.ij; this.ij = 0;
+        receiver.convertCurrency();
     }
 
     public void bullyCheck(Character target) {
@@ -3651,6 +4447,7 @@ public class Character implements java.io.Serializable {
 
     public void battleCheck(Character opponent) {
         if (trait == Traits.Beast && !opponent.dead && opponent.time >= 0) {
+            if (opponent.player == 1) opponent.pc().attackedThisTick = true; // interrupts a running hybrid script
             // Beasts are blocked by arrays
             if (opponent.location.arrayBag != null && !opponent.location.arrayBag.isEmpty()) {
                 return;
@@ -3664,6 +4461,11 @@ public class Character implements java.io.Serializable {
             }
         }
         if (age < 8 && !sparring) {
+            return;
+        }
+        // First-year truce: the whole starting population shares Originis, so nobody may start a fight with another cultivator there until the year ends
+        if (!sparring && GameDriver.time < GameDriver.TRUCE_WEEKS && location != null && location.isStartZone()) {
+            if (player == 1 && skipping <= 0) System.out.println("A truce holds in Originis until the end of the first year: no fighting here yet.");
             return;
         }
         if (relationshipList.contains(opponent.id) != null) {
@@ -3680,8 +4482,8 @@ public class Character implements java.io.Serializable {
             if ("Neutral".equals(affiliation) && relValue > -2) return;
         }
 
-        // Array protection: attacker must break the strongest array before engaging
-        if (opponent.location.arrayBag != null && !opponent.location.arrayBag.isEmpty()) {
+        // Array protection: attacker must break the strongest array before engaging (friendly spars don't break arrays)
+        if (!sparring && opponent.location.arrayBag != null && !opponent.location.arrayBag.isEmpty()) {
             Item strongestArray = null;
             for (Item a : opponent.location.arrayBag) {
                 if (strongestArray == null || a.lvl > strongestArray.lvl) strongestArray = a;
@@ -3700,11 +4502,14 @@ public class Character implements java.io.Serializable {
             }
         }
 
+        // A human being challenged may decline (MANUAL asks; AUTO/HYBRID use the duel policy)
+        if (!sparring && !opponent.sparring && opponent.player == 1 && opponent != this && !opponent.dead && !opponent.acceptChallenge(this)) return;
+
         // Decreases Relationship
         changeRelationship(opponent, 0);
 
         // Sect squabble escalation: repeated cross-sect fights lead to war
-        if (sect != null && opponent.sect != null && sect != opponent.sect && !sect.isAtWar()) {
+        if (!sparring && sect != null && opponent.sect != null && sect != opponent.sect && !sect.isAtWar()) {
             sect.squabbles++;
             if (sect.squabbles >= 5) {
                 sect.declareWar(opponent.sect);
@@ -3713,11 +4518,114 @@ public class Character implements java.io.Serializable {
         }
 
         if (this != opponent && !opponent.dead && opponent.time >= 0) {
+            if (opponent.age < 8 && opponent.mother == this) {
+                return; // a parent never duels their own child (the mother redirect below would make them fight themselves)
+            }
             if (opponent.age < 8 && opponent.mother != null && !opponent.mother.dead) {
                 battle(opponent.mother);
             } else {
                 battle(opponent);
             }
+        }
+    }
+
+    ArrayList<Integer> followerIds; // cultivators that joined this character's squad (pruned when counted; companion beasts are not listed)
+
+    /** How many cultivators follow this leader right now, wherever they are (beasts do not count). */
+    int squadSize() {
+        if (followerIds == null) return 0;
+        for (int i = followerIds.size() - 1; i >= 0; i--) {
+            int fid = followerIds.get(i);
+            Character f = fid >= 0 && fid < Map.characters.size() ? Map.characters.get(fid) : null;
+            if (f == null || f.dead || f.partyLeaderId != id) followerIds.remove(i);
+        }
+        return followerIds.size();
+    }
+
+    public void joinParty(Character leader) {
+        if (leader == null || leader.dead || leader == this) return;
+        partyLeaderId = leader.id;
+        if (trait != Traits.Beast && trait != Traits.Monster) {
+            if (leader.followerIds == null) leader.followerIds = new ArrayList<>();
+            if (!leader.followerIds.contains(id)) leader.followerIds.add(id);
+        }
+    }
+
+    public void leaveParty() {
+        partyLeaderId = -1;
+    }
+
+    public void tryRallyParty() { tryRallyParty(false); }
+
+    // Friends (relationship >= 1) join 1/3 of the time. With openInvite, unaffiliated adventurers of a similar realm
+    // and no ill will also sign on (1/4) — this is how hunting parties form among strangers.
+    /** Rulers (sect masters, city lords) rarely lead squads of their own. */
+    private boolean isRuler() { return (sect != null && sect.isMaster(this)) || (location != null && location.cityOwner == this); }
+
+    /** How many cultivators a squad of this leader may hold (companion beasts do not count): a Leader without a throne gathers up to 12, everybody else up to 4. */
+    int partyCap() { return trait == Traits.Leader && !isRuler() ? 12 : 4; }
+
+    public void tryRallyParty(boolean openInvite) {
+        if (partyLeaderId >= 0) return;
+        int have = squadSize(), cap = partyCap();
+        boolean leader = trait == Traits.Leader && !isRuler();
+        // Friends first: walk the (short) friend list rather than copying a tile that may hold thousands (this used to be the second-biggest cost of a tick).
+        if (relationshipList.relationships != null) {
+            for (int i = 0; i < relationshipList.relationships.size() && have < cap; i++) {
+                Relationship r = relationshipList.relationships.get(i);
+                if (r == null || r.value < 1) continue;
+                Character c = charById(r.friendID);
+                if (c == null || c.dead || c == this || c.location != location || c.partyLeaderId >= 0 || c.player >= 1 || c.age < 8) continue;
+                if (c.trait == Traits.Beast || c.trait == Traits.Monster) continue;
+                if (rand.nextInt(3) == 0) { c.joinParty(this); have++; }
+            }
+        }
+        if (!openInvite || have >= cap) return;
+        // Strangers of a similar realm sign on too: look at a bounded stretch of the tile, from a random start, not at everybody.
+        ArrayList<Character> here = location.characters;
+        int n = here.size(), look = Math.min(n, 48), start = n > look ? rand.nextInt(n) : 0;
+        for (int k = 0; k < look && have < cap; k++) {
+            int idx = (start + k) % n;
+            if (idx >= here.size()) break; // the tile changed under us
+            Character c = here.get(idx);
+            if (c == null || c.dead || c == this || c.partyLeaderId >= 0 || c.player >= 1 || c.age < 8) continue;
+            if (c.trait == Traits.Beast || c.trait == Traits.Monster) continue;
+            Relationship r = relationshipList.contains(c.id);
+            if (r != null && r.value >= 1) continue; // friends were handled above
+            if ((r == null || r.value >= 0) && Math.abs(c.majorLvl - majorLvl) <= (leader ? 2 : 1) && rand.nextInt(leader ? 2 : 4) == 0) { c.joinParty(this); have++; }
+        }
+    }
+
+    // Leader plus every co-located follower attack one beast in turn; the beast tires after each fight.
+    public boolean partyBeastHunt() {
+        ArrayList<Character> party = new ArrayList<>();
+        party.add(this);
+        for (Character c : new ArrayList<>(location.characters)) {
+            if (c != null && !c.dead && c != this && c.partyLeaderId == this.id && c.age >= 8) party.add(c);
+        }
+        if (party.size() == 1) return beastBattleCheck();
+        if (location.monsters <= 0) return false;
+        for (Character p : party) p.tempLvlCheck();
+        party.sort((a, b) -> Integer.compare(b.tempLvl, a.tempLvl));
+        // The party may take on beasts its strongest member could handle alone
+        if (party.get(0).lvl < (location.lvl + location.highestLvl) / 2) return false;
+        location.monsters--;
+        Character beast = new Character(location, party.get(0));
+        for (int i = 0; i < party.size() && !beast.dead; i++) {
+            Character fighter = party.get(i);
+            if (fighter.dead) continue;
+            beast.exhaustionPenalty = i * 2;
+            FightReport.partyRound = i + 1; FightReport.partySize = party.size();
+            try { fighter.battle(beast); } finally { FightReport.partyRound = 0; FightReport.partySize = 0; }
+        }
+        beast.exhaustionPenalty = 0;
+        return true;
+    }
+
+    public void dissolveParty() {
+        for (Character c : new ArrayList<>(location.characters)) {
+            if (c != null && !c.dead && c.partyLeaderId == this.id)
+                c.leaveParty();
         }
     }
 
@@ -3739,12 +4647,14 @@ public class Character implements java.io.Serializable {
         for (Character p : party) p.tempLvlCheck();
         party.sort((a, b) -> Integer.compare(b.tempLvl, a.tempLvl));
 
+        FightReport.partyStart(party, opponent); // a human in either party hears who is ganging up on whom
         for (int i = 0; i < party.size(); i++) {
             if (opponent.dead) break;
             Character fighter = party.get(i);
             if (fighter.dead || (fighter.age < 8 && !fighter.sparring)) continue;
             opponent.exhaustionPenalty = i * 2; // enemy tires from consecutive fights
-            fighter.battleCheck(opponent);
+            FightReport.partyRound = i + 1; FightReport.partySize = party.size();
+            try { fighter.battleCheck(opponent); } finally { FightReport.partyRound = 0; FightReport.partySize = 0; }
         }
         opponent.exhaustionPenalty = 0;
     }
@@ -3777,11 +4687,14 @@ public class Character implements java.io.Serializable {
         int winChance = Math.max(0, Math.min(100, 50 - 15 * (arrayPower - tempLvl)));
         area.arrayBag.remove(strongest);
         if (rand.nextInt(100) < winChance) {
+            FightReport.arrayAttempt(this, area, strongest.lvl, true, false);
             return true;
         }
-        if (rand.nextInt(20) == 0) {
+        boolean backlash = rand.nextInt(20) == 0;
+        if (backlash) {
             dead(null);
         }
+        FightReport.arrayAttempt(this, area, strongest.lvl, false, backlash);
         return false;
     }
 
@@ -3792,20 +4705,29 @@ public class Character implements java.io.Serializable {
     }
 
     public void battle(Character opponent) {
+        FightReport rep = FightReport.begin(this, opponent); // the human's account of the fight (null when no human or followed character is in it)
+        try { battleCore(opponent); } finally { FightReport.end(rep); }
+    }
+
+    private void battleCore(Character opponent) {
         // (MESSAGE) System.out.println(this + " has challenged " + opponent + " to a fight!");
 
 
         // (NOTE) Optimizes Equipment and Techniques and Updates Corresponding TempLvl
         this.tempLvlCheck();
         opponent.tempLvlCheck();
+        if (fx != null) Life.onBattle(this, opponent); // a poisoned blade
 
-        // Defender gets a boost from arrays protecting their area
-        if (opponent.location.arrayBag != null && !opponent.location.arrayBag.isEmpty()) {
+        // Defender gets a boost from arrays protecting their area (arrays shield people, not wild beasts: a hunter standing in an
+        // array-protected tile used to make the beast it was hunting stronger)
+        if (opponent.trait != Traits.Beast && opponent.trait != Traits.Monster
+                && opponent.location.arrayBag != null && !opponent.location.arrayBag.isEmpty()) {
             int bestArrayLvl = 0;
             for (Item a : opponent.location.arrayBag) {
                 if (a.lvl > bestArrayLvl) bestArrayLvl = a.lvl;
             }
             opponent.tempLvl += bestArrayLvl / 10 + 1;
+            FightReport.arrayBoost(bestArrayLvl / 10 + 1);
         }
 
         // Death Chance and Forbidden Init
@@ -3821,15 +4743,15 @@ public class Character implements java.io.Serializable {
         if (opponent.trait == Traits.Lucky) {
             winChance -= 45;
         }
+        FightReport.odds(this, opponent, winChance, deathChance);
 
         if (winChance < caution) {
             if (fleeCheck(opponent)) {
                 return;
             }
             else if (deathChance) {
-                forbiddenCheck();
-                if (this.dead) { this.dead(opponent); return; }
-                forbiddenUsed = true;
+                if (forbiddenCheck()) { this.dead(opponent); return; }
+                forbiddenUsed = !forbiddenDeclined;
             }
         }
         else if (winChance > opponent.caution) {
@@ -3837,9 +4759,8 @@ public class Character implements java.io.Serializable {
                 return;
             }
             else if (deathChance) {
-                opponent.forbiddenCheck();
-                if (opponent.dead) { opponent.dead(this); return; }
-                oppForbiddenUsed = true;
+                if (opponent.forbiddenCheck()) { opponent.dead(this); return; }
+                oppForbiddenUsed = !opponent.forbiddenDeclined;
             }
         }
 
@@ -3857,15 +4778,13 @@ public class Character implements java.io.Serializable {
                 if (fleeCheck(opponent)) {
                     return;
                 } else if (deathChance) {
-                    forbiddenCheck();
-                    if (this.dead) { this.dead(opponent); return; }
+                    if (forbiddenCheck()) { this.dead(opponent); return; }
                 }
             } else if (winChance > opponent.caution && forbiddenUsed) {
                 if (opponent.fleeCheck(this)) {
                     return;
                 } else if (deathChance) {
-                    opponent.forbiddenCheck();
-                    if (opponent.dead) { opponent.dead(this); return; }
+                    if (opponent.forbiddenCheck()) { opponent.dead(this); return; }
                 }
             }
         }
@@ -3878,15 +4797,18 @@ public class Character implements java.io.Serializable {
             winChance -= 45;
         }
 
+        FightReport.odds(this, opponent, winChance, deathChance); // the figures the roll really uses (after any forbidden technique)
         durabilityCheck(opponent);
 
         if ((rand.nextInt(100) + 1) <= winChance) {
-            if (player > 0 || opponent.player > 0) System.out.println(this + " won the fight!");
-            winCheck(opponent);
+            FightReport.won(this, opponent); // the report states the winner itself
+            if (!FightReport.active() && (player > 0 || opponent.player > 0)) System.out.println(this + " won the fight against " + opponent + "!");
+            winCheck(opponent, deathChance);
         }
         else {
-            if (player > 0 || opponent.player > 0) System.out.println(opponent + " won the fight!");
-            opponent.winCheck(this);
+            FightReport.won(opponent, this);
+            if (!FightReport.active() && (player > 0 || opponent.player > 0)) System.out.println(opponent + " won the fight against " + this + "!");
+            opponent.winCheck(this, deathChance);
         }
 
     }
@@ -3896,7 +4818,11 @@ public class Character implements java.io.Serializable {
         int deathChance = 1;
 
         if (opponent.trait == Traits.Beast || this.trait == Traits.Beast) {
-            return true;
+            // Only a deathmatch if the beast meaningfully outlevels the cultivator
+            Character _beast   = (this.trait == Traits.Beast) ? this : opponent;
+            Character _fighter = (this.trait == Traits.Beast) ? opponent : this;
+            if (_beast.trait != Traits.Beast) return true; // both beasts — always lethal
+            return _beast.tempLvl > _fighter.tempLvl + 5;
         }
 
         if (relationshipList.contains(opponent.id) != null) {
@@ -3922,6 +4848,7 @@ public class Character implements java.io.Serializable {
                     break;
             }
         }
+        if (this.player == 1 || opponent.player == 1) deathChance = Math.min(100, deathChance + 12 * GameDriver.difficulty); // Hard / Brutal: lost fights involving the player are deadlier
         if (deathChance >= (rand.nextInt(100) + 1)){
             return true;
         }
@@ -3930,7 +4857,11 @@ public class Character implements java.io.Serializable {
         }
     }
 
-    public void winCheck(Character loser) {
+    public void winCheck(Character loser) { winCheck(loser, true); }
+
+    /** `lethal` = the fight's death roll (deathCheck: by relationship, 1% strangers .. 100% wanted; beasts by level gap). A cultivator who loses a
+     *  non-lethal fight with another cultivator survives, hurt; a human winner can still choose to kill. */
+    public void winCheck(Character loser, boolean lethal) {
         if (sparring) {
             changeRelationship(loser, 1);
             loser.changeRelationship(this, 1);
@@ -3942,13 +4873,39 @@ public class Character implements java.io.Serializable {
             int upgradeChance = (trait == Traits.HeavenlyRoot) ? 2 : 5;
             if (martialTechnique != null && rand.nextInt(upgradeChance) == 0) martialTechnique.upgrade(this);
             Area lostAt = loser.location;
+            // Non-lethal beast encounter: loser escapes injured if beast didn't meaningfully outlevel them
+            if ((trait == Traits.Beast || trait == Traits.Monster) && !ambusher && tempLvl <= loser.tempLvl + 5) {
+                loser.cultivation = Math.max(1, (long)(loser.cultivation * 0.7));
+                FightReport.beastEscape(loser);
+                return;
+            }
+            // A human player decides whether to finish a defeated cultivator (spare = simply don't kill; nothing else changes)
+            boolean humanLoser = loser.trait != Traits.Beast && loser.trait != Traits.Monster;
+            boolean chosenKill = false;
+            if (player == 1 && humanLoser && !loser.dead) {
+                if (!decideKill(loser)) {
+                    if (!FightReport.active()) System.out.println("You spared " + loser + ".");
+                    FightReport.spared(this, loser);
+                    FightReport.penalty(this, loser); // a spared enemy still pays for the loss when there is bad blood between you
+                    return;
+                }
+                chosenKill = true;
+            }
+            // The death roll decides whether a lost fight between cultivators is fatal (it used to be ignored: every lost fight killed)
+            if (!lethal && !chosenKill && humanLoser && trait != Traits.Beast && trait != Traits.Monster) {
+                loser.cultivation = Math.max(1, (long) (loser.cultivation * 0.7)); // injured until the next level-up recalculates it
+                if (loser.player == 1 && skipping <= 0 && !FightReport.active()) System.out.println("You were beaten by " + this + " but left alive, injured.");
+                FightReport.injured(loser);
+                FightReport.penalty(this, loser); // feud fights cost the loser 10% of their spirit stones
+                return;
+            }
             loser.dead(this);
             // Beast awakening: killing a cultivator may trigger Monster NPC awakening (10% chance)
-            if (trait == Traits.Beast && loser.trait != Traits.Beast && loser.dead && rand.nextInt(10) == 0) {
+            if (trait == Traits.Beast && !ambusher && loser.trait != Traits.Beast && loser.dead && rand.nextInt(10) == 0) {
                 awakenMonster();
             }
             // Evil or Beast destroys undefended city/sect (20% chance per eligible kill)
-            if ((affiliationNum == -1 || trait == Traits.Beast)
+            if ((affiliationNum == -1 || trait == Traits.Beast) && !ambusher
                     && lostAt != null && !"Originis".equals(lostAt.name)
                     && (lostAt.city || lostAt.sect != null)
                     && (lostAt.arrayBag == null || lostAt.arrayBag.isEmpty())
@@ -3957,11 +4914,136 @@ public class Character implements java.io.Serializable {
             }
         }
     }
+    /** Estimate of a fight against `opp` (no side effects beyond the usual gear optimisation a fight would do anyway). */
+    static class FightPreview {
+        Character me, opp;
+        int myPower, oppPower, winChance, deathChance, myFlee, oppFlee;
+        boolean deathmatch, arrowBoost;
+        String oneLine() {
+            return "Win chance ~" + winChance + "% (power " + myPower + " vs " + oppPower + "), lethal " + (deathChance >= 100 ? "for sure" : "~" + deathChance + "%")
+                    + ", your escape odds ~" + myFlee + "%";
+        }
+        String detail() {
+            StringBuilder sb = new StringBuilder("=== Fight preview: " + me.name + " vs " + opp.name + " " + opp.lastName + " ===\n");
+            sb.append(String.format("%-18s power %3d   Lv.%d (Major %d)  %s%n", "You", myPower, me.lvl, me.majorLvl, me.affiliation));
+            sb.append(String.format("%-18s power %3d   Lv.%d (Major %d)  %s  %s%n", opp.name, oppPower, opp.lvl, opp.majorLvl, opp.affiliation, opp.getTrait()));
+            sb.append("Power = (level + armour + weapon + both techniques) / 5, plus trait bonuses").append(arrowBoost ? "; the defender's array adds a bonus here" : "").append(".\n\n");
+            sb.append("Your chance to win:        ~").append(winChance).append("%\n");
+            sb.append("Chance the fight is lethal: ").append(deathChance >= 100 ? "certain" : "~" + deathChance + "%").append(deathmatch ? "  (a beast this strong kills)" : "").append("\n");
+            sb.append("Your chance to escape:     ~").append(myFlee).append("%\n");
+            sb.append("Their chance to escape if they are losing: ~").append(oppFlee).append("%\n");
+            Relationship r = me.relationshipList.contains(opp.id);
+            sb.append("Relationship: ").append(r == null ? "none" : String.valueOf(r.value)).append("   Their caution: ").append(opp.caution).append("\n");
+            sb.append("If you win you choose to kill or spare.\n");
+            return sb.toString();
+        }
+    }
+
+    public FightPreview previewFight(Character opp, boolean iAmDefender) {
+        FightPreview p = new FightPreview();
+        p.me = this; p.opp = opp;
+        tempLvlCheck(); opp.tempLvlCheck();
+        int mine = tempLvl, theirs = opp.tempLvl;
+        Character defender = iAmDefender ? this : opp;
+        if (defender.trait != Traits.Beast && defender.trait != Traits.Monster && defender.location != null && defender.location.arrayBag != null && !defender.location.arrayBag.isEmpty()) {
+            int best = 0;
+            for (Item a : defender.location.arrayBag) best = Math.max(best, a.lvl);
+            if (iAmDefender) mine += best / 10 + 1; else theirs += best / 10 + 1;
+            p.arrowBoost = true;
+        }
+        p.myPower = mine; p.oppPower = theirs;
+        int win = 50 - 15 * (theirs - mine);
+        if (trait == Traits.Lucky) win += 45;
+        if (opp.trait == Traits.Lucky) win -= 45;
+        p.winChance = Math.max(0, Math.min(100, win));
+        if (trait == Traits.Beast || opp.trait == Traits.Beast) {
+            Character beast = trait == Traits.Beast ? this : opp, fighter = trait == Traits.Beast ? opp : this;
+            p.deathmatch = beast.trait != Traits.Beast || beast.tempLvl > fighter.tempLvl + 5;
+            p.deathChance = beast.trait != Traits.Beast ? 100 : (beast.tempLvl > fighter.tempLvl + 5 ? 100 : 0);
+        } else {
+            Relationship r = relationshipList.contains(opp.id);
+            int v = r == null ? 0 : r.value;
+            p.deathChance = v <= -4 ? 100 : v == -3 ? 75 : v == -2 ? 25 : v == -1 ? 5 : v == 0 ? 1 : 0;
+        }
+        int n = 300, mf = 0, of = 0;
+        for (int i = 0; i < n; i++) { if (trait != Traits.Beast && fleeRoll(opp)) mf++; if (opp.trait != Traits.Beast && opp.fleeRoll(this)) of++; }
+        p.myFlee = mf * 100 / n; p.oppFlee = of * 100 / n;
+        return p;
+    }
+
+    // Kill or spare a defeated cultivator: a MANUAL player is asked; AUTO/HYBRID follow the kill policy. True = kill.
+    private boolean decideKill(Character loser) {
+        PlayerControl p = pc();
+        boolean byPolicy;
+        switch (p.killPolicy) {
+            case 0:  byPolicy = false; break;
+            case 1:  byPolicy = "Evil".equals(loser.affiliation); break;
+            case 2:  { Relationship r = relationshipList.contains(loser.id); byPolicy = r != null && r.value <= -1; break; }
+            default: byPolicy = true; break;
+        }
+        int a = DecisionBroker.ask(this, "You defeated " + loser + " (Lv." + loser.lvl + ", " + loser.affiliation + "). Kill or spare?",
+                new String[]{"Kill", "Spare"}, byPolicy ? 0 : 1);
+        return a == 0 && !loser.dead;
+    }
+
+    // A player being challenged may slip away instead: MANUAL is asked, otherwise the duel policy decides. True = the fight goes ahead.
+    boolean acceptChallenge(Character challenger) { // package-private: SectPolitics asks a human target before an intrigue turns into a fight
+        PlayerControl p = pc();
+        // Strangers, passing evildoers and people who merely dislike you may only challenge a few times a turn (Settings.maxRandomChallenges);
+        // rivals, arch-enemies and anything between parties or sects at war always get through.
+        if (!mustFace(challenger)) {
+            if (p.limitedWeek != GameDriver.time) { p.limitedWeek = GameDriver.time; p.limitedCount = 0; }
+            if (p.limitedCount >= Settings.maxRandomChallenges) {
+                if (p.limitedNoticeWeek != GameDriver.time) { p.limitedNoticeWeek = GameDriver.time; System.out.println("Other strangers eye you, but keep their distance this week."); }
+                return false;
+            }
+            p.limitedCount++;
+        }
+        p.attackedThisTick = true;
+        int a = DecisionBroker.ask(this, challenger + " (Lv." + challenger.lvl + ", " + challenger.affiliation + ") challenges you!\n" + previewFight(challenger, true).oneLine(),
+                new String[]{"Fight", "Slip away"}, p.duelPolicy ? 0 : 1);
+        if (a == 0) return true;
+        if (fleeRoll(challenger)) {
+            System.out.println("You slipped away from " + challenger + ".");
+            return false;
+        }
+        System.out.println("You couldn't get away from " + challenger + "!");
+        return true;
+    }
+
+    /** A challenge that is never turned away: from a rival or arch-enemy, from the same party's quarrel, or between sects at war. */
+    private boolean mustFace(Character challenger) {
+        Relationship r = relationshipList.contains(challenger.id);
+        if (r != null && r.value <= -2) return true;
+        Relationship back = challenger.relationshipList.contains(id);
+        if (back != null && back.value <= -2) return true;
+        if (partyLeaderId >= 0 && challenger.partyLeaderId == partyLeaderId) return true;
+        if (sect != null && challenger.sect != null && sect != challenger.sect && (sect.warTarget == challenger.sect || challenger.sect.warTarget == sect)) return true;
+        if (challenger.partyLeaderId >= 0 && (challenger.partyLeaderId == id || partyLeaderId == challenger.partyLeaderId)) return true;
+        return false;
+    }
+
     //If true, player will flee
     public boolean fleeCheck(Character opponent) {
         if (this.trait == Traits.Beast) {
             return false;
         }
+        if (player == 1) { // a human decides (MANUAL) or their flee policy does (AUTO/HYBRID); fleeing can still fail
+            PlayerControl p = pc();
+            int a = DecisionBroker.ask(this, "You are outmatched by " + opponent + " (Lv." + opponent.lvl + "). Try to flee?\n" + previewFight(opponent, false).oneLine(),
+                    new String[]{"Flee", "Fight"}, p.fleePolicy ? 0 : 1);
+            if (a != 0) { FightReport.fledNot(this); return false; }
+            if (fleeRoll(opponent)) { if (!FightReport.active()) System.out.println("You escaped from " + opponent + "."); FightReport.fleeAttempt(this, opponent, true); return true; }
+            if (!FightReport.active()) System.out.println("You failed to escape from " + opponent + "!");
+            FightReport.fleeAttempt(this, opponent, false);
+            return false;
+        }
+        boolean got = fleeRoll(opponent);
+        FightReport.fleeAttempt(this, opponent, got);
+        return got;
+    }
+
+    private boolean fleeRoll(Character opponent) {
         if (this.trait == Traits.Runner && lvl >= opponent.lvl - 10) {
             return true;
         }
@@ -3988,13 +5070,14 @@ public class Character implements java.io.Serializable {
 
     public void destroyCity(Area area) {
         // Plunder all area bags
-        if (area.backpack != null)    { backpack.addAll(area.backpack);       area.backpack.clear();    }
-        if (area.materialBag != null) { materialBag.addAll(area.materialBag); area.materialBag.clear(); }
-        if (area.pillBag != null)     { pillBag.addAll(area.pillBag);         area.pillBag.clear();     }
-        if (area.arrayBag != null)    { arrayBag.addAll(area.arrayBag);       area.arrayBag.clear();    }
+        // (stackables merge into existing stacks — unmerged duplicates made gathering/crafting credit every copy)
+        if (area.backpack != null)    { for (Item i : area.backpack)    addToBag(backpack, i);    area.backpack.clear();    }
+        if (area.materialBag != null) { for (Item i : area.materialBag) addToBag(materialBag, i); area.materialBag.clear(); }
+        if (area.pillBag != null)     { for (Item i : area.pillBag)     addToBag(pillBag, i);     area.pillBag.clear();     }
+        if (area.arrayBag != null)    { arrayBag.addAll(area.arrayBag);                           area.arrayBag.clear();    }
         // Blood from population massacre — proportional to city size
         int bloodQty = Math.max(1, (int)(area.population / 100));
-        materialBag.add(new Item(Item.ItemType.Blood, bloodQty));
+        addToBag(materialBag, new Item(Item.ItemType.Blood, bloodQty));
         // Cultivation bonus — 10 extra cultivate() calls from the battle aura
         for (int i = 0; i < 10; i++) cultivate();
         // Potential gain
@@ -4008,10 +5091,14 @@ public class Character implements java.io.Serializable {
         // Population devastated — 90% wiped out
         area.population = Math.max(1, (int)(area.population * 0.1));
         // Dissolve sect if present
-        if (area.sect != null) {
+        if (area.sect != null && !area.sect.palace) { // the Palace of the Oldest Order cannot be razed
             Organization destroyedSect = area.sect;
-            for (Character member : new ArrayList<>(destroyedSect.members)) {
-                if (member != null && !member.dead) {
+            // The founder/master isn't always in `members`; without this they kept a pointer to a sect that no longer exists
+            ArrayList<Character> everyone = new ArrayList<>(destroyedSect.members);
+            if (destroyedSect.master != null) everyone.add(destroyedSect.master);
+            if (destroyedSect.founder != null) everyone.add(destroyedSect.founder);
+            for (Character member : everyone) {
+                if (member != null && !member.dead && member.sect == destroyedSect) {
                     member.sect = null;
                     member.sectMission = null;
                     member.sectMissionBonus = 0;
@@ -4019,13 +5106,19 @@ public class Character implements java.io.Serializable {
             }
             destroyedSect.members.clear();
             destroyedSect.memberRanks.clear();
+            destroyedSect.master = null;
             if (destroyedSect.warTarget != null) destroyedSect.endWar(destroyedSect.warTarget);
+            for (Organization ally : new ArrayList<>(destroyedSect.allies)) ally.allies.remove(destroyedSect);
+            destroyedSect.allies.clear();
             area.sect = null;
         }
         // Destroy city — remove infrastructure
         if (area.city) {
             area.city = false;
             area.cityOwner = null;
+            for (Shop lostShop : area.shops) {
+                if (lostShop.owner != null) lostShop.owner.ownedShops.remove(lostShop); // otherwise the merchant's slot stayed taken by a shop that no longer exists
+            }
             area.shops.clear();
             area.libraries.clear();
         }
@@ -4053,6 +5146,7 @@ public class Character implements java.io.Serializable {
         }
 
         tempLvl /= 5;
+        tempLvl += blessing; // a soldier's blessing: +5 to the fighting level per soldier ancestor
 
         if (this.trait == Traits.Cheater) {
             tempLvl += 5;
@@ -4062,30 +5156,43 @@ public class Character implements java.io.Serializable {
             tempLvl += majorLvl / 2 + 1;
         }
 
+        if (fx != null || beastIds != null) tempLvl = Math.max(1, tempLvl + Life.powerMod(this) + Taming.bonus(this)); // wine, poison, companion beasts
+
         if (exhaustionPenalty > 0) {
             tempLvl = Math.max(1, tempLvl - exhaustionPenalty);
         }
 
     }
 
-    public void forbiddenCheck() {
+    // Returns true if the technique burned out this character's lifespan. The caller then records the kill via dead(opponent);
+    // calling dead() here made that follow-up a no-op (no kill credit, loot, revenge quests).
+    public boolean forbiddenCheck() {
+        forbiddenDeclined = false;
         if (trait == Traits.Beast) {
-            return;
+            return false;
         }
-        else if (age + totalAgeGained/10 > maxAge) {
+        if (player == 1) { // a human opts in (MANUAL), or their forbidden-technique policy decides
+            int a = DecisionBroker.ask(this, "The fight is deadly. Use the Forbidden Technique? (burns " + totalAgeGained / 10
+                    + " years of lifespan and can kill you)", new String[]{"Use it", "Don't"}, pc().forbiddenPolicy ? 0 : 1);
+            if (a != 0) { forbiddenDeclined = true; FightReport.forbidden(this, 0); return false; }
+        }
+        if (age + totalAgeGained/10 > maxAge) {
             tempLvl += Math.sqrt(potential);
             maxAge -= totalAgeGained / 10;
-            dead();
-            return;
+            deathCause = "lifespan burned out by Forbidden Technique";
+            FightReport.forbidden(this, 2);
+            return true;
         }
         else {
             tempLvl += Math.sqrt(potential);
             maxAge -= totalAgeGained / 10;
+            FightReport.forbidden(this, 1);
             // Rare potential gain for surviving a forbidden technique (2% chance)
             if (potential < 101 && rand.nextInt(50) == 0) {
                 potential++;
                 if (player > 0 && skipping <= 0) System.out.println("Surviving the forbidden technique expanded your potential to " + potential + "!");
             }
+            return false;
         }
     }
 
@@ -4135,22 +5242,30 @@ public class Character implements java.io.Serializable {
         }
 
         if (breakWeapon) {
-            System.out.println("" + equippedWeapon + " Weapon has broken!");
+            if (player > 0 || opponent.player > 0) System.out.println("" + equippedWeapon + " Weapon has broken!");
+            final Item brokenW = equippedWeapon;
+            backpack.removeIf(i -> i == brokenW); // a deconstructed item must not linger in the backpack (null name breaks sell/merge code)
             equippedWeapon.deconstructor();
             this.equippedWeapon = null;
         }
         if (breakArmor) {
-            System.out.println("" + equippedClothing + " Armor has broken!");
+            if (player > 0 || opponent.player > 0) System.out.println("" + equippedClothing + " Armor has broken!");
+            final Item brokenC = equippedClothing;
+            backpack.removeIf(i -> i == brokenC);
             equippedClothing.deconstructor();
             this.equippedClothing = null;
         }
         if (oppBreakWeapon) {
-            System.out.println("" + opponent.equippedWeapon + " Weapon has broken!");
+            if (player > 0 || opponent.player > 0) System.out.println("" + opponent.equippedWeapon + " Weapon has broken!");
+            final Item oppBrokenW = opponent.equippedWeapon;
+            opponent.backpack.removeIf(i -> i == oppBrokenW);
             opponent.equippedWeapon.deconstructor();
             opponent.equippedWeapon = null;
         }
         if (oppBreakArmor) {
-            System.out.println("" + opponent.equippedClothing + " Armor has broken!");
+            if (player > 0 || opponent.player > 0) System.out.println("" + opponent.equippedClothing + " Armor has broken!");
+            final Item oppBrokenC = opponent.equippedClothing;
+            opponent.backpack.removeIf(i -> i == oppBrokenC);
             opponent.equippedClothing.deconstructor();
             opponent.equippedClothing = null;
         }
@@ -4167,6 +5282,15 @@ public class Character implements java.io.Serializable {
         }
         return false;
     }
+
+    /** The display name of a trait (same words as getTrait for the character's own). */
+    static String traitName(Traits t) {
+        switch (t) {
+            case IronBody: return "Iron Body"; case SpiritVein: return "Spirit Vein"; case HeavenlyRoot: return "Heavenly Root"; case Tamer: return "Beast Tamer";
+            default: return t.name();
+        }
+    }
+    String getTrait(Traits t) { return traitName(t); }
 
     public String getTrait() {
         switch (trait) {
@@ -4204,28 +5328,28 @@ public class Character implements java.io.Serializable {
                 return "Runner";
             case Cheater:
                 return "Cheater";
+            case Tamer:
+                return "Beast Tamer";
+            case Poisoner:
+                return "Poisoner";
+            case Drunken:
+                return "Drunken";
+            case Chef:
+                return "Chef";
+            case Musician:
+                return "Musician";
+            case Beast:
+                return "Beast";
+            case Monster:
+                return "Monster";
             default:
-                return "Error in trait";
+                return "Unknown Trait";
         }
     }
     public void updateRepTitle() {
-        if (majorLvl >= 10)  { repTitle = "True Immortal"; return; }
-        if (kills >= 500)    { repTitle = "God Slayer"; return; }
-        if (majorLvl >= 9)   { repTitle = "Pseudo Immortal Venerable"; return; }
-        if (kills >= 100)    { repTitle = gender.equals("Female") ? "Demoness Butcher" : "Demon Butcher"; return; }
-        if (majorLvl >= 7)   { repTitle = "Ascension Expert"; return; }
-        if (kills >= 50)     { repTitle = gender.equals("Female") ? "Slaughter Maiden" : "Slaughter King"; return; }
-        if (professionLvl >= 100 && trait != null) {
-            switch (trait) {
-                case Alchemist:  repTitle = gender.equals("Female") ? "Pill Queen" : "Pill King"; return;
-                case Blacksmith: repTitle = gender.equals("Female") ? "Forge Lady" : "Forge Saint"; return;
-                case Tailor:     repTitle = "Robe Saint"; return;
-                case Scribe:     repTitle = "Array Sage"; return;
-                case Innovative: repTitle = "Technique Ancestor"; return;
-                case Merchant:   repTitle = gender.equals("Female") ? "Trade Queen" : "Trade King"; return;
-                default: break;
-            }
-        }
+        if (wanderingImmortal) { repTitle = "Wandering Immortal"; return; }
+        String t = Naming.title(this);
+        if (t != null) repTitle = t;
     }
 
     public String toString() {
