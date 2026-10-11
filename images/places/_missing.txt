@@ -1,0 +1,9 @@
+Nouns seen in this world that have no hand-made picture yet (the game paints one for each place):
+  mountains.png
+  termite_mounds.png
+  underwater_caverns.png
+
+Biome variants seen without their own picture (optional: the plain noun picture is used instead):
+  mountains_grassland.png
+  termite_mounds_savanna.png
+  underwater_caverns_ocean.png

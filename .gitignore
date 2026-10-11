@@ -1,0 +1,8 @@
+# Place images are user-made art (images/places/*.png + optional images/moods.txt); keep them out of git
+saves/
+settings.properties
+exports/
+crash.log
+music-preview/
+# the IDE's build output (kept on disk, not in git)
+out/

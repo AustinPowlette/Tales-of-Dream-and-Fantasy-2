@@ -1,7 +1,8 @@
 package Game;
 
 import static Game.GameDriver.rand;
-public class Technique {
+public class Technique implements java.io.Serializable {
+    static final long serialVersionUID = 1L;
     enum techniqueType {
         Movement,
         Martial
@@ -16,8 +17,8 @@ public class Technique {
     // Constructor for Innovator to make Technique
     public Technique(techniqueType type, Character maker, int potential) {
         this.type = type;
-        this.name = ("" + maker + "'s " + getType() + " Technique");
-        this.maker = maker.name + " " + maker.lastName;
+        this.name = Naming.technique(type, maker);
+        this.maker = (maker.name + " " + maker.lastName).intern();
         this.lvl = potential;
         this.potential = potential;
 
@@ -39,7 +40,7 @@ public class Technique {
         this.maker = "Default Technique";
         this.type = type;
         this.lvl = 1;
-        this.potential = 1;
+        this.potential = 3;
     }
 
     public String getType() {
@@ -58,7 +59,8 @@ public class Technique {
             owner.tempLvlCheck();
             if (rand.nextInt(100) + 1 <= (owner.lvl + owner.potential) / 2) {
                 lvl++;
-                System.out.println(this + " was upgraded!");
+                if ((owner.player > 0 && owner.skipping <= 0) || Game.Map.trackedCharacters.contains(owner.id))
+                    System.out.println(this + " was upgraded!");
             }
         }
     }
