@@ -94,9 +94,19 @@ final class GuiDuties {
         toAuto.setToolTipText("What happens when a hybrid script finishes or is interrupted");
         alerts.setToolTipText("Stops a script the moment a new alert arrives so you can look at it");
         for (JCheckBox b : new JCheckBox[]{flee, forb, duel, toAuto, alerts}) { b.setBackground(BG); b.setForeground(FG); b.setFont(Theme.plain(15)); }
+        JComboBox<String> squad = new JComboBox<>(PlayerControl.SQUAD_POLICIES), friends = new JComboBox<>(PlayerControl.FRIEND_POLICIES), feed = new JComboBox<>(PlayerControl.FEED_POLICIES);
+        squad.setToolTipText("Who may join your squad: ask each time (MANUAL), accept everyone, or nobody");
+        friends.setToolTipText("A friendship offered to you: ask, accept, or decline. Declining costs nothing");
+        feed.setToolTipText("Your companion beasts while you are AUTO or running a script: leftovers = food beyond 3 portions, always = the best food whenever you have any, never. In MANUAL use Feed.");
         JPanel k = GuiWindows.flow(FlowLayout.LEFT);
         k.add(GuiWindows.label("after winning a fight:")); k.add(kill);
         pol.add(k, pg); pg.gridy++;
+        JPanel sq = GuiWindows.flow(FlowLayout.LEFT);
+        sq.add(GuiWindows.label("who may join your squad:")); sq.add(squad); sq.add(GuiWindows.label("offers of friendship:")); sq.add(friends);
+        JPanel fd = GuiWindows.flow(FlowLayout.LEFT);
+        fd.add(GuiWindows.label("feed your companions (AUTO / scripts):")); fd.add(feed);
+        pol.add(sq, pg); pg.gridy++;
+        pol.add(fd, pg); pg.gridy++;
         for (JCheckBox b : new JCheckBox[]{flee, forb, duel, toAuto, alerts}) { pol.add(b, pg); pg.gridy++; }
         JSpinner timeout = new JSpinner(new SpinnerNumberModel(0, 0, 3600, 5));
         timeout.setToolTipText("In MANUAL a prompt waits this long for you, then the policy answers (0 = wait forever)");
@@ -108,6 +118,9 @@ final class GuiDuties {
         pol.add(t, pg); pg.gridy++;
         pg.weighty = 1; pg.fill = GridBagConstraints.BOTH; pol.add(Box.createVerticalGlue(), pg);
         kill.addActionListener(e -> { if (!updating[0]) mv.queueInput("policy kill " + kill.getSelectedIndex()); });
+        squad.addActionListener(e -> { if (!updating[0]) mv.queueInput("policy squad " + squad.getSelectedItem()); });
+        friends.addActionListener(e -> { if (!updating[0]) mv.queueInput("policy friends " + friends.getSelectedItem()); });
+        feed.addActionListener(e -> { if (!updating[0]) mv.queueInput("policy feed " + feed.getSelectedItem()); });
         flee.addActionListener(e -> { if (!updating[0]) mv.queueInput("policy flee " + (flee.isSelected() ? "on" : "off")); });
         forb.addActionListener(e -> { if (!updating[0]) mv.queueInput("policy forbidden " + (forb.isSelected() ? "on" : "off")); });
         duel.addActionListener(e -> { if (!updating[0]) mv.queueInput("policy duel " + (duel.isSelected() ? "accept" : "evade")); });
@@ -129,6 +142,7 @@ final class GuiDuties {
                 modeNote.setText("duties " + pc.dutySummary() + (p.currentQuest != null ? " · quest: " + p.currentQuest.displayName() : ""));
                 back.setEnabled(pc.mode != PlayerControl.Mode.MANUAL);
                 kill.setSelectedIndex(pc.killPolicy);
+                squad.setSelectedIndex(pc.squadPolicy); friends.setSelectedIndex(pc.friendPolicy); feed.setSelectedIndex(pc.feedPolicy);
                 flee.setSelected(pc.fleePolicy); forb.setSelected(pc.forbiddenPolicy); duel.setSelected(pc.duelPolicy);
                 toAuto.setSelected(pc.returnToAuto); alerts.setSelected(pc.interruptOnAlert);
                 if (!timeout.getValue().equals(pc.decisionTimeout)) timeout.setValue(pc.decisionTimeout);

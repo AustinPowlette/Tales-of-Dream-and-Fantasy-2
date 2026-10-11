@@ -10,6 +10,7 @@ public class LifeProbe {
     public static void main(String[] a) throws Exception {
         PcProbe.real = System.out;
         System.setIn(PcProbe.in);
+        GameDriver.frozenNpcs = true; // frozen before the first tick: the NPCs act before the human prompt of a tick, and one of them could otherwise ask the character a question before the probe is ready
         System.setOut(new PrintStream(PcProbe.cap, true));
         Thread t = new Thread(null, () -> { try { GameDriver.main(new String[0]); } catch (Throwable e) { PcProbe.gameError = e; e.printStackTrace(PcProbe.real); } }, "game", 512L << 20);
         t.setDaemon(true); t.start();
@@ -36,7 +37,7 @@ public class LifeProbe {
         p.caution = 0; p.maxAge = 100000;
 
         // ---------- rope table ----------
-        check("L1 rope: potential 10 -> 9, 20 -> 19, 36 -> 19, 37 -> 29, 99 -> 89, 100 -> 99", Reincarnation.cap(10) == 9 && Reincarnation.cap(20) == 19 && Reincarnation.cap(36) == 19 && Reincarnation.cap(37) == 29 && Reincarnation.cap(99) == 89 && Reincarnation.cap(100) == 99);
+        check("L1 rope: potential 10 -> 9, 20 -> 19, 36 -> 19, 37 -> 29, 98 -> 89, 99 -> 99 (ten gates, the last two at 99 and 100)", Reincarnation.cap(10) == 9 && Reincarnation.cap(20) == 19 && Reincarnation.cap(36) == 19 && Reincarnation.cap(37) == 29 && Reincarnation.cap(98) == 89 && Reincarnation.cap(99) == 99);
 
         // ---------- reincarnation ----------
         Character mom = adult(true, 30), dad = adult(false, 32);
@@ -162,8 +163,8 @@ public class LifeProbe {
         check("L6 make food: goods stack appears, herbs used", p.goods != null && p.goods.stream().anyMatch(i -> i.itemType == Item.ItemType.Food && i.quantity > 0) && m1.contains("You made"));
         p.trait = Character.Traits.Drunken; run("make wine");
         p.trait = Character.Traits.Poisoner; run("make poison");
-        p.trait = Character.Traits.Musician; run("make instrument");
-        check("L6 wine, poison and an instrument too", Life.firstOf(p, Item.ItemType.Wine) != null && Life.firstOf(p, Item.ItemType.Poison) != null && Life.bestInstrument(p) != null);
+        p.trait = Character.Traits.Musician; String mi = run("make instrument"); run("play");
+        check("L6 wine and poison too; an instrument is not made (2026-10-07) but a Musician is given one when they play", Life.firstOf(p, Item.ItemType.Wine) != null && Life.firstOf(p, Item.ItemType.Poison) != null && mi.contains("not made") && Life.bestInstrument(p) != null);
         String goods = run("goods");
         check("L6 'goods' lists them", goods.contains("Food, wine and poison") && goods.contains("[Food]") && goods.contains("[Wine]") && goods.contains("[Poison]"));
         double base = Life.cultMult(p);
@@ -209,7 +210,7 @@ public class LifeProbe {
         Character bard = adult(false, 30); bard.trait = Character.Traits.Musician; bard.professionLvl = 20; bard.materialBag.add(new Item(Item.ItemType.Herb, 4, 3000));
         for (Character c : new Character[]{chef, brewer, toxin, bard}) { c.location = p.location; for (int k = 0; k < 25; k++) c.professionPicker(); } // the pick is random: give it plenty of turns
         PcProbe.real.println("[T] info: L9 chef=" + (Life.firstOf(chef, Item.ItemType.Food) != null) + " brewer=" + (Life.firstOf(brewer, Item.ItemType.Wine) != null) + " toxin=" + (Life.firstOf(toxin, Item.ItemType.Poison) != null || (toxin.fx != null && toxin.fx.coat > 0)) + " bard=" + (Life.bestInstrument(bard) != null) + " chefHerb=" + chef.materialBag.size() + " prof=" + chef.professionLvl + " loc=" + chef.location.name);
-        check("L9 Chef cooks, Drunken brews, Poisoner mixes, Musician makes and plays", Life.firstOf(chef, Item.ItemType.Food) != null && Life.firstOf(brewer, Item.ItemType.Wine) != null
+        check("L9 Chef cooks, Drunken brews (the wine is sold at once in a city, so count what was made), Poisoner mixes, Musician plays", Life.firstOf(chef, Item.ItemType.Food) != null && (Life.firstOf(brewer, Item.ItemType.Wine) != null || brewer.itemsCrafted > 0)
                 && (Life.firstOf(toxin, Item.ItemType.Poison) != null || (toxin.fx != null && toxin.fx.coat > 0)) && Life.bestInstrument(bard) != null);
         Character drunk = adult(false, 30); drunk.trait = Character.Traits.Drunken; drunk.majorLvl = 1; drunk.lvl = 15; drunk.tempLvlCheck(); int sober = drunk.tempLvl;
         Life.fx(drunk).drunkWeeks = 4; Life.fx(drunk).drunkLvl = 4; drunk.tempLvlCheck();

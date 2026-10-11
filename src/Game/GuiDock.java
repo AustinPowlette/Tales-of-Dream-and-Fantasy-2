@@ -149,19 +149,29 @@ final class GuiDock {
         page.add(Box.createVerticalStrut(4));
 
         // work: one button per verb of the 'Work:' help line; they grey out when the tile cannot offer it
-        JButton meditate = mv.makeBtn("Meditate", "Cultivate for a week: your cultivation grows. Same as the 'meditate' command.", () -> mv.queueInput("meditate"));
+        JButton meditate = mv.makeBtn("Meditate", "Cultivate for a week (1.5 ticks) and sharpen all four equipped techniques by a level. Same as the 'meditate' command.", () -> mv.queueInput("meditate"));
         JButton hunt = cond(mv, "Hunt", "Fight the beasts of this tile for cultivation, materials and bounties.", "No beasts here.", p -> p.location != null && p.location.monsters > 0, "hunt");
+        JButton explore = cond(mv, "Explore", "Explore the Lost Ruins, Beast Lair, Martial Trial, Haunted Grounds or Celestial Trial of this tile: treasure, fights, techniques, cultivation or potential, depending on the place.", "No ruins, lair or trial here (the map and 'places' show where they are).", p -> p.location != null && p.location.dungeonType != null, "explore");
         JButton forage = cond(mv, "Forage", "Gather herbs (needed for pills, food and wine).", "No herbs here.", p -> p.location != null && p.location.herbMaterials > 0, "forage");
         JButton mine = cond(mv, "Mine", "Dig for metal (needed for weapons and armour).", "No metal here.", p -> p.location != null && p.location.metalMaterials > 0, "mine");
-        JButton craft = cond(mv, "Craft", "Work your profession with the materials you carry.", "Your nature has no craft.", p -> p.trait != Character.Traits.Ghost && p.trait != Character.Traits.Beast, "craft");
+        JButton craft = mv.makeBtn("Profession ▾", "A turn of your own trade (it gathers what it is short of, and says why when it cannot), or craft any of the seven kinds as an amateur (twice the material, plain quality).", () -> { });
+        craft.addActionListener(e -> {
+            JPopupMenu menu = new JPopupMenu();
+            Character pl = mv.findPlayer();
+            if (pl != null && pl.hasTrade()) { JMenuItem trade = new JMenuItem("My profession (" + pl.getTrait() + ")"); trade.addActionListener(ev -> mv.queueInput("profession")); menu.add(trade); menu.addSeparator(); }
+            for (String k : AmateurCraft.KINDS) { final String kind = k; JMenuItem mi = new JMenuItem("Craft " + k + (pl != null && pl.hasTrade() ? "" : " (amateur)")); mi.addActionListener(ev -> mv.queueInput("craft " + kind)); menu.add(mi); }
+            menu.addSeparator();
+            JMenuItem help = new JMenuItem("What does each need?"); help.addActionListener(ev -> mv.queueInput("craft menu")); menu.add(help);
+            menu.show(craft, 0, craft.getHeight());
+        });
         JButton rest = mv.makeBtn("Rest ×4", "Wait four turns in a row (an alert or an attack interrupts). 'wait <n>' does any number.", () -> mv.queueInput("wait 4"));
         JButton sell = cond(mv, "Sell", "Sell everything you do not use to the best shop of this city.", "You need to be in a city to sell.", p -> p.location != null && p.location.city, "sell");
-        JButton buyGear = cond(mv, "Buy gear", "Buy the best weapon and armour you can afford in this city.", "No shops here.", p -> p.location != null && p.location.city && !p.location.shops.isEmpty(), "buygear");
+        JButton buyGear = cond(mv, "Buy gear", "Buy the best weapon and armour you can afford in this city.", "No shops here.", p -> p.canShopHere(), "buygear");
         JButton pills = mv.makeBtn("Use pills", "Swallow the pills you carry (they raise cultivation, potential and more).", () -> mv.queueInput("consume"));
         JButton eat = cond(mv, "Eat", "Eat food from your goods: a short boost to cultivation.", "You carry no food ('make food' from herbs, or buy at the market).", p -> Life.firstOf(p, Item.ItemType.Food) != null, "eat");
         JButton drink = cond(mv, "Drink", "Drink wine from your goods.", "You carry no wine ('make wine' from herbs, or buy at the market).", p -> Life.firstOf(p, Item.ItemType.Wine) != null, "drink");
         JButton equip = mv.makeBtn("Equip best", "Wear the strongest weapon and armour from your backpack.", () -> mv.queueInput("equip"));
-        page.add(group("Do here (uses the turn)", 3, meditate, hunt, forage, mine, craft, rest, sell, buyGear, pills, eat, drink, equip));
+        page.add(group("Do here (uses the turn)", 3, meditate, hunt, explore, forage, mine, craft, rest, sell, buyGear, pills, eat, drink, equip));
         page.add(Box.createVerticalStrut(4));
 
         // quests
@@ -242,7 +252,9 @@ final class GuiDock {
                 mv.makeBtn("Here", "The tile you stand on and what you can do in it.", () -> GuiCards.hereWindow(mv)),
                 mv.makeBtn("Quest Log", "Every quest with its target and priority: go there, do it, pin it, delete it (Q).", () -> GuiQuests.open(mv, null))));
         box.add(Box.createVerticalStrut(4));
-        box.add(group("System", 3, mv.makeBtn("Cheats", "Developer menu: give wealth, set level, heal...", () -> GuiSheets.cheatWindow(mv))));
+        JButton cheatsBtn = mv.makeBtn("Cheats", "Developer menu: give wealth, set level, heal... (only for the Cheater trait)", () -> GuiSheets.cheatWindow(mv));
+        conds.add(new Cond(cheatsBtn, p -> p.trait == Character.Traits.Cheater, "Developer menu: give wealth, set level, heal... (only for the Cheater trait)", "Only a Cheater can use cheats. Edit Self can change your trait."));
+        box.add(group("System", 3, cheatsBtn));
         return scroll(box);
     }
 
@@ -294,7 +306,7 @@ final class GuiDock {
                 mv.makeBtn("All off", "Switch every duty off: you do everything yourself (alerts tell you what waits).", () -> mv.queueInput("duties all off"))));
         box.add(Box.createVerticalStrut(4));
         box.add(group("Scripts and quests", 3,
-                mv.makeBtn("Scripts", "Write the steps of a hybrid-mode script (T).", mv::openScriptEditor),
+                mv.makeBtn("Scripts", "The Script Manager: write, save and load the steps of a hybrid-mode script (T).", mv::openScriptEditor),
                 mv.makeBtn("Run script", "Run the script now (Hybrid mode).", () -> mv.queueInput("script run")),
                 mv.makeBtn("Resume", "Continue the script where it stopped.", () -> mv.queueInput("script resume")),
                 mv.makeBtn("Quest Log", "Every quest with its target and priority (Q).", () -> GuiQuests.open(mv, null)),
@@ -310,7 +322,8 @@ final class GuiDock {
                 mv.makeBtn("Browse", "Select, filter and sort people, shop stock, your backpack and places; search anyone in the world (B).", () -> GuiHub.openWindow(mv, "browse")),
                 mv.makeBtn("Market", "This city's yearly auction, goods market and library (K).", () -> GuiWindows.marketPanel(mv)),
                 mv.makeBtn("Manage", "Your shops' prices, the city you stand in, your sect (M).", () -> GuiWindows.managePanel(mv)),
-                mv.makeBtn("Rankings", "Strongest, richest, most kills, charts and rivalries (G).", () -> GuiWindows.rankingsPanel(mv))));
+                mv.makeBtn("Rankings", "Strongest, richest, most kills, charts and rivalries (G).", () -> GuiWindows.rankingsPanel(mv)),
+                mv.makeBtn("Titled hundred", "The hundred Strongest, Richest and with Most Kills, with their titles (the 'ranking' command).", () -> mv.queueInput("ranking"))));
         box.add(Box.createVerticalStrut(4));
         box.add(group("The world", 3,
                 mv.makeBtn("Overview", "The whole world on one small map: cities, sects, dungeons and where players stand (X).", () -> GuiMore.worldWindow(mv)),

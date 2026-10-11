@@ -40,7 +40,13 @@ final class Chronicle {
     static void add(String kind, String text, int... ids) {
         if (text == null) return;
         log.add(new Entry(GameDriver.time, kind, text, ids == null ? new int[0] : ids));
-        synchronized (log) { while (log.size() > MAX_ENTRIES) log.remove(0); }
+        synchronized (log) {
+            while (log.size() > MAX_ENTRIES) { // a flood of small world lines must not push out deaths, cities and wars: they go first
+                int victim = 0;
+                for (int i = 0; i < log.size() && i < 2000; i++) if ("world".equals(log.get(i).kind)) { victim = i; break; }
+                log.remove(victim);
+            }
+        }
     }
 
     private static String who(Character c) { return c.name + " " + c.lastName + " (#" + c.id + ")"; }
@@ -51,13 +57,13 @@ final class Chronicle {
         String cls;
         if (killer == null) {
             String dc = dead.deathCause == null ? "" : dead.deathCause;
-            cls = dc.startsWith("old age") ? "old age" : dc.contains("Array") ? "arrays & traps" : dc.contains("Forbidden") ? "forbidden technique" : "other";
+            cls = dc.startsWith("old age") ? "old age" : dc.contains("Array") ? "arrays & traps" : dc.contains("Forbidden") ? "forbidden technique" : dead.purgedByHeaven() ? "the epoch" : "other";
         } else cls = (killer.trait == Character.Traits.Beast || killer.trait == Character.Traits.Monster) ? "beasts" : "battle";
         synchronized (deathCauses) { deathCauses.merge(cls, 1, Integer::sum); }
         boolean notable = dead.majorLvl >= 3 || dead.player > 0 || Game.Map.trackedCharacters.contains(dead.id)
                 || (dead.sect != null && dead.sect.master == dead) || dead.storyNpc;
         if (!notable) return;
-        String how = killer != null ? "was slain by " + who(killer) : dead.deathCause != null && dead.deathCause.startsWith("old age") ? "died of old age at " + dead.age : "died (" + dead.deathCause + ")";
+        String how = killer != null ? "was slain by " + who(killer) : dead.purgedByHeaven() ? "was consumed by Heaven in the epoch" : dead.deathCause != null && dead.deathCause.startsWith("old age") ? "died of old age at " + dead.age : "died (" + dead.deathCause + ")";
         add("death", who(dead) + ", Major Lvl " + dead.majorLvl + (dead.sect != null ? " of " + dead.sect.name : "") + ", " + how + " at " + (dead.location == null ? "?" : dead.location.name) + ".",
                 killer != null ? new int[]{dead.id, killer.id} : new int[]{dead.id});
     }

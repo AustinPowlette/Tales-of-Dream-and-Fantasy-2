@@ -180,7 +180,7 @@ public class HelpShots {
                     final String title = d.getTitle();
                     if (title.startsWith("A new life") && grabStart) { grabStart = false; sleep(500); try { edt(() -> save(framed(paint(d.getRootPane()), d.getTitle()), "win-start.png", 820)); } catch (Exception ignored) { } }
                     SwingUtilities.invokeLater(() -> {
-                        String[] prefer = title.startsWith("Tales") ? new String[]{"Single player"} : title.startsWith("A new life") ? new String[]{"Begin"} : title.equals("Your character") ? new String[]{"No"}
+                        String[] prefer = title.startsWith("Saved games") ? new String[]{System.getProperty("shots.load") != null ? "Continue selected" : "New game"} : title.startsWith("Tales") ? new String[]{"Single player"} : title.startsWith("A new life") ? new String[]{"Begin"} : title.equals("Your character") ? new String[]{"No"}
                                 : title.startsWith("Decision") ? new String[]{"Spare", "Slip away", "Flee", "Fight", "Don't"} : new String[]{"No", "OK", "Done", "Yes"};
                         for (String p : prefer) { JButton b = button(d.getContentPane(), p); if (b != null) { b.doClick(); return; } }
                         d.dispose();
@@ -196,7 +196,8 @@ public class HelpShots {
         System.setProperty("java.awt.headless", "false");
         real = System.out;
         FeedIn in = new FeedIn();
-        in.q.add("y\n".getBytes());
+        String load = System.getProperty("shots.load"); // -Dshots.load=1: continue the saved game in that place of the start-up list instead of a new 3,000-person world (the windows of an OLD world)
+        in.q.add((load == null ? "y\n" : "y\n" + load + "\n").getBytes());
         System.setIn(in);
         System.setOut(new PrintStream(new ByteArrayOutputStream(), true));
         Thread t = new Thread(null, () -> { try { GameDriver.main(new String[0]); } catch (Throwable e) { e.printStackTrace(real); } }, "game", 512L << 20);
@@ -219,12 +220,14 @@ public class HelpShots {
         for (Window w : Window.getWindows()) if (w instanceof JDialog && w.isShowing() && titleOf(w).equals("Tutorial")) { edt(w::dispose); }
         edt(() -> { mv.setSize(1180, 800); mv.setLocation(20, 20); mv.validate(); });
         sleep(800);
-        Settings.hints = false; Settings.lorePause = false; // a lore scene must not pause the game while the shots are taken
+        Settings.hints = false; Settings.lorePause = false; Settings.dialoguePopups = false; // a lore scene must not pause the game while the shots are taken
 
         // ---- a life worth looking at: some money, travel, a fight or two, quests
         Character p = player();
+        Character.Traits keepTrait = p.trait; p.trait = Character.Traits.Cheater; // cheats are for Cheaters
         cmd("cheat self ss 400000");
         cmd("cheat self weapon 3");
+        p.trait = keepTrait;
         for (String go : new String[]{"goto 1800 1500", "goto 1800 1800", "goto 1400 1800", "goto 1200 1400", "goto 1500 1500"}) cmd(go);
         cmd("wait 40");
         p = player();
@@ -327,6 +330,7 @@ public class HelpShots {
     static void windows(Character p) throws Exception {
         windowShot("win-stats.png", "Stats", 2000, () -> GuiSheets.statsWindow(mv));
         windowShot("win-backpack-gear.png", "Backpack", 2000, 820, () -> GuiMore.backpackWindow(mv, "Gear"), null);
+        windowShot("win-backpack-stores.png", "Backpack", 2000, 820, () -> GuiMore.backpackWindow(mv, "Materials"), () -> { Window w = find("Backpack"); if (w != null) selectTab(w, "Materials"); });
         windowShot("win-backpack-techniques.png", "Backpack", 2000, 820, () -> GuiMore.backpackWindow(mv, "Techniques"), () -> { Window w = find("Backpack"); if (w != null) selectTab(w, "Techniques"); });
         // companions: make the player a tamer for the picture, if a beast is around
         windowShot("win-companions.png", "Backpack", 2000, 820, () -> GuiMore.backpackWindow(mv, "Companions"), () -> { Window w = find("Backpack"); if (w != null) selectTab(w, "Companions"); });
@@ -383,7 +387,7 @@ public class HelpShots {
         // the script editor with a small script
         cmd("script clear");
         for (String s : new String[]{"goto 1800 1500", "repeat 2", "forage 5", "goto 1500 1500", "sell", "end"}) cmd("script add " + s);
-        windowShot("win-scripts.png", "Script Editor", 2000, 700, () -> { Component b = button(mv.getContentPane(), "Scripts"); if (b != null) ((JButton) b).doClick(); }, null);
+        windowShot("win-scripts.png", "Script Manager", 2000, 860, () -> { Component b = button(mv.getContentPane(), "Scripts"); if (b != null) ((JButton) b).doClick(); }, null);
         cmd("script clear");
     }
 

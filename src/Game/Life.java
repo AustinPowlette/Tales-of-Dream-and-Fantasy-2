@@ -98,7 +98,7 @@ final class Life {
         int lvl = f.poisonLvl;
         Character by = f.poisoner >= 0 ? Character.charById(f.poisoner) : null;
         f.poisonLvl = 0; f.poisoner = -1;
-        if (lvl <= res || c.dead) { if (c.player > 0 && c.skipping <= 0) System.out.println("The poison has run its course."); return; }
+        if (lvl <= res || c.dead || c.childSafe()) { if (c.player > 0 && c.skipping <= 0) System.out.println("The poison has run its course."); return; }
         int deadly = Math.min(60, 20 * (lvl - res));
         if (rand.nextInt(100) < deadly) {
             c.deathCause = "poisoned" + (by != null ? " by " + by.name + " " + by.lastName : "");
@@ -156,7 +156,7 @@ final class Life {
     }
 
     // ------------------------------------------------------------------ goods
-    private static Item bestHerb(Character c, int maxLvl, int need) {
+    static Item bestHerb(Character c, int maxLvl, int need) {
         Item best = null;
         for (Item it : c.materialBag) {
             if (it.itemType == Item.ItemType.Herb && it.quantity >= need && it.lvl <= maxLvl && (best == null || it.lvl > best.lvl)) best = it;
@@ -181,10 +181,14 @@ final class Life {
 
     /** Cooks, brews or mixes from herbs (50 per unit) and files the result. Only the matching trait can (Chef, Drunken, Poisoner, Musician).
      *  2 = made something, -2 = no herbs, -3 = not your art. */
-    static int craft(Character c, Item.ItemType type) {
-        if (!matches(c, type)) return -3;
-        boolean pro = true;
-        int skill = Math.max(10, c.professionLvl);
+    static int craft(Character c, Item.ItemType type) { return craft(c, type, false); }
+
+    /** `amateur`: anybody may make it (any trait), with the amateur skill and at most two portions at a time (see AmateurCraft). */
+    static int craft(Character c, Item.ItemType type, boolean amateur) {
+        if (type == Item.ItemType.Instrument) return -4; // instruments are not made: a Musician's own one matures with playing (see `play`)
+        if (!amateur && !matches(c, type)) return -3;
+        boolean pro = !amateur;
+        int skill = Math.max(10, amateur ? c.amateurLvl : c.professionLvl);
         Item herb = bestHerb(c, skill / 10 + 2, 50);
         if (herb == null) return -2;
         int units = Math.min(herb.quantity / 50, pro ? skill / 10 + 1 : 2);
@@ -199,10 +203,11 @@ final class Life {
             int qty = units * (type == Item.ItemType.Food ? 3 : type == Item.ItemType.Wine ? 2 : 1);
             String name = type == Item.ItemType.Food ? Naming.dish(herb.lvl, c) : type == Item.ItemType.Wine ? Naming.wine(herb.lvl, c) : Naming.poison(herb.lvl, c);
             made = new Item(type, herb.lvl, qty, name);
-            made.maker = c.name + " " + c.lastName; made.makerID = c.id;
+            made.maker = (c.name + " " + c.lastName).intern(); made.makerID = c.id;
             Character.addToBag(goods(c), made);
         }
         c.itemsCrafted++;
+        if (amateur) AmateurCraft.gain(c, herb.lvl * units);
         if (pro && c.professionLvl < 100) {
             c.professionExp += herb.lvl * 10 * units;
             while (c.professionExp > c.professionExpMax && c.professionLvl < 100) { c.professionLvl++; c.professionExp -= c.professionExpMax; c.professionExpMax = Math.pow(10, c.professionLvl / 10.); }
@@ -242,7 +247,7 @@ final class Life {
 
     static final int MARKET_CAP = 600; // portions a city market holds before the oldest spoil
 
-    static ArrayList<Item> market(Area a) { if (a.goodsBag == null) a.goodsBag = new ArrayList<>(); return a.goodsBag; }
+    static ArrayList<Item> market(Area a) { if (a.goodsBag == null) a.goodsBag = new SafeList<>(); return a.goodsBag; }
 
     /** What a buyer pays for one portion at the market (poison costs three times as much). */
     static long buyPrice(Item it) { return unitPrice(it) * (it.itemType == Item.ItemType.Poison ? 3 : 1); }
@@ -251,7 +256,7 @@ final class Life {
     static long sellPrice(Item it) { return Math.max(1, buyPrice(it) / 2); }
 
     // ------------------------------------------------------------------ shops and the market together
-    static ArrayList<Item> shelf(Shop s) { if (s.goodsShelf == null) s.goodsShelf = new ArrayList<>(); return s.goodsShelf; }
+    static ArrayList<Item> shelf(Shop s) { if (s.goodsShelf == null) s.goodsShelf = new SafeList<>(); return s.goodsShelf; }
 
     /** What a shop charges for a portion (the market price at the default markup; a player raises it with `price <shop> sell <rate>`). */
     static long shopSellPrice(Shop s, Item it) { return Math.max(1, Math.round(buyPrice(it) * s.sellRate / 1.5)); }
@@ -308,7 +313,9 @@ final class Life {
             if (it.quantity <= 0) c.goods.remove(it);
         }
         ArrayList<Item> m = market(c.location);
-        while (marketCount(c.location) > MARKET_CAP && !m.isEmpty()) m.remove(0); // the oldest portions spoil
+        long scrapped = 0;
+        while (marketCount(c.location) > MARKET_CAP && !m.isEmpty()) { Item old = m.remove(0); scrapped += (long) old.quantity * sellPrice(old); } // the oldest portions spoil: the city is paid for them
+        if (scrapped > 0) c.location.receivePayment(refundShare(scrapped));
         if (earned > 0) { c.ss += earned; c.convertCurrency(); }
         if (earned > 0 && c.player > 0 && c.skipping <= 0 && c.age >= 8) System.out.println("Sold goods for " + earned + " ss" + (festival ? " (festival prices)" : "") + ".");
         return earned;
@@ -331,7 +338,7 @@ final class Life {
         long price = offer.price * qty;
         if (!c.canAfford(price)) return stack.name + " costs " + price + " ss for " + qty + "; you have " + PlayerLists.wealth(c) + " ss.";
         c.deductSs(price);
-        if (offer.shop != null && offer.shop.owner != null) { offer.shop.owner.ss += price; offer.shop.owner.convertCurrency(); } else a.receivePayment(price);
+        if (offer.shop != null && offer.shop.owner != null) { offer.shop.owner.credit(price); } else a.receivePayment(price);
         Item mine = new Item(stack.itemType, stack.lvl, qty, stack.name);
         mine.maker = stack.maker; mine.makerID = stack.makerID;
         Character.addToBag(goods(c), mine);
@@ -356,38 +363,53 @@ final class Life {
         return Math.max(0, it.quantity - lost);
     }
 
-    /** Spoils every food/wine/poison stack in the list (other items are left alone). */
-    static void spoilList(List<Item> list) {
-        if (list == null) return;
+    /** Spoils every food/wine/poison stack in the list (other items are left alone); returns the spirit stones the lost portions were worth
+     *  (a shelf: what its owner paid for them, anything else: what the market pays), already reduced to Settings.spoilRefundPercent. */
+    static long spoilList(List<Item> list) { return spoilList(list, null); }
+
+    static long spoilList(List<Item> list, Shop shelfOf) {
+        if (list == null) return 0;
+        long value = 0;
         for (int i = list.size() - 1; i >= 0; i--) {
             Item it = list.get(i);
             if (it == null || it.itemType == null || !isGood(it.itemType)) continue;
+            int before = it.quantity;
             it.quantity = spoil(it);
+            value += (long) Math.max(0, before - it.quantity) * (shelfOf != null ? shopBuyPrice(shelfOf, it) : sellPrice(it));
             if (it.quantity <= 0) list.remove(i);
         }
+        return refundShare(value);
     }
+
+    /** The share of a lost value that is paid back (the setting `spoilrefund`). */
+    static long refundShare(long value) { return value * Settings.spoilRefundPercent / 100; }
 
     /** The yearly spoilage of every pile of goods in the world: city markets, shop shelves, sect pantries and what characters carry (their hoards are
      *  also capped at HOLD_CAP portions, the worst and oldest rotting first). It is the sink that keeps stock per head flat while production grows. */
     static void marketYearly() {
         for (Area a : new ArrayList<>(Map.createdAreas)) {
             if (a == null) continue;
-            if (a.goodsBag != null && !a.goodsBag.isEmpty()) spoilList(a.goodsBag);
-            if (a.shops != null) for (Shop s : a.shops) if (s != null && s.goodsShelf != null && !s.goodsShelf.isEmpty()) spoilList(s.goodsShelf);
-            if (a.sect != null && a.sect.treasury != null && !a.sect.treasury.isEmpty()) spoilList(a.sect.treasury);
+            if (a.goodsBag != null && !a.goodsBag.isEmpty()) a.receivePayment(spoilList(a.goodsBag)); // the city (its lord, or the treasury) is paid for what rots on the market
+            if (a.shops != null) for (Shop s : a.shops) if (s != null && s.goodsShelf != null && !s.goodsShelf.isEmpty()) {
+                long back = spoilList(s.goodsShelf, s); // the owner is paid what they paid for the portions
+                if (back > 0) { if (s.owner != null && !s.owner.dead) s.owner.credit(back); else a.receivePayment(back); }
+            }
+            if (a.sect != null && a.sect.treasury != null && !a.sect.treasury.isEmpty()) spoilList(a.sect.treasury); // (the pantry came from missions, nobody paid spirit stones for it)
         }
         for (int i = 0, n = Map.characters.size(); i < n; i++) {
             Character c = Map.characters.get(i);
             if (c == null || c.goods == null || c.goods.isEmpty()) continue;
-            spoilList(c.goods);
+            long back = spoilList(c.goods);
             int total = goodsCount(c);
             while (total > HOLD_CAP && !c.goods.isEmpty()) { // the surplus rots: lowest grade first
                 Item worst = c.goods.get(0);
                 for (Item it : c.goods) if (it.lvl < worst.lvl || (it.lvl == worst.lvl && it.itemType == Item.ItemType.Food && worst.itemType != Item.ItemType.Food)) worst = it;
                 int cut = Math.min(worst.quantity, total - HOLD_CAP);
                 worst.quantity -= cut; total -= cut;
+                back += refundShare(cut * sellPrice(worst));
                 if (worst.quantity <= 0) c.goods.remove(worst);
             }
+            if (back > 0) c.credit(back); // what rotted in the bag is paid back, so a hoard costs nothing but the trouble
         }
     }
 
@@ -407,6 +429,16 @@ final class Life {
             for (Item it : new ArrayList<>(a.backpack)) if (it != null && it.itemType == Item.ItemType.Instrument && (mine == null || it.lvl > mine.lvl) && (best == null || it.lvl > best.lvl)) best = it;
             if (best != null) { long price = Character.itemPrice(best); if (c.canAfford(price)) { c.deductSs(price); a.receivePayment(price); a.backpack.remove(best); c.backpack.add(best); } }
         }
+    }
+
+    /** The Market Trip quest: at the city's market buy a meal if there is none in the pack, wine now and then, poison for a Poisoner. True if something was bought. */
+    static boolean marketTrip(Character c) {
+        if (c.location == null || !c.location.city) return false;
+        int before = goodsCount(c);
+        if ((c.fx == null || c.fx.foodWeeks <= 0) && firstOf(c, Item.ItemType.Food) == null) buyBest(c, Item.ItemType.Food, c.majorLvl + 1);
+        if (rand.nextInt(c.trait == Character.Traits.Drunken ? 2 : 4) == 0 && firstOf(c, Item.ItemType.Wine) == null) buyBest(c, Item.ItemType.Wine, c.majorLvl + 1);
+        if (c.trait == Character.Traits.Poisoner && firstOf(c, Item.ItemType.Poison) == null) buyBest(c, Item.ItemType.Poison, c.majorLvl + 2);
+        return goodsCount(c) > before;
     }
 
     private static void buyBest(Character c, Item.ItemType type, int maxLvl) {
@@ -594,7 +626,11 @@ final class Life {
     static int play(Character c) {
         if (c.trait != Character.Traits.Musician) return -3; // music is the Musician's art
         Item inst = bestInstrument(c);
-        if (inst == null) return -2;
+        if (inst == null) { // a Musician's first instrument is a plain gift of their teacher; it matures as they play
+            inst = new Item(c, 1, Item.ItemType.Instrument);
+            c.backpack.add(inst);
+            if (c.player > 0 && c.skipping <= 0 && c.age >= 8) System.out.println("A plain old instrument comes into your hands: " + inst.name + ".");
+        }
         boolean pro = c.trait == Character.Traits.Musician;
         int ticks = pro ? 2 : 1;
         for (int i = 0; i < ticks; i++) c.cultivate();
@@ -616,7 +652,49 @@ final class Life {
         if (c.location != null && c.location.city && listeners > 0) { tips = Math.max(1, Character.itemPrice(inst) / 50) * listeners; c.ss += tips; c.convertCurrency(); }
         if (c.player > 0 && c.skipping <= 0 && c.age >= 8)
             System.out.println("You play '" + Naming.songTitle(rand, 0) + "' on " + inst.name + (listeners > 0 ? " for " + listeners + " listener(s)" : " alone") + (tips > 0 ? " and earn " + tips + " ss in tips." : "."));
+        practise(c, inst, 1);
         return 2;
+    }
+
+    /** Playing wears the instrument in: now and then it matures one level, up to the player's realm + 1 (and 10). Nothing is made or bought; this is how an instrument improves. */
+    static void practise(Character c, Item inst, int times) {
+        for (int i = 0; i < times && inst != null; i++) {
+            if (inst.lvl >= Math.min(10, c.majorLvl + 1) || rand.nextInt(10 + 6 * inst.lvl) != 0) continue;
+            inst.lvl++;
+            inst.name = Naming.instrument(inst.lvl);
+            if (c.player > 0 && c.skipping <= 0 && c.age >= 8) System.out.println("Your instrument matures with all the playing: it is now " + inst.name + " (Lv." + inst.lvl + ").");
+        }
+    }
+
+    /** A concert (the Perform quest): the usual playing, plus a crowd of townspeople in a city that pays by the city's level, and more practice. 2 = played. */
+    static int concert(Character c) {
+        int r = play(c);
+        if (r != 2) return r;
+        Item inst = bestInstrument(c);
+        Area a = c.location;
+        if (a != null && a.city && inst != null) {
+            long crowd = 10 + 10L * a.cityLevel();
+            long tips = Math.max(1, Character.itemPrice(inst) / 20) * crowd;
+            c.ss += tips; c.convertCurrency();
+            if (c.player > 0 && c.skipping <= 0 && c.age >= 8) System.out.println("A crowd gathers in " + a.name + ": your concert earns " + tips + " ss.");
+        }
+        practise(c, inst, 3);
+        c.nextPerformWeek = GameDriver.time + 26;
+        return 2;
+    }
+
+    /** The best known city to give a concert in (big cities pay more; nearer is better; the one you stand in counts), or null. */
+    static Area stage(Character c) {
+        Area best = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (Area a : c.knownLocations) {
+            if (a == null || !a.city) continue;
+            int d = PlayerControl.distance(c.location, a);
+            if (d > 25) continue;
+            int score = 3 * a.cityLevel() - d;
+            if (score > bestScore) { bestScore = score; best = a; }
+        }
+        return best;
     }
 
     // ------------------------------------------------------------------ NPC behaviour
@@ -659,10 +737,6 @@ final class Life {
                 return 2;
             }
             case Musician: {
-                if (bestInstrument(c) == null) {
-                    int r = craft(c, Item.ItemType.Instrument);
-                    if (r < 0) { needHerbs(c); return -2; }
-                }
                 return play(c);
             }
             case Tamer:
@@ -687,12 +761,13 @@ final class Life {
             if ((f == null || f.foodWeeks <= 0) && rand.nextInt(4) == 0) { Item food = firstOf(c, Item.ItemType.Food); if (food != null) use(c, food); }
             if ((f == null || f.drunkWeeks <= 0) && rand.nextInt(c.trait == Character.Traits.Drunken ? 6 : 80) == 0) { Item wine = firstOf(c, Item.ItemType.Wine); if (wine != null) use(c, wine); }
         }
+        if (!manual && c.player > 0 && c.beastIds != null && !c.beastIds.isEmpty()) Taming.autoFeed(c); // the feed policy
         Reincarnation.check(c);
         if (c.lostBeastIds != null && !c.lostBeastIds.isEmpty()) { // beasts that remember this soul
             Taming.reunite(c);
             if (GameDriver.time % 26 == c.id % 26) Taming.postLostQuest(c);
         }
         if (!manualMode(c) && c.location != null && c.location.city) npcShop(c);
-        if (c.player == 0 && c.age >= 8 && c.majorLvl >= 1 && c.location != null && c.location.monsters > 0 && (c.beastIds == null || c.beastIds.isEmpty()) && rand.nextInt(c.trait == Character.Traits.Tamer ? 100 : 1200) == 0) Taming.attempt(c); // everybody may win one beast over; Tamers try more often
+        if (c.player == 0 && c.age >= 8 && c.majorLvl >= 1 && c.location != null && c.location.monsters > 0 && (c.beastIds == null || c.beastIds.isEmpty()) && (c.trait == Character.Traits.Tamer || Taming.roomForAnother()) && rand.nextInt(c.trait == Character.Traits.Tamer ? 100 : 1200) == 0) Taming.attempt(c); // everybody may win one beast over; Tamers try more often
     }
 }

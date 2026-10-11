@@ -47,7 +47,7 @@ final class TermHelp {
             "Each step takes one week. North is up on the map and y grows to the north. Use 'goto <x> <y>' for a long walk.");
         e("x", "stay rest pass skip", "move", "x", "Stay where you are for one week (same as 'wait 1')", "Duties you switched on, quest alerts and notices still happen.");
         e("wait", "", "move", "wait [weeks]", "Stand still for several weeks (default 1, at most 5,200)",
-            "An attack or a new quest alert cuts a long wait short. Use 'watch' to wait until something happens.\ne.g.  wait 10");
+            "An attack or a new quest alert cuts a long wait short ('settings notify alert off' lets it run through new alerts). Use 'watch' to wait until something happens.\ne.g.  wait 10");
         e("walk", "", "move", "walk <w|a|s|d> <weeks>", "Keep walking one way for some weeks", "e.g.  walk d 5   (five steps east)");
         e("goto", "go travel", "move", "goto <x> <y>", "Walk to a place until you arrive (or something interrupts you)",
             "Coordinates are the ones printed everywhere, like [1500, 1500] (type 1500 1500), or plain tile numbers. 'route <x> <y>' previews the trip first.\ne.g.  goto 1500 1400");
@@ -66,8 +66,10 @@ final class TermHelp {
         e("qd", "", "quests", "qd <n>", "Delete a quest from your list (it may come back; 'mute' stops that)", "");
         e("mute", "", "quests", "mute <quest name>", "Never post this kind of quest again (and remove the queued ones)", "e.g.  mute Find Person   ('unmute <name>' undoes it)");
         e("unmute", "", "quests", "unmute <quest name>", "Allow a muted quest kind again", "");
+        e("ranking", "rankings board boards", "look", "ranking [strongest|richest|kills]", "The boards of the world: the hundred Strongest, Richest and with Most Kills", "Recounted every New Year. Rank 1-3 earns the grandest title, 4-10 a lesser one, 11-100 the plainest; everyone on a board is spared by the epoch.");
+        e("spotaction", "idle", "quests", "spotaction [meditate|hunt|profession|random]", "What your character does by itself while it travels or waits (Meditate by default)", "");
         e("qnew", "", "quests", "qnew <label> <x> <y> <priority> [repeat]", "Create your own waypoint quest", "The tile must have been visited. e.g.  qnew home 1500 1500 70");
-        e("seek", "", "quests", "seek <id> friend|fight|spar [priority]", "Pin a quest to reach a cultivator anywhere in the world", "e.g.  seek 1234 spar");
+        e("seek", "", "quests", "seek <id> talk|court|friend|fight|spar [priority]", "Pin a quest to reach a cultivator anywhere in the world", "e.g.  seek 1234 spar");
         e("do", "", "quests", "do <quest name> [person#]", "Do a quest kind on demand (Donate to Sect, Hold Tournament, Restock Trip, Have Child ...)", "e.g.  do Buy City Array   or   do Have Child");
         // ---- look
         e("i", "stats status stat me self", "look", "i", "Your character sheet: level, cultivation, wealth, gear, sect", "");
@@ -86,7 +88,7 @@ final class TermHelp {
         e("family", "", "look", "family", "Your spouse, parents, children, siblings", "");
         e("relations", "", "look", "relations [n]", "Your n strongest bonds with details (default 25)", "");
         e("lineage", "", "look", "lineage", "Your past lives", "");
-        e("story", "", "look", "story", "Your start and the objectives of a Story run", "");
+        e("story", "", "look", "story [replay [id]]", "The chapters of your Story start; replay reads a scene again", "");
         e("recap", "", "look", "recap", "Summary of the last stretch of your life", "");
         e("notices", "", "look", "notices [n]", "The latest notifications", "");
         e("note", "notes unnote", "look", "note <text> | note #<id> <text> | notes | unnote <n>", "Bookmarks for tiles and people", "");
@@ -99,7 +101,7 @@ final class TermHelp {
         e("list", "ls", "people", "list people|monsters|shop|bag|places [limit] [key=val key>=n ...] [sort=key desc]", "Filtered, sorted lists that the other commands number from",
             "Filters: key=text (contains), key>=n, key<=n ...; numbers accept 5k, 2m. The keys are printed under each list.\ne.g.  list shop type=weapon price<=5k afford=1 sort=price");
         e("limit", "", "people", "limit <1-500>", "Default number of rows a list shows", "");
-        e("talk", "chat", "people", "talk [person]", "Talk to someone here (raises friendship)", "A person is a list number from 'people', or #<id> for anyone in the tile; leave it out and a suitable one is picked.\ne.g.  talk 3   talk #1234");
+        e("talk", "chat", "people", "talk [person]", "Talk to someone here (raises friendship)", "A person is a list number from 'people', or #<id> for anyone in the tile; leave it out and a suitable one is picked.\nIn the GUI (settings dialoguepopups on) this opens a conversation window with their portrait: ask how they are, the news, about themselves, for a lesson, trade, a spar, a walk together, or give a gift. In the terminal you hear their words.\ne.g.  talk 3   talk #1234");
         e("spar", "", "people", "spar [person]", "Friendly fight (nobody dies)", "");
         e("attack", "fight", "people", "attack [person]", "A real fight; asks first when the odds are bad", "'preview <person>' shows your chances.");
         e("invite", "", "people", "invite [person]", "Ask someone to join your party", "");
@@ -124,9 +126,13 @@ final class TermHelp {
         // ---- work
         e("forage", "gather herbs", "work", "forage", "Gather herbs (a turn)", "");
         e("mine", "dig", "work", "mine", "Dig for metal (a turn)", "");
-        e("craft", "", "work", "craft", "Practise your profession (a turn)", "");
-        e("meditate", "cultivate study", "work", "meditate", "Cultivate: the main way to grow stronger", "");
+        e("profession", "prof", "work", "profession", "A turn of your own trade", "Alchemist: pills; Blacksmith: weapons; Tailor: clothes; Scribe: arrays; Innovative: a technique when Inspiration is 100 (fights give it), else an enchantment; Merchant: open or restock a shop; Leader: found or claim a city or sect; Chef/Drunken/Poisoner: food, wine, poison; Musician: play; Tamer: tame a beast; Gatherer/Miner: gather; Friendly: talk; Lucky: pick up what the fallen left. It gathers or buys what the craft is short of, and says why when nothing can be done.");
+        e("craft", "", "work", "craft [weapon|clothing|pill|array|food|wine|poison|menu]", "Practise your trade, or craft as an amateur (a turn)", "Without a trade 'craft' shows the amateur menu. An amateur uses twice the material and makes plain gear.");
+        e("mission", "missions", "sect", "mission [n|abandon]", "The sect's mission board; take one at its home", "Your mission is in the Quest Log; 'qdo' on it hands the work in.");
+        e("avoid", "unavoid", "people", "avoid <n> [off]", "Refuse to be friends with someone (costs nothing)", "'policy friends' decides how offers are handled.");
+        e("meditate", "cultivate study", "work", "meditate", "Cultivate 1.5 ticks and sharpen all four techniques", "One and a half cultivation ticks, and every equipped technique gains a level (up to its potential).");
         e("hunt", "", "work", "hunt", "Hunt the beasts of this tile", "");
+        e("explore", "", "work", "explore", "Explore the ruins, lair or trial of this tile", "Lost Ruins pay treasure and sometimes a technique; a Beast Lair is three fights; a Martial Trial sharpens your techniques; Haunted Grounds and Celestial Trials give cultivation and a chance of potential.");
         e("sell", "", "work", "sell [bag#] | sell goods|food|wine|poison [qty]", "Sell your loot in a city", "Without a number it sells everything sellable.");
         e("buygear", "", "work", "buygear", "Buy the best gear you can afford here", "");
         // ---- trade
@@ -141,15 +147,15 @@ final class TermHelp {
         e("tame", "", "life", "tame", "Tame a beast here as a companion", "");
         e("companions", "beasts", "life", "companions", "Your tamed beasts", "'feed <n>', 'release <n>'.");
         e("release", "", "life", "release <n>", "Send a companion back to the wild", "");
-        e("feed", "", "life", "feed <n>", "Feed a companion", "");
-        e("make", "", "life", "make food|wine|poison|instrument", "Craft goods from herbs (the right trait does it best)", "'cook' = make food, 'brew' = make wine.");
+        e("feed", "", "life", "feed <n>", "Feed a companion", "While AUTO, 'policy feed leftovers|always|never' feeds them for you.");
+        e("make", "", "life", "make food|wine|poison", "Craft goods from herbs (the right trait does it best)", "'cook' = make food, 'brew' = make wine.");
         e("cook", "", "life", "cook", "Make food", "");
         e("brew", "", "life", "brew", "Make wine", "");
         e("eat", "", "life", "eat [n]", "Eat some food", "");
         e("drink", "", "life", "drink [n]", "Drink some wine", "");
         e("poison", "", "life", "poison [person]", "Slip poison to someone (they will not forgive you if noticed)", "");
         e("coat", "", "life", "coat", "Coat your weapon with poison", "");
-        e("play", "", "life", "play", "Play an instrument (inspires you)", "");
+        e("play", "perform", "life", "play | perform", "Play your instrument (inspires you); perform = a concert in a city, paid by its crowd", "A Musician's instrument matures as they play; nothing is made or bought.");
         e("reincarnate", "", "life", "reincarnate", "Be reborn when your rope ends", "");
         // ---- sect
         e("sect", "", "sect", "sect [name] | sect rules ...", "Your sect (or the one here), or any by name", "");
@@ -157,16 +163,16 @@ final class TermHelp {
         e("resign", "", "sect", "resign", "Leave your sect", "");
         e("recruit", "", "sect", "recruit [person]", "Recruit someone into the sect you lead", "");
         e("promote", "", "sect", "promote <person>", "Raise a member's rank", "");
-        e("found", "", "sect", "found city|sect", "Found a city (Major Lvl 3) or a sect (Major Lvl 2)", "");
+        e("found", "", "sect", "found city|sect", "Found a city or a sect (both need Major Lvl 2)", "");
         e("war", "", "sect", "war", "Declare war on the sect whose home you stand in", "");
         e("peace", "", "sect", "peace", "End your sect's war", "");
         e("alliance", "", "sect", "alliance", "Propose an alliance to the sect here", "");
         // ---- auto
         e("auto", "", "auto", "auto [turns]", "Let the character run itself like an NPC", "'stop' takes control back.");
         e("manual", "stop", "auto", "manual | stop", "Take control back (also stops a running script)", "");
-        e("script", "", "auto", "script add <step> | list | del <n> | clear | run | resume | stop", "A list of steps the character carries out by itself", "Steps: goto wait forage mine craft meditate hunt sell quest repeat if end mode.");
+        e("script", "", "auto", "script add <step> | list | del <n> | edit <n> <step> | insert <n> <step> | move <n> <place> | clear | run | resume | stop | save <name> | load <name> | saved | delete <name>", "A list of steps the character carries out by itself", "Steps: goto wait forage mine craft meditate hunt sell quest repeat if end mode, or ANY other command of the game (script add buygear, script add make food, script add learn 1; cmd <text> forces it). Walks and waits inside a step finish before the next step starts. Saved scripts live in the scripts folder, one step a line.");
         e("duties", "", "auto", "duties | duties all on|off | duties <name> on|off", "Choose which kinds of work the game does for you", "");
-        e("policy", "", "auto", "policy [kill|flee|forbidden|duel|script|alerts|timeout <value>]", "How the game answers prompts when you are not at the keyboard", "");
+        e("policy", "", "auto", "policy [kill|flee|forbidden|duel|squad|friends|feed|script|alerts|timeout <value>]", "How the game answers prompts when you are not at the keyboard", "");
         e("watch", "", "auto", "watch [weeks] [for <categories>] [until year <n>]", "Let time pass until something happens to you", "e.g.  watch 100");
         e("pause", "p", "auto", "p", "Pause or resume the clock (GUI)", "");
         // ---- system
@@ -177,7 +183,7 @@ final class TermHelp {
         e("quit", "exit bye", "system", "quit [nosave]", "Save and leave the game", "");
         e("export", "", "system", "export history|rankings|people|monsters|shop|bag|places|world|run", "Write a table to a CSV file", "");
         e("settings", "options config prefs", "system", "settings [key value]", "Show or change settings",
-            "Keys: autosave autosavekeep confirm hints hud autoequip maturestart challenges music volume highcontrast tooltips toasts sound pictures art artfresh colorblind font recap notify.\ne.g.  settings hud off");
+            "Keys: autosave autosavekeep confirm hints hud autoequip maturestart challenges music volume highcontrast tooltips toasts sound pictures art artfresh colorblind font recap notify parallel (experimental: NPC turns on several cores) epochpop epochseconds spoilrefund (percent of the price that spoiled goods pay back, 100 by default) epochcull (the epoch: most cultivators, slowest typical turn in seconds, the cull as 20% or a number like 5000).\ne.g.  settings hud off");
         e("music", "", "system", "music [on|off|new|volume <n>|...]", "Ambient music", "");
         e("tutorial", "", "system", "tutorial", "The new-player tutorial", "");
         e("help", "? commands", "system", "help [command|category|all]", "This help", "e.g.  help quests   help qdo   help all");

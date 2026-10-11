@@ -104,7 +104,12 @@ final class SectPolitics {
     /** Chronicle line (kind "sect") and a notice to every human member of the sect. */
     static void announce(Organization s, String text, int... ids) {
         Chronicle.add("sect", text, ids);
-        for (Character h : Notifications.humans()) if (h != null && !h.dead && h.player == 1 && h.sect == s) Notifications.post("sect", text, ids.length > 0 ? ids[0] : -1, h.id);
+        for (Character h : Notifications.humans()) {
+            if (h == null || h.dead || h.player != 1) continue;
+            boolean named = false; // a human named in the news hears it even when it has just lost the sect (a master who was driven out by a coup was never told)
+            for (int id : ids) if (id == h.id) named = true;
+            if (h.sect == s || named) Notifications.post("sect", text, ids.length > 0 ? ids[0] : -1, h.id);
+        }
     }
 
     private static void tell(Character h, String text, int charId) { if (h != null && h.player == 1 && !h.dead) Notifications.post("sect", text, charId, h.id); }

@@ -11,9 +11,14 @@ public class Library implements java.io.Serializable {
     Character owner;        // null for sect/city libraries
     Area location;
     Organization sect;      // null for city/personal libraries
-    ArrayList<Technique> techniques = new ArrayList<>();
+    ArrayList<Technique> techniques = new SafeList<>();
     boolean isSectLibrary;
     String name = "";
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        techniques = SafeList.of(techniques); // (see SafeList)
+    }
 
     // City or public library
     public Library(Area location) {
@@ -80,7 +85,7 @@ public class Library implements java.io.Serializable {
             if (!dup) kept.add(t);
         }
         java.util.Collections.reverse(kept);
-        techniques = kept;
+        techniques = new SafeList<>(kept);
     }
 
     // Learn a technique from a city library (pays ss, gets a copy)

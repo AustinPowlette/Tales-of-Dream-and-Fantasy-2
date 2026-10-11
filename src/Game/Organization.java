@@ -59,6 +59,8 @@ public class Organization implements java.io.Serializable {
         sectLibrary = new Library(this);
     }
 
+    /** One lock for every change of a sect's people, ranks and alliances (turns of different tiles may run together; sects touch each other, so a lock per sect could deadlock). */
+    private static final Object LOCK = new Object();
     boolean isVirtual() { return virtual; }
 
     public Organization(Character founder) {
@@ -161,14 +163,15 @@ public class Organization implements java.io.Serializable {
         return "Recruitment rules: " + rulesText() + ".";
     }
 
-    public void join(Character member) {
+    public void join(Character member) { synchronized (LOCK) {
         if (!canJoin(member)) return;
         members.add(member);
         member.sect = this;
         memberRanks.put(member.id, SectRank.OUTER_DISCIPLE);
-    }
+        member.joinedASect(); // a "Join Sect" errand is done, whichever door they came through (the Palace's pass, a recruiter, the command)
+    } }
 
-    public void resign(Character member) {
+    public void resign(Character member) { synchronized (LOCK) {
         members.remove(member);
         memberRanks.remove(member.id);
         member.sect = null;
@@ -179,9 +182,9 @@ public class Organization implements java.io.Serializable {
             master = null;
             promote();
         }
-    }
+    } }
 
-    public void promote() {
+    public void promote() { synchronized (LOCK) {
         if (virtual) { master = null; return; } // ??? is always the master; nobody is crowned in his place
         if (members != null && !members.isEmpty()) {
             Character temp = null;
@@ -206,22 +209,22 @@ public class Organization implements java.io.Serializable {
             if (warTarget != null) endWar(warTarget);
             if (location.sect == this) location.sect = null; // don't wipe a newer sect founded on the same tile
         }
-    }
+    } }
 
-    public void promoteRank(Character c) {
+    public void promoteRank(Character c) { synchronized (LOCK) {
         SectRank current = getRank(c);
         switch (current) {
             case OUTER_DISCIPLE: memberRanks.put(c.id, SectRank.INNER_DISCIPLE); break;
             case INNER_DISCIPLE: memberRanks.put(c.id, SectRank.ELDER); break;
             default: break;
         }
-    }
+    } }
 
-    public SectRank getRank(Character c) {
+    public SectRank getRank(Character c) { synchronized (LOCK) {
         if (isMaster(c)) return SectRank.MASTER;
         if (c == founder) return SectRank.FOUNDER;
         return memberRanks.getOrDefault(c.id, SectRank.OUTER_DISCIPLE);
-    }
+    } }
 
     public boolean isMaster(Character character) {
         return character == master;
@@ -231,7 +234,7 @@ public class Organization implements java.io.Serializable {
 
     public boolean inCrisis() { return crisisTimer > 0; }
 
-    public boolean isAlly(Organization other) { return other != null && allies.contains(other); }
+    public boolean isAlly(Organization other) { synchronized (LOCK) { return other != null && allies.contains(other); } }
 
     public int sectLvl() {
         long weight = 0;
@@ -323,21 +326,35 @@ public class Organization implements java.io.Serializable {
         if (master != null && "Evil".equals(master.affiliation) && poison < 5 && questBoard.size() < 7) questBoard.add("Deliver|Poison|" + lvl + "|10|" + Math.max(15, 10 * lvl / 3));
     }
 
-    public void proposeAlliance(Organization other) {
+    /** Why the master of THIS sect would not ally with `from`, or null when they would (a human master is asked by the caller instead). An alliance used to be made at once, without the
+     *  other sect agreeing. They refuse when the masters are Good and Evil, when they dislike each other, or when `from` is allied with a sect this one is at war with. */
+    public String allianceRefusal(Organization from) {
+        if (virtual || (from != null && from.virtual)) return "The Palace of the Oldest Order keeps out of the sects' alliances.";
+        if (from == null || master == null || master.dead || master.player > 0 || from.master == null) return null;
+        if (warTarget == from || from.warTarget == this) return name + " is at war with " + from.name + ".";
+        String a = master.affiliation, b = from.master.affiliation;
+        if (a != null && b != null && !a.equals(b) && !"Neutral".equals(a) && !"Neutral".equals(b)) return master.name + " will not ally with " + (b.startsWith("E") ? "an " : "a ") + b + " sect.";
+        Relationship r = master.relationshipList.contains(from.master.id);
+        if (r != null && r.value < 0) return master.name + " does not trust " + from.master.name + ".";
+        for (Organization ally : from.allies) if (ally != null && (warTarget == ally || ally.warTarget == this)) return name + " is at war with " + ally.name + ", an ally of " + from.name + ".";
+        return null;
+    }
+
+    public void proposeAlliance(Organization other) { synchronized (LOCK) {
         if (other == null || other == this || isAlly(other)) return;
         allies.add(other);
         other.allies.add(this);
         // End any existing war between them (either side's pointer)
         endWar(other);
-    }
+    } }
 
-    public void dissolveAlliance(Organization other) {
+    public void dissolveAlliance(Organization other) { synchronized (LOCK) {
         if (other == null) return;
         allies.remove(other);
         other.allies.remove(this);
-    }
+    } }
 
-    public void declareWar(Organization enemy) {
+    public void declareWar(Organization enemy) { synchronized (LOCK) {
         if (enemy == null || enemy == this || virtual || enemy.virtual) return; // the Palace keeps out of the sects' wars
         if (GameDriver.time < peaceUntil && (master == null || master.player == 0)) return; // an NPC sect rests after a war
         if (warTarget != null && warTarget != enemy && warTarget.warTarget == this) warTarget.warTarget = null; // release the previous enemy so wars stay symmetric
@@ -353,14 +370,14 @@ public class Organization implements java.io.Serializable {
         }
         Chronicle.add("war", this.name + " declared war on " + enemy.name + " (the " + Naming.war(this.name, enemy.name) + ").", this.master != null ? new int[]{this.master.id} : new int[0]);
         Notifications.onWar(this, enemy);
-    }
+    } }
 
-    public void endWar(Organization enemy) {
+    public void endWar(Organization enemy) { synchronized (LOCK) {
         if (enemy != null && this.warTarget == enemy) Chronicle.add("war", this.name + " made peace with " + enemy.name + " (end of the " + Naming.war(this.name, enemy.name) + ").");
         if (this.warTarget == enemy) warsEnded++;
         if (this.warTarget == enemy) { this.warTarget = null; this.warSince = 0; this.peaceUntil = GameDriver.time + 52 * 7; } // seven years of rest: with four, 3 in 4 sects were at war at any time in a 75-sect world
         if (enemy != null && enemy.warTarget == this) { enemy.warTarget = null; enemy.warSince = 0; enemy.peaceUntil = GameDriver.time + 52 * 7; }
-    }
+    } }
 
     public String toString() {
         return name;

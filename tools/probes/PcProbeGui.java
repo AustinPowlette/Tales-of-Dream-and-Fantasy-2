@@ -9,12 +9,15 @@ import java.util.List;
 
 /** Drives the real Swing MapViewer: clicks every button through the component tree (like a user would) and checks the effect. */
 public class PcProbeGui {
+    static { Character.TRIGGER_EVERY = 1; Shop.SEED = false; } // these checks test one trigger / a shop's exact goods: no throttle, no starter stock
     static volatile String dialogInput = null;        // typed into the next input dialog
     static volatile String decisionChoice = "Spare";  // option button clicked in decision dialogs (null = leave unanswered)
     static final List<String> dialogs = Collections.synchronizedList(new ArrayList<>());
     static final Set<Window> handled = Collections.newSetFromMap(new WeakHashMap<>());
+    static final Set<Window> talkSeen = Collections.newSetFromMap(new WeakHashMap<>());
     static volatile boolean watch = true;
-    static volatile String startupChoice = "New game";  // answer to the start-up save menu
+    static volatile boolean answerDialogues = true;   // the watcher closes a talk window (Dialogue) with its way out; DialogueGui turns it off to talk
+    static volatile String startupChoice = System.getProperty("gui.startup", "New game");  // answer to the start-up save menu
     static volatile String confirmAnswer = "Yes";       // answer to the GUI "Are you sure?" confirmations
     static int passes = 0, fails = 0;
     static PrintStream real;
@@ -66,6 +69,12 @@ public class PcProbeGui {
             for (Window w : Window.getWindows()) {
                 if (!(w instanceof JDialog) || !w.isShowing() || handled.contains(w)) continue;
                 final JDialog d = (JDialog) w;
+                if ("dialogue".equals(d.getName())) {
+                    if (!talkSeen.contains(d)) { talkSeen.add(d); dialogs.add("Talk window | " + allText(d).replace((char) 10, (char) 32)); }
+                    if (!answerDialogues) continue; // a talk (Dialogue): answer with the way out (the last reply) until the window closes
+                    SwingUtilities.invokeLater(() -> { List<JButton> bs = new ArrayList<>(); collect(d.getContentPane(), JButton.class, bs); bs.removeIf(b -> b.getText() == null || !b.getText().matches("^\\d+\\..*")); if (!bs.isEmpty()) bs.get(bs.size() - 1).doClick(); });
+                    continue;
+                }
                 if (!d.isModal()) { // the themed non-modal windows: let them fill, record them, close them
                     Long seen = firstSeen.get(d);
                     if (seen == null) { firstSeen.put(d, System.currentTimeMillis()); continue; }
@@ -154,7 +163,7 @@ public class PcProbeGui {
     static void run() throws Exception {
         Settings.lore = new java.io.File("../LORE_ON").exists(); // default off: the story has its own probe (LoreProbe); with the marker file test/LORE_ON the GUI tests run with the story on
         PcProbe.in.feed("y\ns\nn\n");
-        long end = System.currentTimeMillis() + 240000;
+        long end = System.currentTimeMillis() + Long.getLong("gui.waitMs", 240000L);
         while (System.currentTimeMillis() < end && !(GameDriver.mapViewer != null && GameDriver.waitingForInput && pc() != null)) Thread.sleep(200);
         check("GUI opened and the player is prompting", GameDriver.mapViewer != null && GameDriver.waitingForInput && pc() != null);
         if (pc() == null) return;
@@ -208,12 +217,14 @@ public class PcProbeGui {
 
         // ---------- edit self / cheats ----------
         d0 = dialogCount(); String nm0 = p.name; click("Edit Self"); settle();
-        check("Edit Self opens the editor and Done closes it without changes", dialogSince(d0, "Editing:") && p.name.equals(nm0));
+        check("Edit Self opens the editor and Done closes it without changes", dialogSince(d0, "Edit Character") && p.name.equals(nm0));
         p.ss = 0; p.sc = 0;
+        final Character.Traits keepTrait0 = p.trait; p.trait = Character.Traits.Cheater; sendCmd("stay"); settle(); Thread.sleep(1700); // cheats are for Cheaters (the button follows the trait on the next refresh)
         d0 = dialogCount(); click("Cheats"); settle(); Thread.sleep(700);
         check("Cheats opens its window", dialogSince(d0, "Cheat"));
         GameDriver.guiInputQueue.add("cheat self ss 12345"); settle();
         check("Cheats: self + spirit stones adds wealth", p.ss + p.sc * 1_000_000L >= 12345);
+        p.trait = keepTrait0;
 
         // ---------- modes ----------
         click("Auto"); Thread.sleep(1500);
@@ -307,12 +318,12 @@ public class PcProbeGui {
         d0 = dialogCount();
         click("Scripts"); Thread.sleep(700);
         final JDialog[] ed = {null};
-        onEdt(() -> { for (Window w : Window.getWindows()) if (w instanceof JDialog && ((JDialog) w).getTitle().startsWith("Script Editor") && w.isShowing()) ed[0] = (JDialog) w; });
+        onEdt(() -> { for (Window w : Window.getWindows()) if (w instanceof JDialog && ((JDialog) w).getTitle().startsWith("Script Manager") && w.isShowing()) ed[0] = (JDialog) w; });
         check("Scripts opens the script editor window", ed[0] != null);
         if (ed[0] != null) {
             final JDialog e = ed[0];
             java.util.function.Function<String, Boolean> edClick = k -> { final JButton[] b = {null}; try { onEdt(() -> b[0] = findButton(e.getContentPane(), k)); } catch (Exception ex) { return false; } if (b[0] == null) return false; SwingUtilities.invokeLater(() -> b[0].doClick()); return true; };
-            java.util.function.Consumer<String> typeStep = s -> { try { onEdt(() -> { @SuppressWarnings("unchecked") List<JComboBox<String>> cb = new ArrayList<>(); List<JComboBox> raw = new ArrayList<>(); collect(e.getContentPane(), JComboBox.class, raw); ((JComboBox) raw.get(0)).getEditor().setItem(s); }); } catch (Exception ex) { } };
+            java.util.function.Consumer<String> typeStep = s -> { try { onEdt(() -> { List<JTextField> tfs = new ArrayList<>(); collect(e.getContentPane(), JTextField.class, tfs); tfs.get(0).setText(s); }); } catch (Exception ex) { } };
             edClick.apply("Clear"); settle();
             typeStep.accept("wait 3"); edClick.apply("Add step"); settle();
             typeStep.accept("repeat 2"); edClick.apply("Add step"); settle();
@@ -322,11 +333,11 @@ public class PcProbeGui {
             check("editor Add step appends valid steps and rejects bad ones", p.pc().script != null && p.pc().script.steps.size() == 4);
             Thread.sleep(800);
             final List<String> rows = new ArrayList<>();
-            onEdt(() -> { List<JList> ls = new ArrayList<>(); collect(e.getContentPane(), JList.class, ls); ListModel m = ls.get(0).getModel(); for (int i = 0; i < m.getSize(); i++) rows.add(String.valueOf(m.getElementAt(i))); });
+            onEdt(() -> { List<JList> ls = new ArrayList<>(); collect(e.getContentPane(), JList.class, ls); ListModel m = ls.get(1).getModel(); for (int i = 0; i < m.getSize(); i++) rows.add(String.valueOf(m.getElementAt(i))); });
             check("editor list shows the steps with indentation", rows.size() == 4 && rows.get(2).contains("meditate 1") && rows.get(2).contains("  meditate"));
-            onEdt(() -> { List<JList> ls = new ArrayList<>(); collect(e.getContentPane(), JList.class, ls); ls.get(0).setSelectedIndex(0); });
-            edClick.apply("Delete selected"); settle();
-            check("Delete selected removes the chosen step", p.pc().script.steps.size() == 3 && p.pc().script.steps.get(0).type.equals("repeat"));
+            onEdt(() -> { List<JList> ls = new ArrayList<>(); collect(e.getContentPane(), JList.class, ls); ls.get(1).setSelectedIndex(0); });
+            edClick.apply("Delete step"); settle();
+            check("Delete step removes the chosen step", p.pc().script.steps.size() == 3 && p.pc().script.steps.get(0).type.equals("repeat"));
             m0 = PcProbe.mark();
             edClick.apply("Run"); settle();
             check("Run executes the script and hands control back", PcProbe.since(m0).contains("[Script finished]") && p.pc().mode == PlayerControl.Mode.MANUAL);
@@ -399,7 +410,7 @@ public class PcProbeGui {
                 onEdt(() -> t0.setRowSelectionInterval(0, 0));
                 int mm = PcProbe.mark();
                 tabClick.apply("Talk"); settle();
-                check("Talk on the selected cultivator sends 'talk #id' and interacts", PcProbe.since(mm).contains("talked to"));
+                check("Talk on the selected cultivator sends 'talk #id' and they answer (a conversation window, closed by the watcher; or the plain line)", dialogSince(0, "Talk window") || PcProbe.since(mm).contains("talked to") || PcProbe.since(mm).contains(": \""));
                 // clear name filter
                 onEdt(() -> { List<JTextField> l = new ArrayList<>(); collect((Container) tp[0].getSelectedComponent(), JTextField.class, l); l.get(0).setText(""); l.get(0).postActionEvent(); });
 
@@ -563,6 +574,7 @@ public class PcProbeGui {
             known1.crowdHotspot = false;
 
             // quest pins
+            p.targetQuests.removeIf(q -> "Study Trip".equals(q.name) || "Sect Mission".equals(q.name)); // the new travel quests would paint over the pin
             cmdGui("qnew pin1 " + known1.x + " " + known1.y + " 60");
             flip.accept("Quests");
             check("Quests layer pins the quest target in orange (alert)", px.apply(known1, new int[]{0, 0}) == 0xFF961E);
@@ -599,14 +611,59 @@ public class PcProbeGui {
             });
             check("Tile Info shows a 320x180 picture for Originis (overlay art present)", iconSize[0] == 180);
             flip.accept("Tile pics");
-            snap.run();
             boolean magenta = false;
-            for (int dx = -tsz[0] / 2; dx < tsz[0] / 2 && !magenta; dx++) for (int dy = -tsz[0] / 2; dy < tsz[0] / 2; dy++) {
-                int c = shot[0].getRGB(orig2.x * tsz[0] + tsz[0] / 2 + dx + org[0], (Map.range - 1 - orig2.y) * tsz[0] + tsz[0] / 2 + dy + org[1]);
-                if (((c >> 16) & 255) > 200 && ((c >> 8) & 255) < 90 && (c & 255) > 200) { magenta = true; break; }
+            for (int attempt = 0; attempt < 60 && !magenta; attempt++) { // the pictures are painted by a background thread and the map repaints when some are ready
+                snap.run();
+                for (int dx = -tsz[0] / 2; dx < tsz[0] / 2 && !magenta; dx++) for (int dy = -tsz[0] / 2; dy < tsz[0] / 2; dy++) {
+                    int c = shot[0].getRGB(orig2.x * tsz[0] + tsz[0] / 2 + dx + org[0], (Map.range - 1 - orig2.y) * tsz[0] + tsz[0] / 2 + dy + org[1]);
+                    if (((c >> 16) & 255) > 200 && ((c >> 8) & 255) < 90 && (c & 255) > 200) { magenta = true; break; }
+                }
+                if (!magenta) Thread.sleep(100);
             }
             check("Tile pics draws the picture inside the map tile", magenta);
             flip.accept("Tile pics");
+            // ---------- zoom (2026-10-07): every conversion between screen and world tile must agree at every zoom ----------
+            try {
+                java.lang.reflect.Method mTx = MapViewer.class.getDeclaredMethod("tileX", int.class, int.class), mTy = MapViewer.class.getDeclaredMethod("tileY", int.class, int.class),
+                        mCol = MapViewer.class.getDeclaredMethod("colOf", int.class), mRow = MapViewer.class.getDeclaredMethod("rowOf", int.class), mTs = MapViewer.class.getDeclaredMethod("tileSize"),
+                        mOx = MapViewer.class.getDeclaredMethod("offX"), mOy = MapViewer.class.getDeclaredMethod("offY"), mVis = MapViewer.class.getDeclaredMethod("vis");
+                for (java.lang.reflect.Method m : new java.lang.reflect.Method[]{mTx, mTy, mCol, mRow, mTs, mOx, mOy, mVis}) m.setAccessible(true);
+                final int[] bad = {0}, visible = {0}, centreCol = {-9}, outside = {0}, wheel = {0};
+                onEdt(() -> {
+                    try {
+                        mv.followMe = false; mv.viewX = orig2.x; mv.viewY = orig2.y; mv.zoom = 3;
+                        int ts = (Integer) mTs.invoke(mv), ox = (Integer) mOx.invoke(mv), oy = (Integer) mOy.invoke(mv), vis = (Integer) mVis.invoke(mv);
+                        visible[0] = vis;
+                        centreCol[0] = (Integer) mCol.invoke(mv, orig2.x);
+                        for (int dx = -4; dx <= 4; dx++) for (int dy = -4; dy <= 4; dy++) {
+                            int x = Math.floorMod(orig2.x + dx, Map.range), y = Math.floorMod(orig2.y + dy, Map.range);
+                            int c = (Integer) mCol.invoke(mv, x), r = (Integer) mRow.invoke(mv, y);
+                            if (c < 0 || r < 0) { bad[0]++; continue; }
+                            int zpx = ox + c * ts + ts / 2, zpy = oy + r * ts + ts / 2;
+                            if ((Integer) mTx.invoke(mv, zpx, ts) != x || (Integer) mTy.invoke(mv, zpy, ts) != y) bad[0]++;
+                        }
+                        if ((Integer) mCol.invoke(mv, Math.floorMod(orig2.x + vis, Map.range)) < 0) outside[0]++;
+                        mv.zoom = 1; mv.setZoom(1, -1, -1);
+                        List<JPanel> ps = new ArrayList<>(); collect(mv.getContentPane(), JPanel.class, ps);
+                        JPanel mp = null; for (JPanel q : ps) if (q.getClass().getSimpleName().equals("MapPanel")) mp = q;
+                        if (mp != null) { mp.dispatchEvent(new java.awt.event.MouseWheelEvent(mp, MouseEvent.MOUSE_WHEEL, System.currentTimeMillis(), 0, mp.getWidth() / 2, mp.getHeight() / 2, 0, false, java.awt.event.MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, -1)); wheel[0] = mv.zoom; }
+                        mv.zoom = 1; mv.followMe = true;
+                    } catch (Exception ex) { ex.printStackTrace(real); bad[0] += 1000; }
+                });
+                check("zoom 3 shows 11 tiles a side with the chosen tile in the middle (" + visible[0] + ", column " + centreCol[0] + ")", visible[0] == (Map.range + 2) / 3 && centreCol[0] == visible[0] / 2);
+                check("zoom: every tile near the centre maps screen <-> world both ways (" + bad[0] + " off)", bad[0] == 0);
+                check("zoom: a tile beyond the edge is not drawn", outside[0] == 1);
+                check("zoom: the mouse wheel zooms in", wheel[0] == 2);
+                try { // a picture of the zoomed map with Tile pics on, for a look (shots/zoom3.png)
+                    flip.accept("Tile pics");
+                    onEdt(() -> { mv.followMe = false; mv.viewX = orig2.x; mv.viewY = orig2.y; mv.zoom = 3; });
+                    Thread.sleep(2500); snap.run();
+                    java.io.File dir = new java.io.File(System.getProperty("shots", ".")); dir.mkdirs();
+                    javax.imageio.ImageIO.write(shot[0], "png", new java.io.File(dir, "zoom3.png"));
+                    onEdt(() -> { mv.zoom = 1; mv.followMe = true; });
+                    flip.accept("Tile pics");
+                } catch (Exception ex) { real.println("[G] zoom picture not saved: " + ex); }
+            } catch (Exception ex) { check("zoom test reflection: " + ex, false); }
             final int[] bigW = {0};
             onEdt(() -> mv.showLargeView(orig2));
             Thread.sleep(500);
@@ -730,12 +787,12 @@ public class PcProbeGui {
                 onEdt(() -> tp[0].setSelectedIndex(1));
                 Thread.sleep(1700);
                 final String[] cityText = {""};
-                onEdt(() -> { List<JTextArea> l = new ArrayList<>(); collect((Container) tp[0].getComponentAt(1), JTextArea.class, l); cityText[0] = l.get(0).getText(); });
-                check("City tab describes Originis", cityText[0].contains("Originis") && cityText[0].contains("City level"));
+                onEdt(() -> { List<JEditorPane> l = new ArrayList<>(); collect((Container) tp[0].getComponentAt(1), JEditorPane.class, l); try { cityText[0] = l.get(0).getDocument().getText(0, l.get(0).getDocument().getLength()); } catch (Exception ex) { } });
+                check("City tab describes Originis", cityText[0].contains("Originis") && cityText[0].contains("CITY LEVEL"));
                 onEdt(() -> tp[0].setSelectedIndex(2));
                 Thread.sleep(1700);
                 final String[] sectText = {""};
-                onEdt(() -> { List<JTextArea> l = new ArrayList<>(); collect((Container) tp[0].getComponentAt(2), JTextArea.class, l); sectText[0] = l.get(0).getText(); });
+                onEdt(() -> { List<JEditorPane> l = new ArrayList<>(); collect((Container) tp[0].getComponentAt(2), JEditorPane.class, l); try { sectText[0] = l.get(0).getDocument().getText(0, l.get(0).getDocument().getLength()); } catch (Exception ex) { } });
                 check("Sect tab renders (sect info or how to join/found)", !sectText[0].isEmpty());
                 SwingUtilities.invokeLater(m::dispose);
                 Thread.sleep(300);
@@ -772,7 +829,7 @@ public class PcProbeGui {
                 final JDialog k = kd[0];
                 final String[] auct = {""};
                 final int[] tabs = {0};
-                onEdt(() -> { List<JTextArea> l = new ArrayList<>(); collect(k.getContentPane(), JTextArea.class, l); auct[0] = l.get(0).getText(); List<JTabbedPane> tp = new ArrayList<>(); collect(k.getContentPane(), JTabbedPane.class, tp); tabs[0] = tp.get(0).getTabCount(); });
+                onEdt(() -> { List<JEditorPane> l = new ArrayList<>(); collect(k.getContentPane(), JEditorPane.class, l); try { auct[0] = l.get(0).getDocument().getText(0, l.get(0).getDocument().getLength()); } catch (Exception ex) { } List<JTabbedPane> tp = new ArrayList<>(); collect(k.getContentPane(), JTabbedPane.class, tp); tabs[0] = tp.get(0).getTabCount(); });
                 check("Market shows the auction (weeks to the next one) and a library tab", auct[0].contains("Auction at Originis") && auct[0].contains("week") && tabs[0] == 3);
                 SwingUtilities.invokeLater(k::dispose);
                 Thread.sleep(300);
@@ -920,12 +977,24 @@ public class PcProbeGui {
         if (cd2[0] != null) {
             final JDialog c2 = cd2[0];
             SwingUtilities.invokeLater(() -> findButton(c2.getContentPane(), "Control").doClick()); Thread.sleep(800);
-            check("Control makes the NPC the human player and demotes the old one to tracked", npcF.player == 1 && p.player == 2);
+            check("Control makes the NPC the human player and leaves the old one a plain NPC in the tracker", npcF.player == 1 && p.player == 0 && Map.trackedCharacters.contains(p.id));
             settle();
             check("the new character is prompted as MANUAL", pc() == npcF && npcF.pc().mode == PlayerControl.Mode.MANUAL);
             click("Wait"); settle();
             check("the game keeps running under the new player", GameDriver.waitingForInput && !npcF.dead);
         } else check("character dialog for the Control test opened", false);
+
+        // ---------- paused: a button that asks for an info pop-up still gets it while the game runs on its own ----------
+        {
+            sendCmd("auto"); Thread.sleep(1500);            // the character runs like an NPC: the game thread is not waiting at a prompt
+            GameDriver.paused = true; Thread.sleep(1500);   // ... and now it sits in the pause loop
+            int dp = dialogCount();
+            sendCmd("time"); Thread.sleep(1500);
+            check("a paused game still opens the Time pop-up (info commands are answered while paused)", dialogCount() > dp);
+            int tpause = GameDriver.time; sendCmd("wait 3"); Thread.sleep(1200);
+            check("... but a command that acts waits for the game to resume", GameDriver.time == tpause);
+            GameDriver.paused = false; sendCmd("stop"); Thread.sleep(1500); settle();
+        }
 
         // ---------- save button ----------
         File sf = new File("saves/quick.dat"); sf.delete();

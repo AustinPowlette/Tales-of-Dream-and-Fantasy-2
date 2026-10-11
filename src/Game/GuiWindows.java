@@ -36,7 +36,17 @@ public class GuiWindows {
         wrap.add(GuiHub.header(mv, key, title), BorderLayout.NORTH); // what the window is for + the "?" that opens its Help section
         wrap.add(c, BorderLayout.CENTER);
         d.add(wrap);
-        Runnable all = () -> World.read(80, () -> { for (Runnable r : refreshers) { try { r.run(); } catch (RuntimeException ignored) { /* mid-tick read: next refresh fixes it */ } } });
+        final Runnable body = () -> { for (Runnable r : refreshers) { try { r.run(); } catch (RuntimeException ignored) { /* mid-tick read: next refresh fixes it */ } } };
+        final boolean[] waiting = {false};
+        final Runnable[] allRef = new Runnable[1];
+        allRef[0] = () -> {
+            if (World.read(80, body)) return;
+            if (waiting[0]) return;                 // the game thread is mid-tick: look again in 100 ms (not at the next slow refresh), until the window has its data
+            waiting[0] = true;
+            javax.swing.Timer rt = new javax.swing.Timer(100, ev -> { waiting[0] = false; if (d.isDisplayable()) allRef[0].run(); });
+            rt.setRepeats(false); rt.start();
+        };
+        Runnable all = allRef[0];
         Timer t = new Timer(everyMs, e -> all.run());
         d.addWindowListener(new java.awt.event.WindowAdapter() { @Override public void windowClosed(java.awt.event.WindowEvent e) { t.stop(); open.remove(key); } });
         d.setSize(w, h);
@@ -56,6 +66,26 @@ public class GuiWindows {
 
     static JLabel label(String s) { JLabel l = new JLabel(s); l.setForeground(FG); l.setFont(MONO); return l; }
     static JPanel flow(int align) { JPanel p = new JPanel(new FlowLayout(align, 5, 3)); p.setBackground(BG); return p; }
+
+    /** A titled row of buttons. */
+    static JPanel buttonRow(String title, JComponent... bs) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
+        row.setBackground(BG);
+        row.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Theme.LINE), title, 0, 0, Theme.bold(12), Theme.ACCENT));
+        for (JComponent b : bs) row.add(b);
+        return row;
+    }
+
+    /** Table cells that hold a sect rank show it in words and in its colour (gold for a Master or Founder). */
+    static void rankCells(JTable t) {
+        t.setDefaultRenderer(Organization.SectRank.class, new javax.swing.table.DefaultTableCellRenderer() {
+            @Override public Component getTableCellRendererComponent(JTable tb, Object v, boolean sel, boolean foc, int r, int c) {
+                super.getTableCellRendererComponent(tb, v, sel, foc, r, c);
+                if (v instanceof Organization.SectRank) { setText(GuiPages.rankName((Organization.SectRank) v)); if (!sel) setForeground(GuiPages.rankColor((Organization.SectRank) v)); }
+                return this;
+            }
+        });
+    }
 
     static JTable table(DefaultTableModel m) {
         JTable t = new JTable(m);
@@ -107,7 +137,7 @@ public class GuiWindows {
 
     // ================================================================== manage: shops / city / sect
     static void managePanel(MapViewer mv) {
-        window(mv, "manage", "Manage — shops, city, sect", 900, 600, 1500, (d, refreshers) -> {
+        window(mv, "manage", "Manage — shops, city, sect", 960, 760, 1500, (d, refreshers) -> {
             JTabbedPane tabs = new JTabbedPane();
             tabs.setFont(MONO_B);
             tabs.addTab("My shops", shopsTab(mv, refreshers));
@@ -181,78 +211,48 @@ public class GuiWindows {
     private static JComponent cityTab(MapViewer mv, List<Runnable> refreshers) {
         JPanel p = new JPanel(new BorderLayout(4, 4));
         p.setBackground(BG);
-        JTextArea info = new JTextArea();
-        info.setEditable(false); info.setFont(MONO); info.setBackground(Theme.FIELD); info.setForeground(FG);
-        refreshers.add(() -> {
-            Character c = player(mv);
-            if (c == null) return;
-            Area a = c.location;
-            StringBuilder sb = new StringBuilder();
-            sb.append(a.name).append(' ').append(PlayerControl.coord(a)).append("\n");
-            if (!a.city) sb.append("Not a city. A Major Lvl 2+ character can found one here ('Found / claim city').\n");
-            else {
-                sb.append("City level ").append(a.cityLevel()).append("   population ").append(a.population).append("\n");
-                sb.append("Lord: ").append(a.cityOwner != null ? a.cityOwner.name + " " + a.cityOwner.lastName + (a.cityOwner == c ? "  (you)" : "") : "none").append("\n");
-                sb.append("Treasury: ").append(a.cityTreasury).append(" ss   Shops ").append(a.shops.size()).append("/").append(a.maxShopSlots())
-                  .append("   Libraries ").append(a.libraries.size()).append("   Arrays ").append(a.arrayBag == null ? 0 : a.arrayBag.size()).append("\n");
-                sb.append("Crowd: ").append(a.characters.size()).append(a.isOriginis() ? " (Originis is exempt from crowd hotspots)" : " / " + a.crowdCapacity()).append(a.crowdHotspot ? "  — OVERCROWDED" : "").append("\n");
-                if (a.tournamentTimer > 0) sb.append("Tournament: realms ").append(a.tournamentMinMajor).append("-").append(a.tournamentMaxMajor).append(", ").append(a.tournamentTimer).append(" weeks left, ").append(a.tournamentRegistrants.size()).append(" registered\n");
-                sb.append("\nShops here:\n");
-                for (Shop s : new ArrayList<>(a.shops)) sb.append("  ").append(s.name == null || s.name.isEmpty() ? (s.owner != null ? s.owner.name : "?") : s.name + " (" + (s.owner != null ? s.owner.name : "?") + ")").append("  Lv").append(s.level()).append("  stock ").append(s.inventory.size()).append("\n");
-            }
-            if (!info.getText().equals(sb.toString())) info.setText(sb.toString());
-        });
-        JPanel btns = flow(FlowLayout.LEFT);
-        btns.add(mv.makeBtn("Found / claim city", () -> mv.queueInput("found city")));
-        btns.add(mv.makeBtn("Buy city array", () -> mv.queueInput("do Buy City Array")));
-        btns.add(mv.makeBtn("Hold tournament", () -> mv.queueInput("do Hold Tournament")));
-        btns.add(mv.makeBtn("Entice merchant", () -> mv.queueInput("do Entice Merchant")));
-        btns.add(mv.makeBtn("Register for tournament", () -> mv.queueInput("do Register Tournament")));
-        p.add(new JScrollPane(info), BorderLayout.CENTER);
-        p.add(btns, BorderLayout.SOUTH);
+        JComponent sheet = GuiPages.pane(mv, refreshers, () -> { Character c = player(mv); return c == null ? GuiSheets.page("<h1>No player character</h1>") : GuiPages.cityHtml(c, c.location, false); });
+        JPanel south = new JPanel(new GridLayout(1, 3, 6, 0));
+        south.setBackground(BG);
+        south.add(buttonRow("Rule the city", mv.makeBtn("Found / claim city", "A Major Lvl 2+ character can found a city here, or claim one that has no lord.", () -> mv.queueInput("found city")),
+                mv.makeBtn("Buy city array", "An array that gives the city's defenders a fighting bonus.", () -> mv.queueInput("do Buy City Array"))));
+        south.add(buttonRow("Events", mv.makeBtn("Hold tournament", "Pay for a tournament in this city.", () -> mv.queueInput("do Hold Tournament")),
+                mv.makeBtn("Register", "Enter the tournament that is under way here.", () -> mv.queueInput("do Register Tournament"))));
+        south.add(buttonRow("Trade", mv.makeBtn("Entice merchant", "Pay a merchant to open a shop in this city.", () -> mv.queueInput("do Entice Merchant"))));
+        p.add(sheet, BorderLayout.CENTER);
+        p.add(south, BorderLayout.SOUTH);
         return p;
     }
 
     private static JComponent sectTab(MapViewer mv, List<Runnable> refreshers) {
         JPanel p = new JPanel(new BorderLayout(4, 4));
         p.setBackground(BG);
-        JTextArea info = new JTextArea(6, 40);
-        info.setEditable(false); info.setFont(MONO); info.setBackground(Theme.FIELD); info.setForeground(FG);
+        JComponent sheet = GuiPages.pane(mv, refreshers, () -> {
+            Character c = player(mv);
+            if (c == null) return GuiSheets.page("<h1>No player character</h1>");
+            return GuiPages.sectHtml(c.sect != null ? c.sect : c.location.sect, c, false);
+        });
         DefaultTableModel model = model();
         JTable table = table(model);
+        rankCells(table);
         final List<Character> members = new ArrayList<>();
         refreshers.add(() -> {
             Character c = player(mv);
             if (c == null) return;
             Organization s = c.sect != null ? c.sect : c.location.sect;
-            StringBuilder sb = new StringBuilder();
             List<Object[]> rows = new ArrayList<>();
             members.clear();
-            if (s == null) sb.append("You belong to no sect and none is here. Major Lvl 2+ can found one ('Found sect'); otherwise stand in a sect's tile and press Join.\n");
-            else {
-                sb.append(s.name).append(c.sect == s ? "  (yours, " + s.getRank(c) + ")" : "  (not yours)").append("\n");
-                sb.append("Master: ").append(s.master != null ? s.master.name + " " + s.master.lastName : s.isVirtual() ? "???" : "none").append("   members ").append(s.members.size()).append("   Sect Lvl ").append(s.sectLvl()).append("\n");
-                sb.append("Home ").append(s.location.name).append(' ').append(PlayerControl.coord(s.location)).append("   treasury ").append(s.treasury.size()).append(" stacks, ").append(s.sectCash).append(" ss\n");
-                sb.append("War: ").append(s.warTarget != null ? s.warTarget.name : "none").append("   allies ").append(s.allies.size()).append("\n");
-                sb.append("Joining: ").append(s.rulesText()).append("\n");
-                if (c.sect == s) sb.append("Your sect points: ").append(c.sectPoints).append(c.sectMission != null ? "   mission: " + c.sectMission : "").append("\n");
+            if (s != null) {
                 for (Character m : new ArrayList<>(s.members)) {
                     if (m == null || m.dead) continue;
                     members.add(m);
                     rows.add(new Object[]{m.id, m.name + " " + m.lastName, m.lvl, s.getRank(m), m.sectPoints, PlayerControl.coord(m.location)});
                 }
             }
-            if (!info.getText().equals(sb.toString())) info.setText(sb.toString());
             model.setDataVector(rows.toArray(new Object[0][]), new String[]{"ID", "Member", "Lv", "Rank", "Points", "Where"});
         });
-        JPanel btns = flow(FlowLayout.LEFT);
-        JButton promote = mv.makeBtn("Promote selected", () -> { int r = table.getSelectedRow(); if (r >= 0 && r < members.size()) mv.queueInput("promote #" + members.get(r).id); });
-        btns.add(promote);
-        btns.add(mv.makeBtn("Recruit (random here)", () -> mv.queueInput("recruit")));
-        btns.add(mv.makeBtn("Found sect", () -> mv.queueInput("found sect")));
-        btns.add(mv.makeBtn("Join", () -> mv.queueInput("join")));
-        btns.add(mv.makeBtn("Resign", () -> mv.queueInput("resign")));
-        btns.add(mv.makeBtn("Recruitment rules…", () -> {
+        JButton promote = mv.makeBtn("Promote selected", "Raise the selected member one rank (you must outrank them).", () -> { int r = table.getSelectedRow(); if (r >= 0 && r < members.size()) mv.queueInput("promote #" + members.get(r).id); });
+        JButton rules = mv.makeBtn("Recruitment rules…", "What your sect asks of recruits: craft, potential, level, alignment, gender, family name (the master sets them).", () -> {
             JTextField pot = new JTextField("0", 4), lvl = new JTextField("0", 4), fam = new JTextField("any", 10);
             JComboBox<String> gen = new JComboBox<>(new String[]{"any", "male", "female"}), aff = new JComboBox<>(new String[]{"any", "good", "neutral", "evil"}), tr = new JComboBox<>();
             tr.addItem("any");
@@ -264,20 +264,25 @@ public class GuiWindows {
             if (JOptionPane.showConfirmDialog(p, form, "Recruitment rules of your sect (master only)", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION)
                 mv.queueInput("sect rules potential " + pot.getText().trim() + " level " + lvl.getText().trim() + " gender " + gen.getSelectedItem() + " affiliation " + aff.getSelectedItem()
                         + " trait " + String.valueOf(tr.getSelectedItem()).replace(' ', '_') + " family " + (fam.getText().trim().isEmpty() ? "any" : fam.getText().trim()));
-        }));
-        JPanel btns2 = flow(FlowLayout.LEFT);
-        btns2.add(mv.makeBtn("Donate to sect", () -> mv.queueInput("do Donate to Sect")));
-        btns2.add(mv.makeBtn("Buy from sect", () -> mv.queueInput("do Buy from Sect")));
-        btns2.add(mv.makeBtn("Take sect mission", () -> mv.queueInput("do Accept Sect Mission")));
-        btns2.add(mv.makeBtn("Buy sect array", () -> mv.queueInput("do Buy Sect Array")));
-        btns2.add(mv.makeBtn("Declare war here", () -> mv.queueInput("war")));
-        btns2.add(mv.makeBtn("Peace", () -> mv.queueInput("peace")));
-        btns2.add(mv.makeBtn("Propose alliance here", () -> mv.queueInput("alliance")));
-        JPanel south = new JPanel(new GridLayout(2, 1));
+        });
+        JPanel south = new JPanel(new GridLayout(0, 1, 0, 2));
         south.setBackground(BG);
-        south.add(btns); south.add(btns2);
-        p.add(new JScrollPane(info), BorderLayout.NORTH);
-        p.add(new JScrollPane(table), BorderLayout.CENTER);
+        south.add(buttonRow("Membership", promote, mv.makeBtn("Recruit (random here)", "Invite someone in your tile who meets the rules.", () -> mv.queueInput("recruit")),
+                mv.makeBtn("Found sect", "A Major Lvl 2+ character can found a sect.", () -> mv.queueInput("found sect")), mv.makeBtn("Join", "Join the sect whose tile you stand in.", () -> mv.queueInput("join")),
+                mv.makeBtn("Resign", "Leave your sect.", () -> mv.queueInput("resign"))));
+        south.add(buttonRow("Missions", mv.makeBtn("Missions", "The sect's mission board, and the one you hold (it is also in your Quest Log).", () -> mv.queueInput("mission")),
+                mv.makeBtn("Take mission…", "Choose a mission from the board (you must stand at your sect's home).", () -> {
+                    String n = JOptionPane.showInputDialog(mv, "Mission number (see Missions):", "Take a mission", JOptionPane.PLAIN_MESSAGE);
+                    if (n != null && n.trim().matches("\\d+")) mv.queueInput("mission " + n.trim());
+                }), mv.makeBtn("Take sect mission", "Accept the next mission the sect offers.", () -> mv.queueInput("do Accept Sect Mission"))));
+        south.add(buttonRow("Sect affairs", rules, mv.makeBtn("Donate to sect", "Give spirit stones to the sect's cash.", () -> mv.queueInput("do Donate to Sect")),
+                mv.makeBtn("Buy from sect", "Buy from the sect's treasury.", () -> mv.queueInput("do Buy from Sect")), mv.makeBtn("Buy sect array", "An array that guards the sect's home.", () -> mv.queueInput("do Buy Sect Array"))));
+        south.add(buttonRow("Diplomacy", mv.makeBtn("Declare war here", "Your sect declares war on the sect whose tile you stand in.", () -> mv.queueInput("war")), mv.makeBtn("Peace", "End your sect's war.", () -> mv.queueInput("peace")),
+                mv.makeBtn("Propose alliance here", "Offer an alliance to the sect whose tile you stand in.", () -> mv.queueInput("alliance"))));
+        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, sheet, new JScrollPane(table));
+        split.setResizeWeight(0.55); split.setBorder(null); split.setBackground(BG);
+        SwingUtilities.invokeLater(() -> split.setDividerLocation(0.55));
+        p.add(split, BorderLayout.CENTER);
         p.add(south, BorderLayout.SOUTH);
         return p;
     }
@@ -295,6 +300,9 @@ public class GuiWindows {
                 models[i] = model();
                 tables[i] = table(models[i]);
                 final int idx = i;
+                tables[i].setDefaultRenderer(Object.class, medals());
+                tables[i].setDefaultRenderer(Integer.class, medals());
+                tables[i].setDefaultRenderer(Long.class, medals());
                 tables[i].addMouseListener(new MouseAdapter() {
                     @Override public void mouseClicked(MouseEvent e) {
                         if (e.getClickCount() == 2 && lists[idx] != null) {
@@ -310,7 +318,7 @@ public class GuiWindows {
             charts.setBackground(BG);
             charts.add(pop); charts.add(eco); charts.add(realms);
             tabs.addTab("Charts", charts);
-            tabs.addTab("Dashboard", GuiMore.dashboardPanel(refreshers));
+            tabs.addTab("Dashboard", GuiMore.dashboardPanel(mv, refreshers));
             tabs.addTab("Rivalries", GuiMore.rivalriesPanel(refreshers));
             refreshers.add(() -> {
                 List<Character> alive = new ArrayList<>();
@@ -332,9 +340,13 @@ public class GuiWindows {
                     lists[i] = tops.get(i);
                     List<Object[]> rows = new ArrayList<>();
                     int rank = 1;
-                    for (Character c : lists[i]) rows.add(new Object[]{rank++, c.name + " " + c.lastName + (c.player >= 1 ? "  ★" : ""), c.lvl, c.majorLvl, c.age, c.kills, PlayerLists.wealth(c), c.sect != null ? c.sect.name : "-", c.location != null ? c.location.name : "?"});
+                    for (Character c : lists[i]) {
+                        int place = i == 0 ? c.rankStrong : i == 1 ? c.rankRich : i == 2 ? c.rankKills : 0; // the title comes with the yearly count of the hundred
+                        rows.add(new Object[]{rank++, c.name + " " + c.lastName + (c.player >= 1 ? "  ★" : ""), place > 0 && place <= Rankings.BOARD ? Rankings.titleOf(c, i, place) : "", c.lvl, c.majorLvl, c.age, c.kills, PlayerLists.wealth(c), c.sect != null ? c.sect.name : "-", c.location != null ? c.location.name : "?"});
+                    }
                     int sel = tables[i].getSelectedRow();
-                    models[i].setDataVector(rows.toArray(new Object[0][]), new String[]{"#", "Name", "Lv", "Major", "Age", "Kills", "Wealth (ss)", "Sect", "Where"});
+                    models[i].setDataVector(rows.toArray(new Object[0][]), new String[]{"#", "Name", "Title", "Lv", "Major", "Age", "Kills", "Wealth (ss)", "Sect", "Where"});
+                    if (i < 3) { javax.swing.table.TableColumnModel cmod = tables[i].getColumnModel(); cmod.getColumn(0).setPreferredWidth(40); cmod.getColumn(1).setPreferredWidth(190); cmod.getColumn(2).setPreferredWidth(230); }
                     if (sel >= 0 && sel < rows.size()) tables[i].setRowSelectionInterval(sel, sel);
                 }
                 List<int[]> hist;
@@ -367,6 +379,17 @@ public class GuiWindows {
             root.add(exp, BorderLayout.SOUTH);
             return root;
         });
+    }
+
+    /** Cells of a ranking table: the first three places in gold, silver and bronze (the rank, the name and the title). */
+    private static javax.swing.table.DefaultTableCellRenderer medals() {
+        return new javax.swing.table.DefaultTableCellRenderer() {
+            @Override public Component getTableCellRendererComponent(JTable tb, Object v, boolean sel, boolean foc, int r, int c) {
+                super.getTableCellRendererComponent(tb, v, sel, foc, r, c);
+                if (!sel) setForeground(c <= 2 && r < 3 ? (r == 0 ? Theme.GOLD : r == 1 ? new Color(206, 210, 214) : new Color(200, 128, 76)) : FG);
+                return this;
+            }
+        };
     }
 
     private static class Comparator2 {
@@ -439,15 +462,7 @@ public class GuiWindows {
             JTabbedPane tabs = new JTabbedPane();
             tabs.setFont(MONO_B);
 
-            JTextArea auction = new JTextArea();
-            auction.setEditable(false); auction.setLineWrap(true); auction.setWrapStyleWord(true); auction.setFont(MONO); auction.setBackground(Theme.FIELD); auction.setForeground(FG);
-            refreshers.add(() -> {
-                Character c = player(mv);
-                if (c == null) return;
-                StringBuilder sb = new StringBuilder(Auctions.text(c.location, c));
-                if (!auction.getText().equals(sb.toString())) auction.setText(sb.toString());
-            });
-            tabs.addTab("Auction", new JScrollPane(auction));
+            tabs.addTab("Auction", GuiPages.pane(mv, refreshers, () -> GuiPages.auctionHtml(player(mv))));
 
             DefaultTableModel gmModel = model();
             JTable gmTable = table(gmModel);

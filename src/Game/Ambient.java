@@ -10,9 +10,9 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
 
-/** Endless music made on the fly (no audio files). A `Composer` writes whole pieces as note events: a title, a key and a pentatonic mode, a tempo, a
- *  motif that comes back in four sections (statement, answer, contrast, return) over a chord progression, with a guzheng or pipa lead, a dizi
- *  answering, an erhu singing long glides, a warm pad, gongs and chimes at the section marks, and drums when the world turns dangerous.
+/** The game's music (no audio files). The songs are text scores (`SongBook`, `Score`) played by the `Conductor`, which picks a song for the place, brings its
+ *  layers in and out with the mood, fades between songs and rests between them; the old generator (`Composer`, a random pentatonic piece in four sections) now only
+ *  plays when no song is available.
  *  Context cues (`setMood`): 0 open country, 1 city, 2 danger, 3 night/winter, 4 war, 5 sect, 6 the capital Originis. Two engines play the notes:
  *  the built-in stereo synthesiser (Karplus-Strong strings, bowed and blown tones, a stereo reverb) or, when a `.sf2`/`.dls` file sits in
  *  `soundfonts/`, the Java software MIDI synthesiser with that SoundFont (see `MidiOut`). With no audio device it quietly turns itself off. */
@@ -28,16 +28,33 @@ final class Ambient {
     static volatile String status = "off";
     /** Title of the piece now playing ("" when none). */
     static volatile String nowPlaying = "";
+    /** The song now playing (null in a rest): `music keep` saves it when it was composed. */
+    static volatile Score nowScore = null;
     /** Which engine is playing: "built-in" or the SoundFont's name. */
     static volatile String engine = "built-in";
     static volatile int season = 0;
 
     // instruments (also the MIDI channel order; channel 9 is skipped, it is the drum kit)
-    static final int PLUCK = 0, FLUTE = 1, ERHU = 2, PAD = 3, BELL = 4, CHIME = 5, TAIKO = 6, WOOD = 7, PIPA = 8;
-    static final String[] INST = {"pluck", "flute", "erhu", "pad", "bell", "chime", "taiko", "wood", "pipa"};
+    static final int PLUCK = 0, FLUTE = 1, ERHU = 2, PAD = 3, BELL = 4, CHIME = 5, TAIKO = 6, WOOD = 7, PIPA = 8, PIANO = 9, HARP = 10, STRINGS = 11, CELLO = 12, HORN = 13, CHOIR = 14,
+        KIT = 15, SUONA = 16, YANGQIN = 17, SHENG = 18, XUN = 19, XIAO = 20, MARIMBA = 21, TIMPANI = 22, UPRIGHT = 23;
+    /** `kit` is a whole drum kit on the MIDI drum channel: the pitch of a note picks the drum (see `Score.DRUMS`: kick snare hat tamb shaker clap bongo conga ...). The others are melodic. */
+    static final String[] INST = {"pluck", "flute", "erhu", "pad", "bell", "chime", "taiko", "wood", "pipa", "piano", "harp", "strings", "cello", "horn", "choir",
+        "kit", "suona", "yangqin", "sheng", "xun", "xiao", "marimba", "timpani", "upright"};
+    /** Other names the song scores may use for the instruments. */
+    private static final String[][] ALIASES = {{"koto", "0"}, {"guzheng", "0"}, {"dizi", "1"}, {"fiddle", "2"}, {"bells", "4"}, {"timp", "22"}, {"shamisen", "8"}, {"voices", "14"}, {"violin", "2"}, {"drums", "15"}, {"percussion", "15"}, {"shawm", "16"}, {"dulcimer", "17"}, {"ocarina", "19"}, {"shakuhachi", "20"}, {"bass", "23"}};
     /** Per-layer loudness 0..1.5 (Settings.musicMix: "pluck=80,flute=100,..."). */
-    static final double[] layer = {1, 1, 1, 1, 1, 1, 1, 1, 1};
-    private static final int[] GM = {107, 73, 110, 89, 14, 98, 116, 115, 106}; // koto, flute, fiddle, warm pad, tubular bells, crystal, taiko, woodblock, shamisen
+    static final double[] layer = new double[INST.length];
+    static { java.util.Arrays.fill(layer, 1.0); }
+    static final int[] GM = {107, 73, 110, 89, 14, 98, 116, 115, 106, 0, 46, 48, 42, 60, 53, // koto, flute, fiddle, warm pad, tubular bells, crystal, taiko, woodblock, shamisen, piano, harp, strings, cello, horn, voice oohs
+        0, 111, 15, 20, 79, 77, 12, 47, 32};                                                  // (drum kit: the MIDI drum channel), shehnai (a shawm: the suona), dulcimer (the yangqin), reed organ (the sheng), ocarina (the xun), shakuhachi (the xiao), marimba, timpani, acoustic bass
+
+    /** The index of an instrument by name or alias, or -1. */
+    static int instIndex(String name) {
+        String n = name.trim().toLowerCase();
+        for (int i = 0; i < INST.length; i++) if (INST[i].equals(n)) return i;
+        for (String[] a : ALIASES) if (a[0].equals(n)) return Integer.parseInt(a[1]);
+        return -1;
+    }
 
     static synchronized void start() {
         if (running) return;
@@ -69,7 +86,13 @@ final class Ambient {
     private static volatile String startedWith = "", fallback = "";
 
     static void setMood(int m) { mood = m; }
+    static int currentMood() { return mood; }
+    /** The next song now (the Settings button, `music new`). */
     static void newPiece() { reseed = true; }
+    private static volatile Score pinned = null;
+    /** Plays only this song (over and over, with short rests) until `pin(null)` hands the choice back to the places; the change takes effect at once. */
+    static void pin(Score s) { pinned = s; reseed = true; }
+    static Score pinned() { return pinned; }
 
     static void parseMix(String s) {
         Arrays.fill(layer, 1.0);
@@ -102,6 +125,8 @@ final class Ambient {
     /** One note the composer wants played: `at` in samples from the start, `dur` in seconds, `glide` = semitones below the pitch the note starts at. */
     static final class Note {
         final long at; final int inst, midi; final double vel, dur, pan, glide;
+        /** Which track of a song wrote the note (-1: none), for the preview tool's checks. */
+        int track = -1;
         Note(long at, int inst, int midi, double vel, double dur, double pan, double glide) { this.at = at; this.inst = inst; this.midi = midi; this.vel = vel; this.dur = dur; this.pan = pan; this.glide = glide; }
     }
 
@@ -191,6 +216,105 @@ final class Ambient {
         boolean done() { return t > SR * (wood ? 0.4 : 1.2); }
     }
 
+    /** A struck wooden bar (marimba): the fundamental and a bright overtone at about four times its pitch that dies faster. */
+    private static final class Mallet extends Voice {
+        final double f, amp; int t = 0; double ph = 0, ph2 = 0, ph3 = 0;
+        Mallet(double f, double amp) { this.f = f; this.amp = amp; }
+        double next() {
+            double sec = t / (double) SR, tau = 0.55 * Math.pow(261.6 / Math.max(80, f), 0.35);
+            ph += 2 * Math.PI * f / SR; ph2 += 2 * Math.PI * f * 3.93 / SR; ph3 += 2 * Math.PI * f * 9.2 / SR;
+            double s = Math.sin(ph) * Math.exp(-sec / tau) + 0.45 * Math.sin(ph2) * Math.exp(-sec / (tau * 0.28)) + 0.12 * Math.sin(ph3) * Math.exp(-sec / (tau * 0.08));
+            t++;
+            return s * amp * Math.min(1, t / 12.0);
+        }
+        boolean done() { return t > SR * 2.0; }
+    }
+
+    /** A tuned kettle drum: a sine that settles from a little above its pitch, a soft second partial, a thump of noise at the start. */
+    private static final class Timp extends Voice {
+        final double f, amp; int t = 0; double ph = 0, ph2 = 0; final Random r;
+        Timp(double f, double amp, Random r) { this.f = f; this.amp = amp; this.r = r; }
+        double next() {
+            double sec = t / (double) SR;
+            double fc = f * (1 + 0.22 * Math.exp(-sec * 18));
+            ph += 2 * Math.PI * fc / SR; ph2 += 2 * Math.PI * fc * 1.5 / SR;
+            double s = Math.sin(ph) * Math.exp(-sec / 0.85) + 0.25 * Math.sin(ph2) * Math.exp(-sec / 0.4) + (r.nextDouble() * 2 - 1) * 0.25 * Math.exp(-sec * 90);
+            t++;
+            return s * amp * Math.min(1, t / 15.0);
+        }
+        boolean done() { return t > SR * 2.2; }
+    }
+
+    /** One piece of the drum kit, made from sine sweeps, filtered noise and a few ringing partials: `note` is the General MIDI drum number (36 kick, 38 snare, 42 hat, 54 tambourine, 70 maracas, 75 claves, ...). */
+    private static final class Kit extends Voice {
+        final int note; final double amp; final Random r; int t = 0; double ph = 0, ph2 = 0, lp = 0, lp2 = 0; final double len;
+        /** The built-in pieces differ in loudness too: a correction in dB for each drum number 35..81 (measured one by one). */
+        static final double[] GAIN_DB = {-6.6, -6.4, -1.4, -3.9, -4.2, -3.2, -2.1, 2.8, -2.2, 2.6, -3.0, -2.7, -3.3, 0.0, -4.3, -4.2, 2.2, -3.5, -1.3, 3.6, -3.5, -2.1, -4.7, 0.0, 2.4, -0.8, -1.7, -0.7, -2.5, -3.1, -3.0, -3.8, -5.5, -6.8, 6.0, 5.5, 0.0, 0.0, 2.3, 0.9, 0.8, -3.1, -2.2, 0.0, 0.0, 4.1, 2.9};
+        Kit(int note, double amp, Random r) {
+            this.note = note; this.amp = amp * (note >= 35 && note <= 81 ? Math.pow(10, GAIN_DB[note - 35] / 20) : 1); this.r = r;
+            len = SR * (note == 49 || note == 57 ? 2.0 : note == 52 || note == 81 || note == 51 || note == 53 ? 2.4 : note == 46 ? 0.6 : note == 80 ? 0.3 : 0.9);
+        }
+        private double noise() { return r.nextDouble() * 2 - 1; }
+        /** High-passed noise (a one-pole low-pass taken away). */
+        private double hiss(double k) { double n = noise(); lp += (n - lp) * k; return n - lp; }
+        double next() {
+            double sec = t / (double) SR, s = 0;
+            switch (note) {
+                case 35: case 36: { // kick: a fast pitch drop and a click
+                    double fc = 48 + 95 * Math.exp(-sec * 34); ph += 2 * Math.PI * fc / SR;
+                    s = Math.sin(ph) * Math.exp(-sec / 0.16) + noise() * 0.22 * Math.exp(-sec * 220); break; }
+                case 37: // rim shot
+                    ph += 2 * Math.PI * 1750 / SR; ph2 += 2 * Math.PI * 480 / SR;
+                    s = Math.sin(ph) * Math.exp(-sec / 0.012) * 0.7 + Math.sin(ph2) * Math.exp(-sec / 0.03) * 0.5 + hiss(0.2) * 0.35 * Math.exp(-sec / 0.01); break;
+                case 38: case 40: { // snare: a body tone and a rattle of noise
+                    ph += 2 * Math.PI * (185 + 60 * Math.exp(-sec * 40)) / SR;
+                    s = Math.sin(ph) * Math.exp(-sec / 0.07) * 0.55 + hiss(0.12) * Math.exp(-sec / 0.13) * 0.85; break; }
+                case 39: { // hand clap: three quick bursts and a tail
+                    double burst = sec < 0.033 ? Math.exp(-(sec % 0.011) / 0.004) : 0, e = burst + Math.exp(-sec / 0.11) * 0.5;
+                    lp2 += (noise() - lp2) * 0.35;
+                    s = (lp2 - lp) * e * 2.2; lp += (lp2 - lp) * 0.05; break; }
+                case 41: case 43: case 45: case 47: case 48: case 50: { // toms
+                    double base = note == 41 ? 78 : note == 43 ? 98 : note == 45 ? 120 : note == 47 ? 148 : note == 48 ? 178 : 210;
+                    ph += 2 * Math.PI * base * (1 + 0.55 * Math.exp(-sec * 22)) / SR;
+                    s = Math.sin(ph) * Math.exp(-sec / 0.2) + noise() * 0.15 * Math.exp(-sec * 160); break; }
+                case 42: case 44: s = hiss(0.35) * Math.exp(-sec / 0.03) * 0.9; break; // closed and pedal hat
+                case 46: s = hiss(0.3) * Math.exp(-sec / 0.26) * 0.8; break;           // open hat
+                case 49: case 57: case 55: // crash, splash
+                    s = hiss(0.25) * Math.exp(-sec / (note == 55 ? 0.35 : 0.85)) * 0.8 + metal(sec, 420, 0.5) * 0.25; break;
+                case 51: case 59: s = metal(sec, 560, 0.45) * 0.55 + hiss(0.5) * Math.exp(-sec / 0.05) * 0.3; break; // ride
+                case 53: s = metal(sec, 760, 0.7) * 0.6; break;                                                        // ride bell
+                case 52: s = metal(sec, 330, 1.0) * 0.6 + hiss(0.3) * Math.exp(-sec / 0.5) * 0.35; break;             // Chinese cymbal: here a small gong
+                case 54: s = hiss(0.5) * Math.exp(-sec / 0.07) * 0.55 + metal(sec, 5200, 0.12) * 0.25; break;          // tambourine
+                case 56: // cowbell
+                    ph += 2 * Math.PI * 562 / SR; ph2 += 2 * Math.PI * 845 / SR;
+                    s = (Math.signum(Math.sin(ph)) * 0.35 + Math.signum(Math.sin(ph2)) * 0.25) * Math.exp(-sec / 0.12); break;
+                case 60: case 61: { double f = note == 60 ? 360 : 270; ph += 2 * Math.PI * f * (1 + 0.15 * Math.exp(-sec * 50)) / SR; s = Math.sin(ph) * Math.exp(-sec / 0.09) + noise() * 0.2 * Math.exp(-sec * 150); break; } // bongos
+                case 62: case 63: case 64: { // congas: mute, open, low
+                    double f = note == 62 ? 265 : note == 63 ? 235 : 165, tau = note == 62 ? 0.06 : note == 63 ? 0.2 : 0.24;
+                    ph += 2 * Math.PI * f * (1 + 0.12 * Math.exp(-sec * 40)) / SR; s = Math.sin(ph) * Math.exp(-sec / tau) + noise() * 0.18 * Math.exp(-sec * 140); break; }
+                case 65: case 66: { double f = note == 65 ? 430 : 320; ph += 2 * Math.PI * f / SR; ph2 += 2 * Math.PI * f * 2.7 / SR; s = (Math.sin(ph) + 0.4 * Math.sin(ph2)) * Math.exp(-sec / 0.14); break; } // timbales
+                case 67: case 68: { double f = note == 67 ? 910 : 680; ph += 2 * Math.PI * f / SR; ph2 += 2 * Math.PI * f * 1.51 / SR; s = (Math.sin(ph) + 0.5 * Math.sin(ph2)) * Math.exp(-sec / 0.18); break; } // agogo
+                case 69: s = hiss(0.6) * Math.exp(-sec / 0.055) * 0.7; break;                                           // cabasa
+                case 70: s = hiss(0.45) * Math.exp(-sec / 0.04) * (1 - Math.exp(-sec / 0.006)) * 0.9; break;            // maracas: a soft attack
+                case 73: case 74: { double gate = (Math.sin(2 * Math.PI * (note == 73 ? 38 : 30) * sec) > 0) ? 1 : 0.15; s = hiss(0.4) * gate * Math.exp(-sec / (note == 73 ? 0.09 : 0.3)) * 0.8; break; } // guiro
+                case 75: ph += 2 * Math.PI * 2500 / SR; s = Math.sin(ph) * Math.exp(-sec / 0.022); break;               // claves
+                case 76: case 77: { double f = note == 76 ? 1100 : 820; ph += 2 * Math.PI * f / SR; ph2 += 2 * Math.PI * f * 1.6 / SR; s = (Math.sin(ph) + 0.5 * Math.sin(ph2)) * Math.exp(-sec / 0.04); break; } // wood blocks
+                case 80: case 81: s = metal(sec, 5600, note == 80 ? 0.2 : 1.4) * 0.5; break;                           // triangle
+                default: s = hiss(0.4) * Math.exp(-sec / 0.05) * 0.6;
+            }
+            t++;
+            return s * amp * Math.min(1, t / 6.0);
+        }
+        /** A few inharmonic partials that ring for about `tau` seconds. */
+        private double metal(double sec, double f, double tau) {
+            double s = 0, e = Math.exp(-sec / tau);
+            double[] ratio = {1, 1.34, 1.9, 2.5, 3.1};
+            for (int i = 0; i < ratio.length; i++) s += Math.sin(2 * Math.PI * f * ratio[i] * sec) * e / (1 + i * 0.5);
+            return s * 0.5;
+        }
+        boolean done() { return t >= len; }
+    }
+
     // ------------------------------------------------------------------ reverb (two of them, tuned differently, make the stereo width)
     private static final class Reverb {
         final double[][] comb; final int[] cpos; final double[][] ap; final int[] apos; final double fb = 0.8, damp = 0.35; final double[] lp;
@@ -226,7 +350,9 @@ final class Ambient {
     private static final double[][] RHYTHMS = { // a two-bar phrase in beats (each sums to 8)
         {1, 1, 2, 1, 1, 2}, {2, 1, 1, 2, 2}, {1.5, 0.5, 1, 1, 2, 2}, {0.5, 0.5, 1, 2, 1, 0.5, 0.5, 2}, {3, 1, 2, 2}, {1, 1, 1, 1, 2, 2}, {2, 2, 1, 1, 1, 1}, {1, 0.5, 0.5, 1, 1, 1, 3}};
     private static final int[][] PROGS = {{0, 3, 4, 0}, {0, 2, 3, 1}, {0, 4, 3, 0}, {0, 3, 2, 4}, {0, 1, 3, 4}};
-    private static final double[] BRIGHT_H = {1, 0.6, 0.5, 0.35, 0.25, 0.18, 0.12, 0.08}, FLUTE_H = {1, 0.22, 0.07}, PAD_H = {1, 0.16, 0.05}, DRONE_H = {1, 0.5};
+    private static final double[] BRIGHT_H = {1, 0.6, 0.5, 0.35, 0.25, 0.18, 0.12, 0.08}, FLUTE_H = {1, 0.22, 0.07}, PAD_H = {1, 0.16, 0.05}, DRONE_H = {1, 0.5},
+        CELLO_H = {1, 0.62, 0.42, 0.26, 0.15, 0.08}, HORN_H = {1, 0.55, 0.34, 0.2, 0.1}, CHOIR_H = {1, 0.3, 0.12, 0.06}, STRING_H = {1, 0.5, 0.33, 0.22, 0.14, 0.09},
+        SUONA_H = {1, 0.9, 0.75, 0.6, 0.45, 0.32, 0.2, 0.12, 0.07}, SHENG_H = {1, 0.55, 0.45, 0.3, 0.22, 0.15, 0.08}, XUN_H = {1, 0.1, 0.03}, XIAO_H = {1, 0.18, 0.06};
 
     private static double hz(double midi) { return 440.0 * Math.pow(2, (midi - 69) / 12.0); }
 
@@ -395,12 +521,12 @@ final class Ambient {
 
     // ------------------------------------------------------------------ the built-in synthesiser
     private static final class Synth {
-        final Composer comp;
+        final Conductor comp;
         final List<Voice> voices = new ArrayList<>();
         final Reverb revL = new Reverb(new int[]{1557, 1617, 1491, 1422, 1277}, new int[]{556, 441}), revR = new Reverb(new int[]{1603, 1531, 1459, 1379, 1319}, new int[]{571, 463});
         long clock = 0; final Random r = new Random(77);
 
-        Synth(Composer c) { comp = c; }
+        Synth(Conductor c) { comp = c; }
 
         void spawn(Note n) {
             double f = hz(n.midi);
@@ -413,7 +539,22 @@ final class Ambient {
                 case PAD: v = new Tone(f * (1 + (r.nextDouble() - 0.5) * 0.004), 0, 0.075 * n.vel, n.dur, 1.2, 1.6, 0.0012, 0, n.midi < 50 ? DRONE_H : PAD_H, r); break;
                 case BELL: v = new Bell(f, 0.17 * n.vel, n.dur); break;
                 case CHIME: v = new Bell(f, 0.04 * n.vel, n.dur); break;
+                case PIANO: v = new Pluck(f, 0.30 * n.vel, 2.4, 0.5, r); break;
+                case HARP: v = new Pluck(f, 0.27 * n.vel, 2.6, 0.38, r); break;
+                case STRINGS: v = new Tone(f * (1 + (r.nextDouble() - 0.5) * 0.003), 0, 0.085 * n.vel, n.dur, 0.35, 0.55, 0.0035, 0.004, STRING_H, r); break;
+                case CELLO: v = new Tone(f, 0, 0.13 * n.vel, n.dur, 0.12, 0.3, 0.006, 0.003, CELLO_H, r); break;
+                case HORN: v = new Tone(f, 0, 0.12 * n.vel, n.dur, 0.1, 0.35, 0.002, 0.01, HORN_H, r); break;
+                case CHOIR: v = new Tone(f, 0, 0.075 * n.vel, n.dur, 0.45, 0.7, 0.003, 0.012, CHOIR_H, r); break;
                 case TAIKO: v = new Drum(f, 0.42 * n.vel, false, r); break;
+                case KIT: v = new Kit(n.midi, 0.36 * n.vel, r); break;
+                case SUONA: v = new Tone(f, 0, 0.10 * n.vel, n.dur, 0.04, 0.12, 0.012, 0.01, SUONA_H, r); break;
+                case YANGQIN: v = new Pluck(f, 0.28 * n.vel, 0.8, 0.22, r); break;
+                case SHENG: v = new Tone(f, 0, 0.09 * n.vel, n.dur, 0.08, 0.15, 0.002, 0.004, SHENG_H, r); break;
+                case XUN: v = new Tone(f, 0, 0.12 * n.vel, n.dur, 0.1, 0.3, 0.004, 0.035, XUN_H, r); break;
+                case XIAO: v = new Tone(f, 0, 0.12 * n.vel, n.dur, 0.12, 0.35, 0.006, 0.045, XIAO_H, r); break;
+                case MARIMBA: v = new Mallet(f, 0.30 * n.vel); break;
+                case TIMPANI: v = new Timp(f, 0.42 * n.vel, r); break;
+                case UPRIGHT: v = new Pluck(f, 0.32 * n.vel, 0.7, 0.75, r); break;
                 default: v = new Drum(f * 6, 0.22 * n.vel, true, r);
             }
             v.pan = n.pan;
@@ -424,8 +565,10 @@ final class Ambient {
         /** Fills `out` with n frames of 16-bit little-endian stereo. */
         void fill(byte[] out, int n, int m, double volume) {
             comp.mood = m;
+            if (comp.takeCut()) voices.clear();
             for (int i = 0; i < n; i++, clock++) {
                 for (Note nt = comp.poll(clock); nt != null; nt = comp.poll(clock)) spawn(nt);
+                double master = comp.masterAt(clock);
                 double l = 0, rr = 0;
                 for (int v = voices.size() - 1; v >= 0; v--) {
                     Voice vo = voices.get(v);
@@ -436,7 +579,7 @@ final class Ambient {
                 }
                 double mono = (l + rr) * 0.5;
                 double wl = revL.process(mono * 0.8), wr = revR.process(mono * 0.8);
-                double k = volume * 1.35 * (m == 2 ? 0.8 : m == 4 ? 0.7 : 1.0);
+                double k = volume * master * 1.35 * (m == 2 ? 0.8 : m == 4 ? 0.7 : 1.0);
                 int sl = (int) (Math.tanh((l * 0.7 + wl * 0.9) * 0.9) * k * 30000), sr = (int) (Math.tanh((rr * 0.7 + wr * 0.9) * 0.9) * k * 30000);
                 out[4 * i] = (byte) (sl & 0xff); out[4 * i + 1] = (byte) ((sl >> 8) & 0xff);
                 out[4 * i + 2] = (byte) (sr & 0xff); out[4 * i + 3] = (byte) ((sr >> 8) & 0xff);
@@ -457,9 +600,9 @@ final class Ambient {
 
     /** For tests and for exporting: stereo 16-bit little-endian samples at `SR`. */
     static byte[] renderStereo(int seconds, long seed, int moodValue) {
-        Composer c = new Composer(seed);
+        Conductor c = new Conductor(seed);
+        c.testMode = true;
         c.mood = moodValue;
-        c.newPiece(false);
         Synth s = new Synth(c);
         int total = (int) (SR * seconds);
         byte[] all = new byte[total * 4];
@@ -470,6 +613,18 @@ final class Ambient {
             System.arraycopy(blk, 0, all, done * 4, n * 4);
         }
         return all;
+    }
+
+    /** For the preview tool: one whole song with every optional part, as stereo 16-bit little-endian samples (at most `maxSeconds`, plus the last notes dying away). */
+    static byte[] renderScore(Score sc, int moodValue, long seed, int maxSeconds) {
+        Conductor c = new Conductor(seed);
+        c.testMode = true; c.mood = moodValue; c.forced = sc; c.once = true; c.forcedMode = "full";
+        Synth s = new Synth(c);
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        byte[] blk = new byte[2048 * 4];
+        long limit = (long) (SR * maxSeconds);
+        while (s.clock < limit && !c.finished()) { s.fill(blk, 2048, moodValue, 1.0); bo.write(blk, 0, blk.length); }
+        return bo.toByteArray();
     }
 
     // ------------------------------------------------------------------ the loop
@@ -501,14 +656,14 @@ final class Ambient {
         }
         status = "playing";
         engine = "built-in" + fallback;
-        Composer comp = new Composer(System.nanoTime() ^ 0x5DEECE66DL);
+        Conductor comp = new Conductor(System.nanoTime() ^ 0x5DEECE66DL);
         comp.mood = mood;
-        comp.newPiece(false);
         Synth syn = new Synth(comp);
         byte[] out = new byte[2048 * 4];
         try {
             while (running) {
-                if (reseed) { reseed = false; comp.mood = mood; comp.reseed(System.nanoTime(), syn.clock); }
+                if (comp.forced != pinned) comp.forced = pinned;
+                if (reseed) { reseed = false; comp.skipPiece(); }
                 syn.fill(out, 2048, mood, volume);
                 line.write(out, 0, out.length);
             }
@@ -527,23 +682,26 @@ final class Ambient {
         if (out == null) { status = "soundfont failed: " + MidiOut.lastError; return false; }
         status = "playing";
         engine = sf.getName();
-        Composer comp = new Composer(System.nanoTime() ^ 0x5DEECE66DL);
+        Conductor comp = new Conductor(System.nanoTime() ^ 0x5DEECE66DL);
         comp.mood = mood;
-        comp.newPiece(false);
         long t0 = System.nanoTime();
         List<long[]> offs = new ArrayList<>(); // {sample, channel, midi}
-        double lastVol = -1; double[] lastLayer = new double[layer.length];
+        double lastVol = -1, lastMaster = -1; double[] lastLayer = new double[layer.length];
         try {
             while (running) {
                 long now = (long) ((System.nanoTime() - t0) / 1e9 * SR);
-                if (reseed) { reseed = false; comp.mood = mood; comp.reseed(System.nanoTime(), now); out.allOff(); offs.clear(); }
+                if (comp.forced != pinned) comp.forced = pinned;
+                if (reseed) { reseed = false; comp.skipPiece(); }
                 comp.mood = mood;
-                if (volume != lastVol || !Arrays.equals(lastLayer, layer)) { lastVol = volume; lastLayer = layer.clone(); out.volumes(volume, layer); }
                 for (Note n = comp.poll(now); n != null; n = comp.poll(now)) {
-                    out.on(n.inst, n.midi, n.vel);
-                    offs.add(new long[]{n.at + (long) (n.dur * SR), n.inst, n.midi});
+                    int c = out.on(n.inst, n.midi, n.vel);
+                    for (int i = offs.size() - 1; i >= 0; i--) if (offs.get(i)[1] == c && offs.get(i)[2] == n.midi) offs.remove(i); // a struck note again: the new one's end ends both
+                    offs.add(new long[]{n.at + (long) (n.dur * SR), c, n.midi});
                 }
                 for (int i = offs.size() - 1; i >= 0; i--) if (offs.get(i)[0] <= now) { long[] o = offs.remove(i); out.off((int) o[1], (int) o[2]); }
+                if (comp.takeCut()) { out.allOff(); offs.clear(); }
+                double master = comp.masterAt(now);
+                if (volume != lastVol || Math.abs(master - lastMaster) > 0.01 || !Arrays.equals(lastLayer, layer)) { lastVol = volume; lastMaster = master; lastLayer = layer.clone(); out.volumes(volume * master, layer); }
                 Thread.sleep(8);
             }
         } catch (InterruptedException ignored) {

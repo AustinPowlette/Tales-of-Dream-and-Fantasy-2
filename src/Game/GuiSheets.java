@@ -138,10 +138,10 @@ final class GuiSheets {
         sb.append("</span>");
 
         sb.append("<h2>FORTUNE</h2><table width='100%'>");
-        sb.append(row("Potential", esc(c.potentialLabel()) + (c.potentialHidden ? " (a rumour until your first breakthrough)" : "")));
+        sb.append(row("Potential", esc(c.potentialShown()) + (c.potentialHidden ? " (a rumour until your first breakthrough)" : "")));
         sb.append(row("Rope", esc(Reincarnation.status(c).replace("Rope: ", ""))));
         sb.append(row("Wealth", PlayerLists.wealth(c) + " spirit stones"));
-        sb.append(row("Profession", "level " + c.professionLvl + " · " + c.itemsCrafted + " crafted"));
+        sb.append(row("Profession", "level " + c.professionShown() + " · " + c.itemsCrafted + " crafted" + (c.trait == Character.Traits.Innovative ? " · Inspiration " + c.inspiration + "/" + Character.INSPIRATION_NEEDED : "")));
         sb.append("</table>");
 
         Item w = c.equippedWeapon, a = c.equippedClothing;
@@ -155,7 +155,7 @@ final class GuiSheets {
         sb.append("</table>");
 
         sb.append("<h2>HOME AND FAMILY</h2><table width='100%'>");
-        if (c.sect != null) sb.append(row("Sect", "<a href='win:squad'>" + esc(c.sect.name) + "</a> · " + c.sect.getRank(c) + " · " + c.sectPoints + " points" + (c.sectMission != null ? " · mission: " + esc(c.sectMission) : "")));
+        if (c.sect != null) sb.append(row("Sect", "<a href='win:squad'>" + esc(c.sect.name) + "</a> · " + c.sect.getRank(c) + " · " + c.sectPoints + " points" + (c.sectMission != null ? " · mission: " + esc(c.missionLine()) : "")));
         else sb.append(row("Sect", "none"));
         if (c.location != null) sb.append(row("Place", "<a href='place:" + c.location.x + ":" + c.location.y + "'>" + esc(c.location.name) + "</a> " + PlayerControl.coord(c.location) + (c.location.city ? " · city" : "")));
         if (c.spouse != null) sb.append(row("Spouse", "<a href='char:" + c.spouse.id + "'>" + esc(c.spouse.name + " " + c.spouse.lastName) + "</a>"));
@@ -227,37 +227,38 @@ final class GuiSheets {
         JComboBox<String> kind = new JComboBox<>(new String[]{"everyone", "friends", "rivals and enemies", "family"});
         JPanel top = GuiWindows.flow(FlowLayout.LEFT);
         top.add(GuiWindows.label("Find:")); top.add(filter); top.add(kind);
-        sheet(mv, "relations", "Relations", 620, 640, 2500, () -> {
-            Character c = mv.findPlayer();
-            if (c == null) return page("<h1>No player character</h1>");
-            String q = filter.getText().trim().toLowerCase();
-            int k = kind.getSelectedIndex();
-            StringBuilder sb = new StringBuilder("<h1>Relationships</h1>");
-            if (c.spouse != null) sb.append("<span class='dim'>Spouse: </span><a href='char:" + c.spouse.id + "'>" + esc(c.spouse.name + " " + c.spouse.lastName) + "</a>  ");
-            if (c.mother != null) sb.append("<span class='dim'>Mother: </span><a href='char:" + c.mother.id + "'>" + esc(c.mother.name) + "</a>  ");
-            if (c.father != null) sb.append("<span class='dim'>Father: </span><a href='char:" + c.father.id + "'>" + esc(c.father.name) + "</a>  ");
-            sb.append("<table width='100%'><tr><th>Name</th><th>Bond</th><th>Lv</th><th>Alive</th><th>Where</th></tr>");
-            List<Relationship> rels = new ArrayList<>(c.relationshipList.relationships);
-            rels.sort((x, y) -> Integer.compare(y.value, x.value));
-            int shown = 0;
-            for (Relationship r : rels) {
-                Character f = Character.charById(r.friendID);
-                if (f == null || f.dead) continue;
-                boolean fam = f == c.spouse || f == c.mother || f == c.father || c.children.contains(f) || c.siblings.contains(f);
-                if (k == 1 && r.value < 1) continue;
-                if (k == 2 && r.value > -1) continue;
-                if (k == 3 && !fam) continue;
-                String nm = f.name + " " + f.lastName;
-                if (!q.isEmpty() && !nm.toLowerCase().contains(q)) continue;
-                if (shown++ >= 400) break;
-                String col = r.value >= 1 ? hex(Theme.OK) : r.value <= -1 ? hex(Theme.DANGER) : hex(Theme.DIM);
-                sb.append("<tr><td><a href='char:").append(f.id).append("'>").append(esc(nm)).append("</a>").append(fam ? " <span class='dim'>(family)</span>" : "").append("</td><td><font color='").append(col).append("'>").append(relLabel(r.value)).append(" (").append(r.value).append(")</font></td><td>")
-                  .append(f.lvl).append("</td><td>yes</td><td class='dim'>").append(f.location == null ? "?" : esc(f.location.name)).append("</td></tr>");
-            }
-            sb.append("</table>");
-            if (shown == 0) sb.append("<p class='dim'>Nobody matches.</p>");
-            return page(sb.toString());
-        }, top);
+        sheet(mv, "relations", "Relations", 620, 640, 2500, () -> relationsHtml(mv.findPlayer(), filter.getText().trim().toLowerCase(), kind.getSelectedIndex(), 400), top);
+    }
+
+    /** The relationship table: kind 0 everyone, 1 friends, 2 rivals and enemies, 3 family; q filters by name. A bar shows how strong each bond is. */
+    static String relationsHtml(Character c, String q, int k, int limit) {
+        if (c == null) return page("<h1>No player character</h1>");
+        StringBuilder sb = new StringBuilder("<h1>Relationships</h1>");
+        if (c.spouse != null) sb.append("<span class='dim'>Spouse: </span><a href='char:" + c.spouse.id + "'>" + esc(c.spouse.name + " " + c.spouse.lastName) + "</a>  ");
+        if (c.mother != null) sb.append("<span class='dim'>Mother: </span><a href='char:" + c.mother.id + "'>" + esc(c.mother.name) + "</a>  ");
+        if (c.father != null) sb.append("<span class='dim'>Father: </span><a href='char:" + c.father.id + "'>" + esc(c.father.name) + "</a>  ");
+        sb.append("<table width='100%'><tr><th>Name</th><th>Bond</th><th width='22%'></th><th>Lv</th><th>Where</th></tr>");
+        List<Relationship> rels = new ArrayList<>(c.relationshipList.relationships);
+        rels.sort((x, y) -> Integer.compare(y.value, x.value));
+        int shown = 0;
+        for (Relationship r : rels) {
+            Character f = Character.charById(r.friendID);
+            if (f == null || f.dead) continue;
+            boolean fam = f == c.spouse || f == c.mother || f == c.father || c.children.contains(f) || c.siblings.contains(f);
+            if (k == 1 && r.value < 1) continue;
+            if (k == 2 && r.value > -1) continue;
+            if (k == 3 && !fam) continue;
+            String nm = f.name + " " + f.lastName;
+            if (!q.isEmpty() && !nm.toLowerCase().contains(q)) continue;
+            if (shown++ >= limit) break;
+            Color colr = r.value >= 1 ? Theme.OK : r.value <= -1 ? Theme.DANGER : Theme.DIM;
+            sb.append("<tr><td><a href='char:").append(f.id).append("'>").append(esc(nm)).append("</a>").append(fam ? " <span class='dim'>(family)</span>" : "").append("</td><td><font color='").append(hex(colr)).append("'>").append(relLabel(r.value)).append(" (").append(r.value).append(")</font></td><td>")
+              .append(r.value == 0 ? "" : bar(Math.max(0.06, Math.min(1, Math.abs(r.value) / 3.0)), colr)).append("</td><td>")
+              .append(f.lvl).append("</td><td class='dim'>").append(f.location == null ? "?" : esc(f.location.name)).append("</td></tr>");
+        }
+        sb.append("</table>");
+        if (shown == 0) sb.append("<p class='dim'>Nobody matches. Talk, spar and travel to make friends — and rivals.</p>");
+        return page(sb.toString());
     }
 
     // ------------------------------------------------------------------ the generic info window (replaces the modal pop-ups)
@@ -291,12 +292,19 @@ final class GuiSheets {
 
     // ------------------------------------------------------------------ Squad & sect
     static void squadWindow(MapViewer mv) {
-        GuiWindows.window(mv, "squad", "Squad & Sect", 760, 620, 2000, (d, refreshers) -> {
+        GuiWindows.window(mv, "squad", "Squad & Sect", 820, 760, 2000, (d, refreshers) -> {
             DefaultTableModel pm = GuiWindows.model(), sm = GuiWindows.model();
             JTable pt = GuiWindows.table(pm), st = GuiWindows.table(sm);
             final List<Character> partyRows = new ArrayList<>(), sectRows = new ArrayList<>();
-            JLabel partyHead = GuiWindows.label(" "), sectHead = GuiWindows.label(" ");
-            partyHead.setFont(GuiWindows.MONO_B); sectHead.setFont(GuiWindows.MONO_B);
+            JLabel partyHead = GuiWindows.label(" ");
+            partyHead.setFont(GuiWindows.MONO_B);
+            GuiWindows.rankCells(st);
+            JComponent sectBanner = GuiPages.pane(mv, refreshers, () -> {
+                Character c = GuiWindows.player(mv);
+                if (c == null) return page("<h1>No player character</h1>");
+                return GuiPages.sectHtml(c.sect != null ? c.sect : c.location == null ? null : c.location.sect, c, false);
+            });
+            sectBanner.setPreferredSize(new Dimension(400, 190));
             refreshers.add(() -> {
                 Character c = GuiWindows.player(mv);
                 if (c == null) { partyHead.setText("No player character."); return; }
@@ -312,20 +320,20 @@ final class GuiSheets {
                 for (Character x : members) { partyRows.add(x); rows.add(new Object[]{x.name + " " + x.lastName + (x == c ? "  (you)" : ""), x == leader ? "leader" : "member", x.lvl, x.getTrait(), x.location == null ? "?" : x.location.name}); }
                 for (Character b : Taming.peek(c)) { partyRows.add(null); rows.add(new Object[]{b.name + " " + b.lastName, "companion beast", b.lvl, "Beast", b.location == null ? "?" : b.location.name}); }
                 pm.setDataVector(rows.toArray(new Object[0][]), new String[]{"Name", "Role", "Lv", "Trait", "Where"});
+                pt.getColumnModel().getColumn(0).setPreferredWidth(240);
                 partyHead.setText(inParty ? "Your squad — led by " + leader.name + " " + leader.lastName : "You are not in a squad (invite someone from the tile, or join a leader).");
                 // sect
                 Organization s = c.sect;
                 List<Object[]> srows = new ArrayList<>();
                 sectRows.clear();
-                if (s == null) sectHead.setText("You belong to no sect." + (c.location != null && c.location.sect != null ? " " + c.location.sect.name + " is here: " + c.location.sect.rulesText() + "." : ""));
-                else {
-                    sectHead.setText(s.name + " — " + s.members.size() + " members · master " + (s.master != null ? s.master.name + " " + s.master.lastName : s.isVirtual() ? "???" : "none") + " · rules: " + s.rulesText());
+                if (s != null) {
                     List<Character> mem = new ArrayList<>(s.members);
                     mem.removeIf(x -> x == null || x.dead);
                     mem.sort((x, y) -> { int rx = s.getRank(x).ordinal(), ry = s.getRank(y).ordinal(); return rx != ry ? Integer.compare(ry, rx) : Integer.compare(y.lvl, x.lvl); });
                     for (Character x : mem) { sectRows.add(x); srows.add(new Object[]{x.name + " " + x.lastName + (x == c ? "  (you)" : ""), s.getRank(x), x.lvl, x.sectPoints, x.location == null ? "?" : x.location.name, PlayerControl.distance(c.location, x.location) + " tiles"}); }
                 }
                 sm.setDataVector(srows.toArray(new Object[0][]), new String[]{"Name", "Rank", "Lv", "Points", "Where", "Distance"});
+                st.getColumnModel().getColumn(0).setPreferredWidth(240);
             });
             java.awt.event.MouseAdapter open = new java.awt.event.MouseAdapter() {
                 @Override public void mouseClicked(java.awt.event.MouseEvent e) {
@@ -355,9 +363,9 @@ final class GuiSheets {
             JPanel top = new JPanel(new BorderLayout(4, 4)); top.setBackground(GuiWindows.BG);
             top.add(partyHead, BorderLayout.NORTH); top.add(new JScrollPane(pt), BorderLayout.CENTER); top.add(pb, BorderLayout.SOUTH);
             JPanel bottom = new JPanel(new BorderLayout(4, 4)); bottom.setBackground(GuiWindows.BG);
-            bottom.add(sectHead, BorderLayout.NORTH); bottom.add(new JScrollPane(st), BorderLayout.CENTER); bottom.add(sb, BorderLayout.SOUTH);
+            bottom.add(sectBanner, BorderLayout.NORTH); bottom.add(new JScrollPane(st), BorderLayout.CENTER); bottom.add(sb, BorderLayout.SOUTH);
             JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, top, bottom);
-            split.setResizeWeight(0.4); split.setBackground(GuiWindows.BG);
+            split.setResizeWeight(0.3); split.setBackground(GuiWindows.BG);
             return split;
         });
     }

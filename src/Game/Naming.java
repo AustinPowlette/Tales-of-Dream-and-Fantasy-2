@@ -295,43 +295,114 @@ public final class Naming {
     }
 
     // ------------------------------------------------------------------ reputation titles
-    /** The title a cultivator has earned, or null. Deterministic (same input, same title) so it does not flicker from year to year. */
-    static String title(Character c) {
+    /** At most this many cultivators hold any one kind of title (a "Demon Butcher" is one of the ten best killers, not everybody who hunted a hundred beasts). */
+    static final int TITLE_HOLDERS = 10;
+
+    /** The title a cultivator qualifies for, or null. Deterministic (same input, same title) so it does not flicker from year to year. */
+    static String title(Character c) { return title(c, java.util.Collections.<String>emptySet()); }
+
+    /** The same, skipping the kinds of title in `barred` (the ones this cultivator qualifies for but is not among the best ten of). */
+    static String title(Character c, java.util.Set<String> barred) {
         boolean f = "Female".equals(c.gender);
-        if (c.majorLvl >= 10) return "True Immortal";
-        if (c.kills >= 500) return "God Slayer";
-        if (c.majorLvl >= 9) return "Pseudo Immortal Venerable";
-        if (c.majorLvl >= 8) return f ? "Heaven-Ascending Matriarch" : "Heaven-Ascending Patriarch";
-        if (c.majorLvl >= 7) return c.id % 2 == 0 ? "Ascendant Venerable" : "Sovereign of the Ascension";
-        if (c.sect != null && c.sect.master == c && c.majorLvl >= 3) return "Master of the " + c.sect.name;
-        if (c.kills >= 300) return f ? "Blood-Soaked Empress" : "Blood-Soaked Tyrant";
-        if (c.kills >= 100) return f ? "Demoness Butcher" : "Demon Butcher";
-        if (c.majorLvl >= 5) return f ? "Nascent Soul Lady" : "Nascent Soul Elder";
+        String t = null;
+        if (c.majorLvl >= 10) t = "True Immortal";
+        if (t != null && !barred.contains(titleFamily(t))) return t;
+        if (c.majorLvl >= 9) { t = "Pseudo Immortal Venerable"; if (!barred.contains(titleFamily(t))) return t; }
+        if (c.majorLvl >= 8) { t = f ? "Heaven-Ascending Matriarch" : "Heaven-Ascending Patriarch"; if (!barred.contains(titleFamily(t))) return t; }
+        if (c.majorLvl >= 7) { t = c.id % 2 == 0 ? "Ascendant Venerable" : "Sovereign of the Ascension"; if (!barred.contains(titleFamily(t))) return t; }
+        if (c.sect != null && c.sect.master == c && c.majorLvl >= 3) return "Master of the " + c.sect.name; // one per sect: not limited
+        if (c.majorLvl >= 5) { t = f ? "Nascent Soul Lady" : "Nascent Soul Elder"; if (!barred.contains(titleFamily(t))) return t; }
+        t = null;
         switch (c.trait) {
-            case Alchemist: if (c.itemsCrafted >= 400 && c.majorLvl >= 2) return "Pill Sage"; break;
-            case Blacksmith: if (c.itemsCrafted >= 400 && c.majorLvl >= 2) return "Forge Master"; break;
-            case Scribe: if (c.itemsCrafted >= 300 && c.majorLvl >= 2) return "Keeper of Scrolls"; break;
-            case Merchant: if (PlayerLists.wealth(c) >= 1_000_000_000L) return "Golden Abacus"; break;
-            case Runner: if (c.age >= 40 && c.majorLvl >= 2) return "Thousand-Mile Wanderer"; break;
-            case Friendly: if (c.relationshipList != null && c.relationshipList.relationships.size() >= 25) return "Friend of All"; break;
-            case Lucky: if (c.majorLvl >= 2 && c.age >= 40) return "The Fortunate"; break;
-            case Ghost: if (c.originalName != null || c.isGhostForm) return "The Twice-Born"; break;
+            case Alchemist: if (c.itemsCrafted >= 400 && c.majorLvl >= 2) t = "Pill Sage"; break;
+            case Blacksmith: if (c.itemsCrafted >= 400 && c.majorLvl >= 2) t = "Forge Master"; break;
+            case Scribe: if (c.itemsCrafted >= 300 && c.majorLvl >= 2) t = "Keeper of Scrolls"; break;
+            case Runner: if (c.age >= 40 && c.majorLvl >= 2) t = "Thousand-Mile Wanderer"; break;
+            case Friendly: if (c.relationshipList != null && c.relationshipList.relationships.size() >= 25) t = "Friend of All"; break;
+            case Lucky: if (c.majorLvl >= 2 && c.age >= 40) t = "The Fortunate"; break;
+            case Ghost: if (c.originalName != null || c.isGhostForm) t = "The Twice-Born"; break;
             default: break;
         }
-        if (c.kills >= 50) return f ? "Slaughter Maiden" : "Slaughter King";
+        if (t != null && !barred.contains(titleFamily(t))) return t;
         if (c.professionLvl >= 100 && c.trait != null) {
+            t = null;
             switch (c.trait) {
-                case Alchemist: return f ? "Pill Queen" : "Pill King";
-                case Blacksmith: return f ? "Forge Lady" : "Forge Saint";
-                case Tailor: return "Robe Saint";
-                case Scribe: return "Array Sage";
-                case Innovative: return "Technique Ancestor";
-                case Merchant: return f ? "Trade Queen" : "Trade King";
+                case Alchemist: t = f ? "Pill Queen" : "Pill King"; break;
+                case Blacksmith: t = f ? "Forge Lady" : "Forge Saint"; break;
+                case Tailor: t = "Robe Saint"; break;
+                case Scribe: t = "Array Sage"; break;
+                case Innovative: t = "Technique Ancestor"; break;
+                case Merchant: t = f ? "Trade Queen" : "Trade King"; break;
                 default: break;
             }
+            if (t != null && !barred.contains(titleFamily(t))) return t;
         }
-        if (c.majorLvl >= 3 && c.kills >= 30) return f ? "Ironhand Lady" : "Ironhand";
         return null;
+    }
+
+    /** The kind a title belongs to (the two genders of a title are one kind); null = not limited (a sect master's title is one per sect). */
+    static String titleFamily(String t) {
+        if (t == null || t.startsWith("Master of the ")) return null;
+        switch (t) {
+            case "Heaven-Ascending Matriarch": case "Heaven-Ascending Patriarch": return "Heaven-Ascending";
+            case "Ascendant Venerable": case "Sovereign of the Ascension": return "Ascension";
+            case "Nascent Soul Lady": case "Nascent Soul Elder": return "Nascent Soul";
+            case "Pill Queen": case "Pill King": return "Pill monarch";
+            case "Forge Lady": case "Forge Saint": return "Forge saint";
+            case "Trade Queen": case "Trade King": return "Trade monarch";
+            default: return t;
+        }
+    }
+
+    /** How strongly a cultivator holds a kind of title (who is among the best ten). */
+    static long titleMetric(Character c, String family) {
+        switch (family) {
+            case "Pill Sage": case "Forge Master": case "Keeper of Scrolls": return c.itemsCrafted;
+            case "Pill monarch": case "Forge saint": case "Trade monarch": case "Robe Saint": case "Array Sage": case "Technique Ancestor": return c.professionLvl;
+            case "Friend of All": return c.relationshipList == null ? 0 : c.relationshipList.relationships.size();
+            case "Thousand-Mile Wanderer": case "The Fortunate": case "The Twice-Born": return c.age;
+            default: return c.majorLvl * 100000L + c.lvl * 1000L + Math.min(999, c.kills);
+        }
+    }
+
+    /** Once a year: every living cultivator gets the best title they qualify for among the kinds they are in the top ten of (others fall to the next title down, or none). */
+    static void assignTitles(java.util.List<Character> all) {
+        Rankings.yearly(all); // the boards first: a place on one (Strongest, Richest, Most Kills) gives the grandest title
+        java.util.Map<Character, java.util.Set<String>> barred = new java.util.IdentityHashMap<>();
+        java.util.Map<Character, String> got = new java.util.IdentityHashMap<>();
+        for (int round = 0; round < 8; round++) {
+            got.clear();
+            java.util.Map<String, java.util.List<Character>> byKind = new java.util.HashMap<>();
+            for (Character c : all) {
+                if (c == null || c.dead || !c.born || c.trait == Character.Traits.Beast || c.wanderingImmortal) continue;
+                java.util.Set<String> b = barred.get(c);
+                String t = title(c, b == null ? java.util.Collections.<String>emptySet() : b);
+                if (t == null) continue;
+                got.put(c, t);
+                String fam = titleFamily(t);
+                if (fam != null) { java.util.List<Character> l = byKind.get(fam); if (l == null) byKind.put(fam, l = new java.util.ArrayList<>()); l.add(c); }
+            }
+            boolean changed = false;
+            for (java.util.Map.Entry<String, java.util.List<Character>> e : byKind.entrySet()) {
+                java.util.List<Character> l = e.getValue();
+                if (l.size() <= TITLE_HOLDERS) continue;
+                final String fam = e.getKey();
+                l.sort((x, y) -> { int d = Long.compare(titleMetric(y, fam), titleMetric(x, fam)); return d != 0 ? d : Integer.compare(x.id, y.id); });
+                for (int i = TITLE_HOLDERS; i < l.size(); i++) {
+                    java.util.Set<String> b = barred.get(l.get(i));
+                    if (b == null) barred.put(l.get(i), b = new java.util.HashSet<>());
+                    b.add(fam);
+                    changed = true;
+                }
+            }
+            if (!changed) break;
+        }
+        for (Character c : all) {
+            if (c == null || c.dead || !c.born || c.trait == Character.Traits.Beast) continue;
+            if (c.wanderingImmortal) { c.repTitle = "Wandering Immortal"; continue; }
+            String board = Rankings.title(c);
+            c.repTitle = board != null ? board : got.get(c);
+        }
     }
 
     // ------------------------------------------------------------------ items

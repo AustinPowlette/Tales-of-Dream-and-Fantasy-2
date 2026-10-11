@@ -35,30 +35,35 @@ final class GuiMore {
 
     /** Opens the backpack window on a tab ("Gear", "Techniques", "Companions", ...), also when it is already open. */
     static void backpackWindow(MapViewer mv, String tab) {
-        JDialog bw0 = GuiWindows.window(mv, "backpack", "Backpack & equipment", 820, 600, 1500, (d, refreshers) -> {
+        JDialog bw0 = GuiWindows.window(mv, "backpack", "Backpack & equipment", 860, 640, 1500, (d, refreshers) -> {
             JTabbedPane tabs = new JTabbedPane();
             tabs.setFont(GuiWindows.MONO_B);
             d.getRootPane().putClientProperty("tabs", tabs);
 
-            // ---- gear
-            JTextArea worn = area("");
-            worn.setRows(5);
-            DefaultTableModel gm = GuiWindows.model();
-            gm.setColumnIdentifiers(new String[]{"#", "Item", "Kind", "Lvl", "Enchant", "Fight lvl if worn"});
-            JTable gt = GuiWindows.table(gm);
-            gt.getColumnModel().getColumn(0).setMaxWidth(40);
+            // ---- gear: what you wear (two cards) above what you carry (rows with the change in fighting level)
+            GuiItems.WornCard wWeapon = new GuiItems.WornCard("WEAPON"), wArmor = new GuiItems.WornCard("ARMOR");
+            JLabel fight = new JLabel(" ");
+            fight.setFont(Theme.plain(13)); fight.setForeground(Theme.DIM);
+            JPanel cards = new JPanel(new GridLayout(1, 2, 8, 0)); cards.setBackground(BG);
+            cards.add(wWeapon); cards.add(wArmor);
+            JPanel wornBox = new JPanel(new BorderLayout(0, 4)); wornBox.setBackground(BG);
+            wornBox.setBorder(BorderFactory.createEmptyBorder(6, 6, 2, 6));
+            wornBox.add(cards, BorderLayout.CENTER); wornBox.add(fight, BorderLayout.SOUTH);
+            DefaultListModel<GuiItems.Entry> gm = new DefaultListModel<>();
+            JList<GuiItems.Entry> gl = GuiItems.list(gm);
             JLabel hint = GuiWindows.label("Select an item to compare it with what you wear.");
+            final int[] fightNow = {0};
             JPanel btns = GuiWindows.flow(FlowLayout.LEFT);
-            btns.add(mv.makeBtn("Equip selected", () -> { int r = gt.getSelectedRow(); if (r >= 0) mv.queueInput("equip " + (r + 1)); }));
+            btns.add(mv.makeBtn("Equip selected", () -> { int r = GuiItems.selected(gl); if (r >= 0) mv.queueInput("equip " + (r + 1)); }));
             btns.add(mv.makeBtn("Equip best", () -> mv.queueInput("equip")));
-            btns.add(mv.makeBtn("Sell selected", () -> { int r = gt.getSelectedRow(); if (r >= 0) mv.queueInput("sell " + (r + 1)); }));
+            btns.add(mv.makeBtn("Sell selected", () -> { int r = GuiItems.selected(gl); if (r >= 0) mv.queueInput("sell " + (r + 1)); }));
             btns.add(mv.makeBtn("Sell all (city)", () -> mv.queueInput("sell")));
             btns.add(mv.makeBtn("Consume pills", () -> mv.queueInput("consume")));
             JPanel south = new JPanel(new BorderLayout()); south.setBackground(BG);
             south.add(hint, BorderLayout.NORTH); south.add(btns, BorderLayout.CENTER);
             JPanel gear = new JPanel(new BorderLayout(4, 4)); gear.setBackground(BG);
-            gear.add(worn, BorderLayout.NORTH);
-            gear.add(new JScrollPane(gt), BorderLayout.CENTER);
+            gear.add(wornBox, BorderLayout.NORTH);
+            gear.add(new JScrollPane(gl), BorderLayout.CENTER);
             gear.add(south, BorderLayout.SOUTH);
             tabs.addTab("Gear", gear);
 
@@ -79,30 +84,36 @@ final class GuiMore {
             tech.add(tb, BorderLayout.SOUTH);
             tabs.addTab("Techniques", tech);
 
-            // ---- stores
-            JTextArea stores = area("");
-            tabs.addTab("Materials, pills, arrays", new JScrollPane(stores));
+            // ---- stores: herbs, metals, blood, pills, arrays
+            DefaultListModel<GuiItems.Entry> sm = new DefaultListModel<>();
+            JList<GuiItems.Entry> sl = GuiItems.list(sm);
+            JLabel storeSum = GuiWindows.label(" ");
+            JPanel sbtns = GuiWindows.flow(FlowLayout.LEFT);
+            sbtns.add(mv.makeBtn("Consume pills", () -> mv.queueInput("consume")));
+            sbtns.add(mv.makeBtn("Sell all (city)", () -> mv.queueInput("sell")));
+            sbtns.add(GuiWindows.label("Herbs and metal feed a trade; pills raise cultivation or potential."));
+            JPanel stores = new JPanel(new BorderLayout(4, 4)); stores.setBackground(BG);
+            stores.add(storeSum, BorderLayout.NORTH); stores.add(new JScrollPane(sl), BorderLayout.CENTER); stores.add(sbtns, BorderLayout.SOUTH);
+            tabs.addTab("Materials, pills, arrays", stores);
 
             // ---- goods: food, wine, poison, music
-            DefaultTableModel om = GuiWindows.model();
-            om.setColumnIdentifiers(new String[]{"#", "Goods", "Kind", "Lvl", "Qty"});
-            JTable ot = GuiWindows.table(om);
-            ot.getColumnModel().getColumn(0).setMaxWidth(40);
+            DefaultListModel<GuiItems.Entry> om = new DefaultListModel<>();
+            JList<GuiItems.Entry> ol = GuiItems.list(om);
             JLabel cond = GuiWindows.label(" ");
             JPanel ob = GuiWindows.flow(FlowLayout.LEFT);
-            ob.add(mv.makeBtn("Eat", () -> { int r = ot.getSelectedRow(); mv.queueInput(r >= 0 ? "eat " + (r + 1) : "eat"); }));
-            ob.add(mv.makeBtn("Drink", () -> { int r = ot.getSelectedRow(); mv.queueInput(r >= 0 ? "drink " + (r + 1) : "drink"); }));
+            ob.add(mv.makeBtn("Eat", () -> { int r = GuiItems.selected(ol); mv.queueInput(r >= 0 ? "eat " + (r + 1) : "eat"); }));
+            ob.add(mv.makeBtn("Drink", () -> { int r = GuiItems.selected(ol); mv.queueInput(r >= 0 ? "drink " + (r + 1) : "drink"); }));
             ob.add(mv.makeBtn("Make food", () -> mv.queueInput("make food")));
             ob.add(mv.makeBtn("Make wine", () -> mv.queueInput("make wine")));
             ob.add(mv.makeBtn("Make poison", () -> mv.queueInput("make poison")));
-            ob.add(mv.makeBtn("Make instrument", () -> mv.queueInput("make instrument")));
             ob.add(mv.makeBtn("Play", () -> mv.queueInput("play")));
+            ob.add(mv.makeBtn("Perform", () -> mv.queueInput("perform")));
             ob.add(mv.makeBtn("Coat blade", () -> mv.queueInput("coat")));
             JPanel ogoods = new JPanel(new BorderLayout(4, 4)); ogoods.setBackground(BG);
-            ogoods.add(new JScrollPane(ot), BorderLayout.CENTER);
+            ogoods.add(new JScrollPane(ol), BorderLayout.CENTER);
             JPanel osouth = new JPanel(new BorderLayout()); osouth.setBackground(BG);
-            osouth.add(cond, BorderLayout.NORTH); osouth.add(ob, BorderLayout.CENTER);
-            ogoods.add(osouth, BorderLayout.SOUTH);
+            osouth.add(ob, BorderLayout.CENTER);
+            ogoods.add(cond, BorderLayout.NORTH); ogoods.add(osouth, BorderLayout.SOUTH);
             tabs.addTab("Food, wine, poison", ogoods);
 
             // ---- companions
@@ -121,38 +132,62 @@ final class GuiMore {
 
             refreshers.add(() -> {
                 Character p = GuiWindows.player(mv);
-                if (p == null) { worn.setText("No player character."); return; }
+                if (p == null) { fight.setText("No player character."); return; }
                 Item w = p.equippedWeapon, a = p.equippedClothing;
-                String t = "Weapon: " + (w == null ? "none" : w) + "\nArmor:  " + (a == null ? "none" : a)
-                        + "\nFighting level " + TextTools.power(p, w, a) + "  (level " + p.lvl + " + gear + techniques, divided by 5)   Wealth " + p.ss + " ss";
-                if (!worn.getText().equals(t)) worn.setText(t);
-                int sel = gt.getSelectedRow();
-                List<Object[]> rows = new ArrayList<>();
-                List<Item> bag = new ArrayList<>(p.backpack);
+                wWeapon.set(w); wArmor.set(a);
                 int base = TextTools.power(p, w, a);
+                fightNow[0] = base;
+                fight.setText("<html>Fighting level <b><font color='" + Theme.hex(Theme.GOLD) + "'>" + base + "</font></b> — your level " + p.lvl + " plus gear and techniques, divided by 5.   Wealth <b>" + p.ss + "</b> ss</html>");
+                List<GuiItems.Entry> rows = new ArrayList<>();
+                List<Item> bag = new ArrayList<>(p.backpack);
                 for (int i = 0; i < bag.size(); i++) {
                     Item it = bag.get(i);
+                    GuiItems.Entry e = new GuiItems.Entry(it);
+                    e.index = i; e.makerShown = true;
                     boolean wear = it.itemType == Item.ItemType.Weapon || it.itemType == Item.ItemType.Clothing;
-                    String after = "";
-                    if (wear) { int pw = it.itemType == Item.ItemType.Weapon ? TextTools.power(p, it, a) : TextTools.power(p, w, it); after = pw + (pw > base ? "  ▲" : pw < base ? "  ▼" : "  ="); }
-                    rows.add(new Object[]{i + 1, it.name, it.itemType == null ? "?" : it.itemType.name(), it.lvl, it.enchantment == null ? "" : it.enchantment + " +" + it.enchantBonus, after});
+                    if (wear) {
+                        int pw = it.itemType == Item.ItemType.Weapon ? TextTools.power(p, it, a) : TextTools.power(p, w, it);
+                        e.after = pw;
+                        e.badge = pw > base ? "▲ " + pw : pw < base ? "▼ " + pw : "= " + pw;
+                        e.badgeColor = pw > base ? Theme.OK : pw < base ? Theme.DANGER : Theme.DIM;
+                    } else if (it.stackable || it.quantity > 1) { e.badge = "×" + it.quantity; e.badgeColor = Theme.TEXT; }
+                    rows.add(e);
                 }
-                setRows(gm, rows);
-                if (sel >= 0 && sel < gm.getRowCount()) gt.setRowSelectionInterval(sel, sel);
+                if (rows.isEmpty()) rows.add(GuiItems.Entry.header("Your backpack is empty — hunt, craft or buy gear (Buy gear in a city)"));
+                GuiItems.fill(gl, gm, rows);
+
                 List<Object[]> trows = new ArrayList<>();
                 Object[][] slots = {{"Martial", p.martialTechnique}, {"Martial 2", p.martialTechnique2}, {"Movement", p.movementTechnique}, {"Movement 2", p.movementTechnique2}};
                 for (Object[] s : slots) { Technique q = (Technique) s[1]; if (q != null) trows.add(new Object[]{s[0], q.name, q.getType(), q.lvl, q.potential, mastery(q), q.maker}); }
                 for (Technique q : new ArrayList<>(p.techniqueList)) trows.add(new Object[]{"known", q.name, q.getType(), q.lvl, q.potential, mastery(q), q.maker});
                 setRows(tm, trows);
-                StringBuilder sb = new StringBuilder();
-                sb.append("Materials: ").append(p.materialBag).append("\n\nPills: ").append(p.pillBag).append("\n\nArrays: ").append(p.arrayBag).append("\n");
-                if (!stores.getText().equals(sb.toString())) stores.setText(sb.toString());
-                int osel = ot.getSelectedRow();
-                List<Object[]> orows = new ArrayList<>();
+
+                List<GuiItems.Entry> srows = new ArrayList<>();
+                List<Item> herbs = new ArrayList<>(), metals = new ArrayList<>(), bloods = new ArrayList<>(), potPills = new ArrayList<>(), cultPills = new ArrayList<>();
+                for (Item it : new ArrayList<>(p.materialBag)) {
+                    if (it == null || it.itemType == null) continue;
+                    if (it.itemType == Item.ItemType.Herb) herbs.add(it); else if (it.itemType == Item.ItemType.Metal) metals.add(it); else bloods.add(it);
+                }
+                for (Item it : new ArrayList<>(p.pillBag)) { if (it == null) continue; if (it.pillType == Item.PillType.Potential) potPills.add(it); else cultPills.add(it); }
+                GuiItems.group(srows, "Herbs", herbs); GuiItems.group(srows, "Metals", metals); GuiItems.group(srows, "Blood", bloods);
+                GuiItems.group(srows, "Pills that raise potential", potPills); GuiItems.group(srows, "Pills that raise cultivation", cultPills);
+                GuiItems.group(srows, "Arrays", new ArrayList<>(p.arrayBag));
+                int stacks = herbs.size() + metals.size() + bloods.size() + potPills.size() + cultPills.size() + p.arrayBag.size();
+                if (srows.isEmpty()) srows.add(GuiItems.Entry.header("Nothing here yet — forage herbs, mine metal, craft pills and arrays"));
+                storeSum.setText(stacks == 0 ? "You carry no materials, pills or arrays." : stacks + " stacks: " + herbs.size() + " herbs, " + metals.size() + " metals, " + (potPills.size() + cultPills.size()) + " pills, " + p.arrayBag.size() + " arrays.");
+                GuiItems.fill(sl, sm, srows);
+
+                List<GuiItems.Entry> orows = new ArrayList<>();
                 List<Item> goodsNow = p.goods == null ? new ArrayList<Item>() : new ArrayList<>(p.goods);
-                for (int i = 0; i < goodsNow.size(); i++) { Item it = goodsNow.get(i); orows.add(new Object[]{i + 1, it.name, it.itemType == null ? "?" : it.itemType.name(), it.lvl, it.quantity}); }
-                setRows(om, orows);
-                if (osel >= 0 && osel < om.getRowCount()) ot.setRowSelectionInterval(osel, osel);
+                for (int i = 0; i < goodsNow.size(); i++) {
+                    Item it = goodsNow.get(i);
+                    if (it == null) continue;
+                    GuiItems.Entry e = new GuiItems.Entry(it);
+                    e.index = i; e.badge = "×" + it.quantity; e.badgeColor = Theme.TEXT;
+                    orows.add(e);
+                }
+                if (orows.isEmpty()) orows.add(GuiItems.Entry.header("No food, wine or poison — Make food / Make wine from herbs, or buy at the market"));
+                GuiItems.fill(ol, om, orows);
                 Life.Fx fx = p.fx;
                 String cs = fx == null ? "No special conditions." : "Conditions: " + (fx.foodWeeks > 0 ? "nourished " + fx.foodWeeks + "w   " : "") + (fx.drunkWeeks > 0 ? "drunk " + fx.drunkWeeks + "w   " : "")
                         + (fx.inspiredWeeks > 0 ? "inspired " + fx.inspiredWeeks + "w   " : "") + (fx.poisonWeeks > 0 ? "POISONED Lv." + fx.poisonLvl + " " + fx.poisonWeeks + "w   " : "") + (fx.coat > 0 ? "poisoned blade x" + fx.coat : "");
@@ -165,13 +200,11 @@ final class GuiMore {
                 if (csel >= 0 && csel < cm.getRowCount()) ct.setRowSelectionInterval(csel, csel);
                 ccap.setText("Companions " + bs.size() + " / " + Taming.cap(p) + "  (a cultivator may keep Major Lvl + 1; they follow you and fight beside you)");
             });
-            gt.getSelectionModel().addListSelectionListener(e -> {
-                int r = gt.getSelectedRow();
-                if (r < 0 || e.getValueIsAdjusting()) return;
-                Object after = gm.getValueAt(r, 5);
-                Character pl0 = GuiWindows.player(mv);
-                if (pl0 != null && r < pl0.backpack.size() && Settings.pictures) hint.setIcon(new ImageIcon(ArtMore.itemIcon(pl0.backpack.get(r), 48)));
-                hint.setText(after == null || after.toString().isEmpty() ? "Not wearable gear." : "Wearing it makes your fighting level " + after + "  (now " + (worn.getText().replaceAll("(?s).*Fighting level (\\d+).*", "$1")) + ").");
+            gl.addListSelectionListener(e -> {
+                if (e.getValueIsAdjusting()) return;
+                GuiItems.Entry en = gl.getSelectedValue();
+                if (en == null || en.item == null) { hint.setText("Select an item to compare it with what you wear."); return; }
+                hint.setText(en.after == Integer.MIN_VALUE ? "Not wearable gear." : "Wearing it makes your fighting level " + en.after + "  (now " + fightNow[0] + ").");
             });
             return tabs;
         });
@@ -218,10 +251,10 @@ final class GuiMore {
                 setRows(m, rows);
                 signature[0] = Chronicle.log.size();
             };
-            refresh.addActionListener(e -> World.read(200, load));
-            query.addActionListener(e -> World.read(200, load));
-            kind.addActionListener(e -> World.read(200, load));
-            mine.addActionListener(e -> World.read(200, load));
+            refresh.addActionListener(e -> World.readSoon(200, load));
+            query.addActionListener(e -> World.readSoon(200, load));
+            kind.addActionListener(e -> World.readSoon(200, load));
+            mine.addActionListener(e -> World.readSoon(200, load));
             t.addMouseListener(new MouseAdapter() {
                 @Override public void mouseClicked(MouseEvent e) {
                     if (e.getClickCount() != 2) return;
@@ -246,24 +279,8 @@ final class GuiMore {
             chron.add(GuiWindows.label("Newest first. Double-click a row to open the first cultivator in it who is still alive."), BorderLayout.SOUTH);
             tabs.addTab("Chronicle", chron);
 
-            JTextArea legends = area("");
-            tabs.addTab("Hall of legends", new JScrollPane(legends));
-
-            refreshers.add(() -> {
-                if (signature[0] != Chronicle.log.size()) load.run();
-                StringBuilder sb = new StringBuilder("Cultivators who reached Ascension or beyond are remembered here.\n\n");
-                List<String> titles = new ArrayList<>(Game.Map.legacyTitles);
-                List<Integer> lvls = new ArrayList<>(Game.Map.legacyLvls);
-                for (int i = 0; i < titles.size(); i++) sb.append(String.format("  %-34s level %d%n", titles.get(i), i < lvls.size() ? lvls.get(i) : 0));
-                if (titles.isEmpty()) sb.append("  (none yet)\n");
-                sb.append("\nFirsts and legends from the chronicle:\n");
-                List<Chronicle.Entry> lg = Chronicle.search("", "legend", 100);
-                java.util.Collections.reverse(lg);
-                for (Chronicle.Entry e : lg) sb.append("  ").append(e).append("\n");
-                if (lg.isEmpty()) sb.append("  (none yet)\n");
-                String s = sb.toString();
-                if (!legends.getText().equals(s)) legends.setText(s);
-            });
+            tabs.addTab("Hall of legends", GuiPages.pane(mv, refreshers, GuiPages::legendsHtml));
+            refreshers.add(() -> { if (signature[0] != Chronicle.log.size()) load.run(); });
             return tabs;
         });
     }
@@ -278,28 +295,31 @@ final class GuiMore {
             GuiWindows.ChartPanel social = new GuiWindows.ChartPanel("Friends and kills by year");
             JPanel charts = new JPanel(new GridLayout(3, 1, 4, 4)); charts.setBackground(BG);
             charts.add(lvl); charts.add(wealth); charts.add(social);
-            JTextArea story = area("");
-            JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, charts, new JScrollPane(story));
-            split.setResizeWeight(0.58);
+            JLabel head = new JLabel(" ");
+            head.setOpaque(true); head.setBackground(Theme.PANEL2); head.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+            head.setIconTextGap(12);
+            final String[] headKey = {""};
+            JPanel right = new JPanel(new BorderLayout()); right.setBackground(BG);
+            right.add(head, BorderLayout.NORTH);
+            right.add(GuiPages.pane(mv, refreshers, () -> GuiPages.bioHtml(Character.charById(id))), BorderLayout.CENTER);
+            JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, charts, right);
+            split.setResizeWeight(0.45);
+            SwingUtilities.invokeLater(() -> split.setDividerLocation(0.42));
             refreshers.add(() -> {
                 Character c = Character.charById(id);
                 List<int[]> life = Chronicle.bioOf(id);
                 lvl.setSeries(new String[]{"Level"}, life, new int[]{1}, new Color[]{Theme.ACCENT}, false);
                 wealth.setSeries(new String[]{"Wealth"}, life, new int[]{2}, new Color[]{Theme.GOLD}, false);
                 social.setSeries(new String[]{"Friends", "Kills"}, life, new int[]{3, 4}, new Color[]{Theme.OK, Theme.DANGER}, false);
-                StringBuilder sb = new StringBuilder();
-                if (c != null) {
-                    sb.append(c.name).append(" ").append(c.lastName).append(c.dead ? "  (dead)" : "").append("\nAge ").append(c.age).append(", level ").append(c.lvl).append(", ").append(c.kills).append(" kills");
-                    if (c.sect != null) sb.append(", ").append(c.sect.name);
-                    sb.append("\nPotential ").append(c.player == 1 ? c.potentialLabel() : String.valueOf(c.potential)).append("\n\n");
+                if (c == null) { head.setText("<html><b>Unknown cultivator</b></html>"); return; }
+                String key = c.name + c.lastName + c.dead + c.trait + c.gender + c.affiliation + c.repTitle;
+                if (!key.equals(headKey[0])) {
+                    headKey[0] = key;
+                    head.setIcon(Settings.pictures ? new ImageIcon(ArtMore.portrait(c, 64, 80)) : null);
+                    head.setText("<html><span style='font-size:" + Math.round(18 * Settings.fontScale) + "px;color:" + Theme.hex(Theme.GOLD) + "'><b>" + GuiSheets.esc(c.name + " " + c.lastName) + (c.dead ? " (dead)" : "") + "</b></span>"
+                            + (c.repTitle != null ? "<br><span style='color:" + Theme.hex(Theme.DIM) + "'>'" + GuiSheets.esc(c.repTitle) + "'</span>" : "")
+                            + "<br><span style='color:" + Theme.hex(Theme.DIM) + "'>" + GuiSheets.esc(c.getTrait() + " · " + c.affiliation + " · " + c.gender) + "</span></html>");
                 }
-                if (life.size() < 2) sb.append("(the charts fill in as game years pass; they are recorded for player characters and followed cultivators)\n\n");
-                List<Chronicle.Entry> mine = c == null ? new ArrayList<>() : Chronicle.about(c);
-                sb.append("Life events:\n");
-                for (Chronicle.Entry e : mine) sb.append("  ").append(e).append("\n");
-                if (mine.isEmpty()) sb.append("  (nothing notable yet)\n");
-                String s = sb.toString();
-                if (!story.getText().equals(s)) story.setText(s);
             });
             return split;
         });
@@ -488,18 +508,29 @@ final class GuiMore {
 
     // ================================================================== digest
     static void digestWindow(MapViewer mv, int weeks) {
-        GuiWindows.window(mv, "digest", "What happened lately", 820, 560, 5000, (d, refreshers) -> {
-            JTextArea ta = area("");
+        GuiWindows.window(mv, "digest", "What happened lately", 860, 640, 5000, (d, refreshers) -> {
+            range[0] = weeks;
+            final int[] spans = {13, 52, 260};
+            final String[] names = {"Season", "Year", "5 years"};
+            final JButton[] bs = new JButton[3];
             JPanel btns = GuiWindows.flow(FlowLayout.LEFT);
-            for (int w : new int[]{13, 52, 260}) btns.add(mv.makeBtn(w == 13 ? "Season" : w == 52 ? "Year" : "5 years", () -> { range[0] = w; }));
+            Runnable style = () -> { for (int i = 0; i < 3; i++) bs[i].putClientProperty("FlatLaf.style", spans[i] == range[0] ? "background:#265a52;borderColor:#68b8a0" : null); };
+            for (int i = 0; i < 3; i++) {
+                final int w = spans[i];
+                bs[i] = mv.makeBtn(names[i], "Show the last " + names[i].toLowerCase() + (w == 13 ? " (13 weeks)" : w == 52 ? " (52 weeks)" : " (260 weeks)") + ".", () -> {
+                    range[0] = w; style.run();
+                    World.readSoon(100, () -> { for (Runnable r : refreshers) { try { r.run(); } catch (RuntimeException ignored) { } } });
+                });
+                btns.add(bs[i]);
+            }
+            style.run();
             JCheckBox auto = new JCheckBox("Show when a saved game opens", Settings.digestOnLoad);
             auto.setBackground(BG); auto.setForeground(FG);
             auto.addActionListener(e -> { Settings.digestOnLoad = auto.isSelected(); Settings.save(); });
             btns.add(auto);
             JPanel p = new JPanel(new BorderLayout(4, 4)); p.setBackground(BG);
-            p.add(new JScrollPane(ta), BorderLayout.CENTER); p.add(btns, BorderLayout.SOUTH);
-            range[0] = weeks;
-            refreshers.add(() -> { String s = TextTools.digest(range[0]); if (!ta.getText().equals(s)) { ta.setText(s); ta.setCaretPosition(0); } });
+            p.add(btns, BorderLayout.NORTH);
+            p.add(GuiPages.pane(mv, refreshers, () -> GuiPages.digestHtml(range[0])), BorderLayout.CENTER);
             return p;
         });
     }
@@ -533,15 +564,16 @@ final class GuiMore {
 
     // ================================================================== run statistics
     static void runWindow(MapViewer mv) {
-        GuiWindows.window(mv, "run", "Run statistics", 920, 560, 4000, (d, refreshers) -> {
-            JTextArea ta = area("");
+        GuiWindows.window(mv, "run", "Run statistics", 920, 620, 4000, (d, refreshers) -> {
+            JTabbedPane tabs = new JTabbedPane();
+            tabs.setFont(GuiWindows.MONO_B);
+            tabs.addTab("This run", GuiPages.pane(mv, refreshers, GuiPages::runHtml));
+            tabs.addTab("Hall of fame", GuiPages.pane(mv, refreshers, GuiPages::hallHtml));
             JPanel btns = GuiWindows.flow(FlowLayout.LEFT);
-            btns.add(mv.makeBtn("Export CSV", () -> mv.queueInput("export run")));
-            btns.add(mv.makeBtn("Hall of fame", () -> mv.queueInput("halloffame")));
-            btns.add(mv.makeBtn("Retire run…", () -> { if (GuiExtras.confirm(d, "Record this run in the hall of fame? The game goes on.")) mv.queueInput("!retire"); }));
+            btns.add(mv.makeBtn("Export CSV", "Save every life of this run as a spreadsheet file in the exports folder.", () -> mv.queueInput("export run")));
+            btns.add(mv.makeBtn("Retire run…", "Write this run into the hall of fame now. The game goes on.", () -> { if (GuiExtras.confirm(d, "Record this run in the hall of fame? The game goes on.")) mv.queueInput("!retire"); }));
             JPanel p = new JPanel(new BorderLayout(4, 4)); p.setBackground(BG);
-            p.add(new JScrollPane(ta), BorderLayout.CENTER); p.add(btns, BorderLayout.SOUTH);
-            refreshers.add(() -> { String s = RunStats.text(); if (!ta.getText().equals(s)) { int pos = ta.getCaretPosition(); ta.setText(s); ta.setCaretPosition(Math.min(pos, s.length())); } });
+            p.add(tabs, BorderLayout.CENTER); p.add(btns, BorderLayout.SOUTH);
             return p;
         });
     }
@@ -551,7 +583,6 @@ final class GuiMore {
         if (a == null || (!a.city && a.sect == null)) return;
         final int ax = a.x, ay = a.y;
         GuiWindows.window(mv, "place" + ax + "_" + ay, "Details — " + (a.city ? a.name : a.sect.name), 780, 640, 3000, (d, refreshers) -> {
-            JTextArea ta = area("");
             JPanel btns = GuiWindows.flow(FlowLayout.LEFT);
             btns.add(mv.makeBtn("Go there", () -> mv.queueInput("goto " + ax * 100 + " " + ay * 100)));
             btns.add(mv.makeBtn("Route preview", () -> mv.queueInput("route " + ax * 100 + " " + ay * 100)));
@@ -561,21 +592,13 @@ final class GuiMore {
                 if (who != null) mv.showCharacterDialog(who);
             }));
             JPanel p = new JPanel(new BorderLayout(4, 4)); p.setBackground(BG);
-            p.add(new JScrollPane(ta), BorderLayout.CENTER); p.add(btns, BorderLayout.SOUTH);
-            refreshers.add(() -> {
-                Area t = Game.Map.tiles[ax][ay];
-                String s = t == null ? "Unknown place." : TextTools.placeDetails(t, null);
-                if (!ta.getText().equals(s)) { int pos = ta.getCaretPosition(); ta.setText(s); ta.setCaretPosition(Math.min(pos, s.length())); }
-            });
+            p.add(GuiPages.pane(mv, refreshers, () -> GuiPages.placeHtml(Game.Map.tiles[ax][ay], GuiWindows.player(mv))), BorderLayout.CENTER); p.add(btns, BorderLayout.SOUTH);
             return p;
         });
     }
 
     // ================================================================== dashboard tab (Rankings)
-    static JComponent dashboardPanel(List<Runnable> refreshers) {
-        JTextArea a = area("");
-        a.setFont(Theme.mono(13));
-        refreshers.add(() -> a.setText(TextTools.dashText(TextTools.dash())));
-        return new JScrollPane(a);
+    static JComponent dashboardPanel(MapViewer mv, List<Runnable> refreshers) {
+        return GuiPages.pane(mv, refreshers, GuiPages::dashHtml);
     }
 }

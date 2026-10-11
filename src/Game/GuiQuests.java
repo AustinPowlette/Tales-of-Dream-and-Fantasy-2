@@ -46,6 +46,10 @@ final class GuiQuests {
         JComboBox<String> filter = new JComboBox<>(FILTERS);
         d.getRootPane().putClientProperty("filter", filter);
         filter.setToolTipText("Alerts: quests that wait for you. Duties: chores you can hand to the character (Duties window). Routine: everyday work the game does for you.");
+        JComboBox<String> idle = new JComboBox<>(PlayerControl.SPOT_ACTIONS);
+        idle.setToolTipText("What your character does by itself while it travels or waits and its routine would pick a plain spot quest: Meditate (default), Hunt (beasts in the tile, else it meditates), Profession, or Random.");
+        final boolean[] idleSync = {false};
+        idle.addActionListener(e -> { if (!idleSync[0]) mv.queueInput("spotaction " + idle.getSelectedItem()); });
         JLabel status = GuiWindows.label(" ");
         status.setForeground(GuiWindows.ACCENT);
         JSpinner pri = new JSpinner(new SpinnerNumberModel(80, 0, 1000, 5));
@@ -63,6 +67,7 @@ final class GuiQuests {
             Character p = GuiWindows.player(mv);
             if (p == null) { status.setText("No player character."); return; }
             PlayerControl pc = p.pc;
+            idleSync[0] = true; try { idle.setSelectedIndex(Math.max(0, Math.min(PlayerControl.SPOT_ACTIONS.length - 1, pc.spotAction))); } finally { idleSync[0] = false; }
             List<Quest> rows = new ArrayList<>();
             if (p.currentQuest != null) rows.add(p.currentQuest);
             List<Quest> t = new ArrayList<>(p.targetQuests); t.sort((a, b) -> Integer.compare(b.priority, a.priority)); rows.addAll(t);
@@ -85,7 +90,7 @@ final class GuiQuests {
                     Character t2 = Character.charById(q.targetCharacter);
                     if (t2 != null) { target = t2.name + " " + t2.lastName + " (#" + t2.id + ")"; where = PlayerControl.coord(t2.location); tiles = String.valueOf(PlayerControl.distance(p.location, t2.location)); }
                 } else if (q.category == Quest.QuestCategory.Area && q.targetArea != null) {
-                    target = q.targetArea.name; where = PlayerControl.coord(q.targetArea); tiles = String.valueOf(PlayerControl.distance(p.location, q.targetArea));
+                    target = q.targetArea.name + ("Hunt Beast".equals(q.name) ? " (" + Math.max(0, q.targetArea.monsters) + " beasts)" : ""); where = PlayerControl.coord(q.targetArea); tiles = String.valueOf(PlayerControl.distance(p.location, q.targetArea));
                 }
                 String state = (q.pinned ? "pinned " : "") + (pc.inbox.contains(q) ? "NEW" : "");
                 shown.add(q);
@@ -112,8 +117,8 @@ final class GuiQuests {
         };
         Runnable refresh = () -> { if (busy[0]) return; busy[0] = true; try { refreshBody.run(); } finally { busy[0] = false; } };
         refreshers.add(refresh);
-        filter.addActionListener(e -> { World.read(150, refresh); });
-        table.getSelectionModel().addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) World.read(150, refresh); });
+        filter.addActionListener(e -> { World.readSoon(150, refresh); });
+        table.getSelectionModel().addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) World.readSoon(150, refresh); });
 
         // alerts in orange, duties cyan, routine dim, the active quest gold
         table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
@@ -197,6 +202,7 @@ final class GuiQuests {
             status.setText("No new alerts waiting.");
         }));
         top.add(mv.makeBtn("▶ Go to top quest", "Walk to the place of your first quest (or chase the person it names). Same as the Go button in the status bar.", () -> mv.queueInput("goquest")));
+        top.add(GuiWindows.label("  while travelling I:")); top.add(idle);
         top.add(status);
 
         JPanel south = new JPanel(new GridLayout(3, 1));
@@ -236,6 +242,7 @@ final class GuiQuests {
             Area a = q.targetArea;
             String nm = (a.city || a.sect != null) ? "<a href='place:" + a.x + ":" + a.y + "'>" + GuiSheets.esc(a.name) + "</a>" : GuiSheets.esc(a.name);
             sb.append("<tr><td class='dim'>Place</td><td>").append(nm).append(" <a href='goto:").append(a.x).append(":").append(a.y).append("'>").append(PlayerControl.coord(a)).append("</a></td></tr>");
+            if ("Hunt Beast".equals(q.name)) sb.append("<tr><td class='dim'>Beasts</td><td>").append(Math.max(0, a.monsters)).append(" left here (Lv ").append(a.lvl).append("-").append(a.highestLvl).append("). \"Hunt Monster\" means this hunting ground, not one creature: beasts stay on their tile.</td></tr>");
             sb.append("<tr><td class='dim'>Distance</td><td>").append(PlayerControl.distance(p.location, a)).append(" tiles").append(here ? " — you are there" : "").append("</td></tr>");
         } else sb.append("<tr><td class='dim'>Place</td><td>done where you stand, no travel</td></tr>");
         sb.append("</table>");

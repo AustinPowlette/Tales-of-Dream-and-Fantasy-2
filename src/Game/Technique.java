@@ -18,7 +18,7 @@ public class Technique implements java.io.Serializable {
     public Technique(techniqueType type, Character maker, int potential) {
         this.type = type;
         this.name = Naming.technique(type, maker);
-        this.maker = maker.name + " " + maker.lastName;
+        this.maker = (maker.name + " " + maker.lastName).intern();
         this.lvl = potential;
         this.potential = potential;
 

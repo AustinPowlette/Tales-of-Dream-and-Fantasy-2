@@ -161,6 +161,46 @@ public class GuiExtras {
             form.add(check("Ask before risky or irreversible actions", Settings.confirmRisky, v -> { Settings.confirmRisky = v; applyAll.run(); },
                     "Leaving a sect, declaring war, deleting quests, attacking with bad odds, overwriting or loading saves..."));
 
+            form.add(section("Speed"));
+            form.add(check("EXPERIMENTAL: NPCs of different tiles take their turns on several cores", Settings.parallelNpcs, v -> { Settings.parallelNpcs = v; applyAll.run(); },
+                    "Off (default): the NPCs take their turns one after the other. On: the turns of NPCs on different tiles run together, 2-4 times faster in a big world; people on a tile with a person who plays are still played one by one. Experimental: if anything looks wrong, switch it off."));
+
+            form.add(section("A new world"));
+            JSpinner stPop = new JSpinner(new SpinnerNumberModel(Settings.startPopulation, 1000, 1000000, 5000));
+            stPop.addChangeListener(e -> { Settings.startPopulation = (Integer) stPop.getValue(); applyAll.run(); });
+            stPop.setToolTipText("How many people the NEXT new world begins with (you are asked at the start too). 10,000 to 150,000 is recommended: a weaker computer plays a smaller world faster. The world you are in keeps its size.");
+            form.add(line("People at the start of a new world", stPop));
+
+            form.add(section("The epoch (the great purge of a crowded world)"));
+            JSpinner epPop = new JSpinner(new SpinnerNumberModel(Math.max(1000, Math.min(10000000, Settings.epochLimit())), 1000, 10000000, 10000));
+            epPop.addChangeListener(e -> { Settings.epochPopulation = (Integer) epPop.getValue(); Settings.epochCustom = true; applyAll.run(); });
+            epPop.setToolTipText("The epoch comes when this many cultivators live, whatever the speed of the computer");
+            form.add(line("Most cultivators before an epoch", epPop));
+            JSpinner epMem = new JSpinner(new SpinnerNumberModel(Settings.epochMemoryPercent, 0, 95, 5));
+            epMem.addChangeListener(e -> { Settings.epochMemoryPercent = (Integer) epMem.getValue(); applyAll.run(); });
+            epMem.setToolTipText("The epoch also comes when more than this percent of the memory the game may use (-Xmx) is alive, so an old world is thinned before it runs out of memory. 0 = never for that reason. Checked once a year. " + MemWatch.line() + ". The task manager shows the heap the Java machine grew to, not what the game needs: start the game with -Xmx3g to keep it near 3 GB.");
+            form.add(line("Memory alive that brings an epoch (%)", epMem));
+            JSpinner epSec = new JSpinner(new SpinnerNumberModel(Settings.epochTickSeconds, 0.1, 600.0, 0.5));
+            epSec.addChangeListener(e -> { Settings.epochTickSeconds = ((Number) epSec.getValue()).doubleValue(); applyAll.run(); });
+            epSec.setToolTipText("The epoch also comes when a typical turn takes longer than this many seconds (in a world of 10,000+): a slower computer is purged sooner, so every computer plays at a good speed");
+            form.add(line("Slowest typical turn, in seconds", epSec));
+            JSpinner epPct = new JSpinner(new SpinnerNumberModel(Settings.epochCullPercent, 1, 95, 1));
+            epPct.addChangeListener(e -> { Settings.epochCullPercent = (Integer) epPct.getValue(); applyAll.run(); });
+            epPct.setToolTipText("Percent of each realm's cultivators the epoch takes (realms with fewer than 10 are spared)");
+            form.add(line("Cull: percent of each realm", epPct));
+            JSpinner epNum = new JSpinner(new SpinnerNumberModel(Settings.epochCullNumber, 0, 10000000, 1000));
+            epNum.addChangeListener(e -> { Settings.epochCullNumber = (Integer) epNum.getValue(); applyAll.run(); });
+            epNum.setToolTipText("0 = use the percent. Above 0: the epoch takes this many cultivators in all, shared out over the realms by their size");
+            form.add(line("Cull: a number in all (0 = use the percent)", epNum));
+            JSpinner epRealm = new JSpinner(new SpinnerNumberModel(Settings.epochMaxRealm, 0, 10, 1));
+            epRealm.addChangeListener(e -> { Settings.epochMaxRealm = (Integer) epRealm.getValue(); applyAll.run(); });
+            epRealm.setToolTipText("The epoch takes people only from Major Lvl 0 up to this realm; the realms above are left alone. Only the survivors of the realms it thinned get the blessing (the potential of half a Potential Pill).");
+            form.add(line("Highest realm the epoch culls (Major Lvl)", epRealm));
+            JSpinner crowd = new JSpinner(new SpinnerNumberModel(Settings.crowdFactor, 0.5, 100.0, 0.5));
+            crowd.addChangeListener(e -> { Settings.crowdFactor = ((Number) crowd.getValue()).doubleValue(); GameDriver.rescaleCrowd(); applyAll.run(); });
+            crowd.setToolTipText("A tile is overcrowded (beasts ambush everyone there) above this many times its fair share of the starting population, an even spread over the map. A city holds four times as much; Originis has no limit.");
+            form.add(line("Overcrowded above (times a tile's fair share)", crowd));
+
             form.add(section("Display"));
             JSlider font = new JSlider(70, 250, (int) Math.round(Settings.fontScale * 100));
             font.setBackground(BG); font.setForeground(FG); font.setMajorTickSpacing(45); font.setPaintTicks(true);
@@ -189,16 +229,24 @@ public class GuiExtras {
             form.add(check("New characters start with their first ten years of cultivation", Settings.matureStart, v -> { Settings.matureStart = v; applyAll.run(); }, "On: a new human begins at the level an 18-year-old of their potential would have (like everyone else in the world). Off: level 1. Story starts always begin at level 1."));
             form.add(check("First-time hints", Settings.hints, v -> { Settings.hints = v; applyAll.run(); }, "One-time tips the first time something happens"));
             form.add(check("Story: the Palace of the Oldest Order", Settings.lore, v -> { Settings.lore = v; applyAll.run(); }, "On: the story that runs through every life (the Palace at Originis, ???'s scenes). Off: none of it runs or shows. A world that began without it: type 'lore enable'."));
+            form.add(check("Hear what people say to you", Settings.dialogueFlavor, v -> { Settings.dialogueFlavor = v; applyAll.run(); }, "On: when someone speaks to you, offers friendship, asks to join your squad or challenges you, their words appear in the log and the terminal."));
+            form.add(check("Conversation windows with a portrait", Settings.dialoguePopups, v -> { Settings.dialoguePopups = v; applyAll.run(); }, "On: people who stop to talk open a window with their portrait and replies to choose from, and the Talk button opens a full conversation. Off: only their words in the log."));
+            form.add(check("Talks for an AUTO character too", Settings.dialogueAuto, v -> { Settings.dialogueAuto = v; applyAll.run(); }, "Off (default): an AUTO or script-run character only hears the people's words. On: it also has the branching talks and conversations, answering by its own temper; the talk is written to the log."));
             form.add(check("Pause the game while a story scene is open", Settings.lorePause, v -> { Settings.lorePause = v; applyAll.run(); }, "The game waits until you press Continue on a scene of ???."));
 
             form.add(section("Music"));
-            form.add(check("Ambient music (generated live, never repeats)", Settings.music, v -> { Settings.music = v; applyAll.run(); }, "A pentatonic drone, plucked strings, flute, gongs and chimes made on the fly; it follows where you are (city, danger, winter)"));
+            form.add(check("Music", Settings.music, v -> { Settings.music = v; applyAll.run(); }, "Seven songs that follow where you are (the capital, open country, cities, night and winter, danger, war, sects), fade into each other, rest between songs and are played a little differently each time."));
             JSlider vol = new JSlider(0, 100, Settings.musicVolume);
             vol.setBackground(BG); vol.setForeground(FG);
             vol.addChangeListener(e -> { Settings.musicVolume = vol.getValue(); if (!vol.getValueIsAdjusting()) { Settings.save(); } Ambient.apply(); });
             form.add(line("Music volume", vol));
+            JSlider gen = new JSlider(0, 100, Settings.musicGenerated);
+            gen.setBackground(BG); gen.setForeground(FG);
+            gen.setToolTipText("EXPERIMENTAL. How often a song newly composed by the game (not kept yet) takes a slot; the game's songs are written by hand and this is an extra for people who want endless variety, so the tunes are not as good. 0: only the written and the kept songs. Type 'music gen' to hear one and 'music keep' to keep it.");
+            gen.addChangeListener(e -> { Settings.musicGenerated = gen.getValue(); if (!gen.getValueIsAdjusting()) Settings.save(); });
+            form.add(line("Newly composed songs (%, experimental)", gen));
             JPanel musicBtns = GuiWindows.flow(FlowLayout.LEFT);
-            musicBtns.add(mv.makeBtn("New piece", Ambient::newPiece));
+            musicBtns.add(mv.makeBtn("Next song", Ambient::newPiece));
             musicBtns.setAlignmentX(Component.LEFT_ALIGNMENT);
             form.add(musicBtns);
             java.util.List<String> fonts = Ambient.fonts();
@@ -434,15 +482,29 @@ public class GuiExtras {
 
     // ================================================================== story objectives
     static void storyWindow(MapViewer mv) {
-        GuiWindows.window(mv, "story", "Story", 640, 440, 2000, (d, refreshers) -> {
-            JTextArea area = text("");
-            area.setFont(new Font("Georgia", Font.PLAIN, 15));
+        GuiWindows.window(mv, "story", "Story", 760, 640, 2000, (d, refreshers) -> {
+            final JComboBox<String> scenes = new JComboBox<>();
+            final JButton again = mv.makeBtn("Read again", () -> {
+                Object o = scenes.getSelectedItem();
+                if (o != null) { String id = o.toString(); int dash = id.indexOf("  -  "); mv.queueInput("story replay " + (dash > 0 ? id.substring(0, dash) : id)); }
+            });
             refreshers.add(() -> {
                 Character p = GuiWindows.player(mv);
-                String t = p == null ? "No player character." : Starts.describe(p);
-                if (!area.getText().equals(t)) { area.setText(t); area.setCaretPosition(0); }
+                java.util.List<String> items = p == null || p.story == null ? new ArrayList<String>() : Chapters.sceneList(p.story);
+                boolean same = items.size() == scenes.getItemCount();
+                for (int i = 0; same && i < items.size(); i++) if (!items.get(i).equals(scenes.getItemAt(i))) same = false;
+                if (!same) { scenes.removeAllItems(); for (String it : items) scenes.addItem(it); }
+                again.setEnabled(!items.isEmpty());
+                scenes.setEnabled(!items.isEmpty());
             });
-            return new JScrollPane(area);
+            JPanel south = GuiWindows.flow(FlowLayout.LEFT);
+            south.add(GuiWindows.label("Scenes you have seen: "));
+            south.add(scenes);
+            south.add(again);
+            JPanel root = new JPanel(new BorderLayout());
+            root.add(GuiPages.pane(mv, refreshers, () -> GuiPages.storyHtml(GuiWindows.player(mv))), BorderLayout.CENTER);
+            root.add(south, BorderLayout.SOUTH);
+            return root;
         });
     }
 
@@ -579,7 +641,6 @@ public class GuiExtras {
         GuiWindows.window(mv, "family", "Family & Relationships", 940, 640, 3000, (d, refreshers) -> {
             TreePanel tree = new TreePanel(mv);
             GraphPanel graph = new GraphPanel(mv);
-            JTextArea famText = text(""), relText = text(""), pastText = text("");
             refreshers.add(() -> {
                 Character p = GuiWindows.player(mv);
                 if (p == null) { tree.tree = null; graph.ties = new ArrayList<>(); tree.repaint(); graph.repaint(); return; }
@@ -587,19 +648,14 @@ public class GuiExtras {
                 graph.ties = Family.ties(p, 16);
                 graph.me = p.name;
                 tree.revalidate(); tree.repaint(); graph.repaint();
-                String f = Family.text(p), r = Family.relationsText(p, 40);
-                if (!famText.getText().equals(f)) famText.setText(f);
-                if (!relText.getText().equals(r)) relText.setText(r);
-                String pl = Reincarnation.lineage(p);
-                if (!pastText.getText().equals(pl)) pastText.setText(pl);
             });
             JTabbedPane tabs = new JTabbedPane();
             tabs.setFont(MONO_B);
             tabs.addTab("Family tree", new JScrollPane(tree));
             tabs.addTab("Relationship graph", graph);
-            tabs.addTab("Family list", new JScrollPane(famText));
-            tabs.addTab("Relationship list", new JScrollPane(relText));
-            tabs.addTab("Past lives", new JScrollPane(pastText));
+            tabs.addTab("Family list", GuiPages.pane(mv, refreshers, () -> GuiPages.familyListHtml(GuiWindows.player(mv))));
+            tabs.addTab("Relationship list", GuiPages.pane(mv, refreshers, () -> GuiSheets.relationsHtml(GuiWindows.player(mv), "", 0, 80)));
+            tabs.addTab("Past lives", GuiPages.pane(mv, refreshers, () -> GuiPages.pastLivesHtml(GuiWindows.player(mv))));
             // the relationship web of anyone: type a name or #id
             GraphPanel web = new GraphPanel(mv);
             JTextField who = new JTextField(18);

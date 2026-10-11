@@ -30,23 +30,26 @@ public class EconSim {
         Thread t = new Thread(null, () -> { try { GameDriver.main(new String[0]); } catch (Throwable e) { gameError = e; e.printStackTrace(real); } }, "game", 512L << 20);
         t.setDaemon(true); t.start();
         Thread.sleep(3000);
-        String head = "year,pop,cultivators,avgPotential,pctPotential100,potPillsHeld,potPillsOnBlock,lotsWaiting,auctionsHeld,lotsSold,lotsUnsold,potPillsSold,treasuresSpawned,treasuresClaimed,treasuresUnclaimed,bloodStock,pillsRefined,libraryBooks,avgTechniques,shopItems,poolItems,sectCount";
+        String head = "year,pop,cultivators,avgPotential,pctPotential100,potPillsHeld,potPillsOnBlock,lotsWaiting,auctionsHeld,lotsSold,lotsUnsold,potPillsSold,treasuresSpawned,treasuresClaimed,treasuresUnclaimed,bloodStock,pillsRefined,libraryBooks,avgTechniques,shopItems,poolItems,sectCount,avgKnown,maxKnown,pctNoWeapon,pctNoClothing,pctOldGear,wallSec";
         PrintWriter csv = new PrintWriter(new FileWriter("econ_years.csv"));
         csv.println(head); real.println(head);
         int lastYear = -1, exceptions = 0;
+        long wall0 = System.currentTimeMillis();
         while (true) {
             int yr = GameDriver.time / 52;
             if (gameError != null) { real.println("GAME ERROR " + gameError); break; }
             if (yr == lastYear) { Thread.sleep(200); continue; }
             lastYear = yr;
             if (yr > years) break;
-            int n = Map.characters.size(), cult = 0, p100 = 0, techs = 0; long potSum = 0, potPills = 0, blood = 0;
+            int n = Map.characters.size(), cult = 0, p100 = 0, techs = 0, noW = 0, noC = 0, oldG = 0, adults = 0; long knownSum = 0; int knownMax = 0; long potSum = 0, potPills = 0, blood = 0;
             for (int i = 0; i < n; i++) {
                 Character c = Map.characters.get(i);
                 if (c == null || c.dead || !c.born || c.trait == Character.Traits.Beast || c.trait == Character.Traits.Monster || c.age < 8) continue;
                 try {
                     cult++; potSum += c.potential; if (c.potential >= 100) p100++;
                     techs += c.techniqueList == null ? 0 : c.techniqueList.size();
+                    int kn = c.knownLocations == null ? 0 : c.knownLocations.size(); knownSum += kn; knownMax = Math.max(knownMax, kn);
+                    if (c.age >= 16 && c.majorLvl >= 1) { adults++; if (c.equippedWeapon == null) noW++; if (c.equippedClothing == null) noC++; if ((c.equippedWeapon != null && c.equippedWeapon.lvl + 10 <= c.lvl) || (c.equippedClothing != null && c.equippedClothing.lvl + 10 <= c.lvl)) oldG++; }
                     for (Item it : c.pillBag) if (it.pillType == Item.PillType.Potential) potPills += it.quantity;
                     for (Item it : c.materialBag) if (it.itemType == Item.ItemType.Blood) blood += it.quantity;
                 } catch (RuntimeException e) { exceptions++; }
@@ -67,7 +70,8 @@ public class EconSim {
             String row = String.join(",", String.valueOf(yr), String.valueOf(Map.population), String.valueOf(cult), String.format("%.1f", cult == 0 ? 0 : (double) potSum / cult), String.format("%.1f", cult == 0 ? 0 : 100.0 * p100 / cult),
                     String.valueOf(potPills), String.valueOf(onBlock), String.valueOf(lots), String.valueOf(Auctions.stHeld), String.valueOf(Auctions.stSold), String.valueOf(Auctions.stUnsold), String.valueOf(Auctions.stPotentialPills),
                     String.valueOf(Treasure.stSpawned), String.valueOf(Treasure.stClaimed), String.valueOf(unclaimed), String.valueOf(blood), String.valueOf(Character.stRefined), String.valueOf(books),
-                    String.format("%.2f", cult == 0 ? 0 : (double) techs / cult), String.valueOf(shopItems), String.valueOf(pool), String.valueOf(sects));
+                    String.format("%.2f", cult == 0 ? 0 : (double) techs / cult), String.valueOf(shopItems), String.valueOf(pool), String.valueOf(sects),
+                    String.format("%.1f", cult == 0 ? 0 : (double) knownSum / cult), String.valueOf(knownMax), String.format("%.1f", adults == 0 ? 0 : 100.0 * noW / adults), String.format("%.1f", adults == 0 ? 0 : 100.0 * noC / adults), String.format("%.1f", adults == 0 ? 0 : 100.0 * oldG / adults), String.valueOf((System.currentTimeMillis() - wall0) / 1000));
             csv.println(row); csv.flush(); real.println(row);
         }
         csv.close();

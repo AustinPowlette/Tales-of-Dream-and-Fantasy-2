@@ -26,7 +26,12 @@ final class GuiLore {
         StringBuilder sb = new StringBuilder("<h1>" + esc(title) + "</h1><hr>");
         String gold = Theme.hex(Theme.GOLD), dim = Theme.hex(Theme.DIM);
         for (String l : lines) {
-            if (LoreText.narration(l)) sb.append("<p><font color='").append(dim).append("'><i>").append(esc(l.substring(2))).append("</i></font></p>");
+            if (ChapText.speaker(l)) { // a person of a story: "@Name| words"
+                String who = ChapText.who(l);
+                boolean you = who.equals("You");
+                sb.append("<p><b><font color='").append(you ? Theme.hex(Theme.ACCENT) : gold).append("'>").append(esc(who)).append("</font></b>&nbsp; ").append(esc(ChapText.words(l))).append("</p>");
+            }
+            else if (LoreText.narration(l)) sb.append("<p><font color='").append(dim).append("'><i>").append(esc(l.substring(2))).append("</i></font></p>");
             else if (LoreText.other(l)) sb.append("<p><b><font color='").append(Theme.hex(Theme.ACCENT)).append("'>OLD MAN</font></b>&nbsp; ").append(esc(l.substring(9))).append("</p>");
             else sb.append("<p><b><font color='").append(gold).append("'>").append(LoreText.VOICE).append("</font></b>&nbsp; ").append(esc(l)).append("</p>");
         }
@@ -34,10 +39,12 @@ final class GuiLore {
         return GuiSheets.page(sb.toString());
     }
 
-    static void scene(String id, String title, List<String> lines) { show(title, lines, null, "Continue", null); }
-    static void ending(String title, List<String> lines, String stats) { show(title, lines, stats, "Close", null); }
+    static void scene(String id, String title, List<String> lines) { show(title, lines, null, "Continue", null, LoreText.VOICE); }
+    /** A scene of a Story start (see Chapters): the same window, headed "Story". */
+    static void story(String title, List<String> lines) { show(title, lines, null, "Continue", null, "Story"); }
+    static void ending(String title, List<String> lines, String stats) { show(title, lines, stats, "Close", null, LoreText.VOICE); }
     /** An ending: the scene, then (Credits button) the funny credits as a slow scroll. */
-    static void ending(String title, List<String> lines, String stats, List<String> credits) { show(title, lines, stats, credits == null ? "Close" : "Credits ▸", credits); }
+    static void ending(String title, List<String> lines, String stats, List<String> credits) { show(title, lines, stats, credits == null ? "Close" : "Credits ▸", credits, LoreText.VOICE); }
 
     /** The credits as a slow scroll (a Skip button stops it); safe from any thread. */
     static void credits(final MapViewer mv, final List<String> lines) {
@@ -80,13 +87,13 @@ final class GuiLore {
         });
     }
 
-    private static void show(final String title, final List<String> lines, final String stats, final String button, final List<String> creditLines) {
+    private static void show(final String title, final List<String> lines, final String stats, final String button, final List<String> creditLines, final String who) {
         final MapViewer mv = GameDriver.mapViewer;
         if (mv == null) return;
         if (Settings.lorePause && !GameDriver.paused) { GameDriver.paused = true; weHoldThePause = true; } // the game waits until the scene is closed
         final String html = sceneHtml(title, lines, stats);
         SwingUtilities.invokeLater(() -> {
-            JDialog d = new JDialog(mv, LoreText.VOICE + "  ·  " + title, false);
+            JDialog d = new JDialog(mv, who + "  ·  " + title, false);
             d.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             d.getContentPane().setBackground(Theme.BG);
             JEditorPane ep = GuiSheets.view(mv);
@@ -166,6 +173,11 @@ final class GuiLore {
             sb.append("<p><b>").append(++n).append(". ").append(esc(cl.title)).append("</b><br>").append(esc(cl.truth)).append("</p>");
         }
         if (n == 0) sb.append("<p class='dim'>Nothing yet. The Palace's roads lead to nine places; the Wayhouse is the first.</p>");
+        if (p.remembered != null && !p.remembered.isEmpty()) {
+            sb.append("<h2>Remembered by you alone</h2><p class='dim'>The Hollow Court put them out. Nobody else remembers.</p><p>");
+            for (String r : p.remembered) sb.append(esc(r)).append("<br>");
+            sb.append("</p>");
+        }
         sb.append("<h2>The Palace</h2><p>").append(esc(Lore.palaceText(c, p)).replace("\n", "<br>")).append("</p>");
         sb.append("<h2>Scenes you have seen</h2><p>");
         for (String id : p.scenes) { LoreText.Scene sc = LoreText.SCENES.get(id); if (sc != null) sb.append("<a href='cmd:lore replay ").append(id).append("'>").append(esc(sc.title)).append("</a> &nbsp; "); }

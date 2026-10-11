@@ -5,8 +5,8 @@ package Game;
 final class Perf {
     private Perf() { }
     static final boolean ON = Boolean.getBoolean("tdf.perf");
-    static final String[] NAMES = {"wait/save", "yearly", "areaScan", "epoch", "time()", "cultivate", "phase2A", "phase2B", "tame+reinc", "area.age", "monsters", "cleanup", "guiHandoff"};
-    static final int WAIT = 0, YEARLY = 1, AREASCAN = 2, EPOCH = 3, TIME = 4, CULT = 5, P2A = 6, P2B = 7, TAME = 8, AGE = 9, MON = 10, CLEAN = 11, GUI = 12;
+    static final String[] NAMES = {"wait/save", "yearly", "areaScan", "epoch", "time()", "cultivate", "phase2A", "phase2B", "tame+reinc", "area.age", "monsters", "cleanup", "guiHandoff", "steps", "companions"};
+    static final int WAIT = 0, YEARLY = 1, AREASCAN = 2, EPOCH = 3, TIME = 4, CULT = 5, P2A = 6, P2B = 7, TAME = 8, AGE = 9, MON = 10, CLEAN = 11, GUI = 12, STEPS = 13, FOLLOW = 14;
     static final long[] ns = new long[NAMES.length];       // since the last reset
     static final long[] total = new long[NAMES.length];    // whole run
     static long last = 0, ticks = 0, tickStart = 0, tickNsTotal = 0, ticksSince = 0, maxTick = 0;

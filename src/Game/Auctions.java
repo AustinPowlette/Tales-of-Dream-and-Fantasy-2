@@ -59,17 +59,31 @@ final class Auctions {
     }
 
     /** Would this character bid for the lot? Characters bid for what they need (the Potential Pill, the next-realm pill, better gear) and the very rich for anything. */
-    static boolean wants(Character b, Item lot, long wealth) {
+    static boolean wants(Character b, Item lot, long wealth) { return want(b, lot, wealth) > 0; }
+
+    static final int NO_INTEREST = 0, COLLECTOR = 1, NEED = 2;
+    /** How much the bidder wants the lot: a need (the Potential Pill, the next-realm pill, better gear, an array for a ruler), a collector's fancy (a purse of twenty reserves), or nothing. */
+    static int want(Character b, Item lot, long wealth) {
         switch (lot.itemType) {
             case Pill:
-                if (lot.pillType == Item.PillType.Potential) return b.potential < 100;
-                return lot.lvl > b.majorLvl && lot.lvl <= b.majorLvl + 2;
-            case Weapon: return b.equippedWeapon == null || lot.lvl > b.equippedWeapon.lvl;
-            case Clothing: return b.equippedClothing == null || lot.lvl > b.equippedClothing.lvl;
-            case Array: if (b.sect != null && b.sect.isMaster(b)) return true; if (b.location != null && b.location.cityOwner == b) return true; break;
+                if (lot.pillType == Item.PillType.Potential) { if (b.potential < 100) return NEED; break; }
+                if (lot.lvl > b.majorLvl && lot.lvl <= b.majorLvl + 2) return NEED;
+                break;
+            case Weapon: if (b.equippedWeapon == null || lot.lvl > b.equippedWeapon.lvl) return NEED; break;
+            case Clothing: if (b.equippedClothing == null || lot.lvl > b.equippedClothing.lvl) return NEED; break;
+            case Array: if (b.sect != null && b.sect.isMaster(b)) return NEED; if (b.location != null && b.location.cityOwner == b) return NEED; break;
             default: break;
         }
-        return wealth >= reserve(lot) * 20; // a collector
+        return wealth >= reserve(lot) * 20 ? COLLECTOR : NO_INTEREST;
+    }
+
+    /** What a computer-played bidder offers: someone in need up to three reserves, a collector up to one and a half, and never more than half (a need) or a tenth (a collector) of the purse. It used to be the whole purse, so the winner paid the runner-up's entire fortune (billions for a plate of dumplings). */
+    static long npcBid(int want, long wealth, long base) {
+        double f = want == NEED ? 1.0 + 2.0 * rand.nextDouble() : 1.0 + 0.5 * rand.nextDouble();
+        long bid = (long) Math.ceil(base * f);
+        long cap = want == NEED ? wealth / 2 : wealth / 10;
+        if (bid > cap) bid = Math.max(base, cap);
+        return Math.min(bid, wealth);
     }
 
     private static void give(Character buyer, Item lot) {
@@ -98,7 +112,7 @@ final class Auctions {
             if (wealth < minReserve) continue;
             if (c.player == 1 && DecisionBroker.promptable(c)) {
                 if (c.location == a) humans.add(c); // a human must be in the city to bid
-            } else if ((c.player != 1 || c.pc().mode == PlayerControl.Mode.AUTO) && c.knownLocations.contains(a)) { // a HYBRID character never bids by itself
+            } else if ((c.player != 1 || c.pc().mode == PlayerControl.Mode.AUTO) && c.knownLocations.contains(a) && c.location != null && PlayerControl.distance(c.location, a) <= 8) { // bidders have come (the Attend Auction quest) or live within eight tiles // a HYBRID character never bids by itself
                 bidders.add(c);
             }
         }
@@ -110,9 +124,12 @@ final class Auctions {
             for (Character c : bidders) {
                 if (c.dead) continue;
                 long wealth = c.ss + c.sc * 1_000_000L + c.dc * 1_000_000_000_000L;
-                if (wealth < base || !wants(c, lot, wealth)) continue;
-                if (wealth > best) { second = Math.max(base, best); best = wealth; buyer = c; }
-                else if (wealth > second) second = wealth;
+                if (wealth < base) continue;
+                int want = want(c, lot, wealth);
+                if (want == NO_INTEREST) continue;
+                long bid = npcBid(want, wealth, base);
+                if (bid > best) { second = Math.max(base, best); best = bid; buyer = c; }
+                else if (bid > second) second = bid;
             }
             for (Character h : humans) {
                 if (h.dead) continue;

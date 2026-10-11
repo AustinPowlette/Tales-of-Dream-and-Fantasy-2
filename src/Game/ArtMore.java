@@ -45,7 +45,7 @@ final class ArtMore {
 
     /** A portrait that is painted once and kept while the person looks the same (the level band, the age decade and the sect matter to the picture). */
     static synchronized BufferedImage portraitCached(Character ch, int w, int h) {
-        String key = ch.id + "|" + w + "x" + h + "|" + ch.lvl / 10 + "|" + ch.age / 10 + "|" + ch.kills / 50 + "|" + (ch.sect == null ? "" : ch.sect.name) + "|" + ch.trait;
+        String key = ch.id + "|" + ch.gender + "|" + w + "x" + h + "|" + ch.lvl / 10 + "|" + ch.age / 10 + "|" + ch.kills / 50 + "|" + (ch.sect == null ? "" : ch.sect.name) + "|" + ch.trait + "|" + ch.skinTone;
         BufferedImage im = portraitCache.get(key);
         if (im == null) { im = portrait(ch, w, h); portraitCache.put(key, im); }
         return im;
@@ -134,7 +134,7 @@ final class ArtMore {
             p.stroke(98, 206, 128, 262, 2.2, mix(robe, c(20, 20, 20), 0.45), 0.8); p.stroke(158, 206, 128, 262, 2.2, mix(robe, c(20, 20, 20), 0.45), 0.8);
             p.stroke(70, 300, 186, 296, 7, mix(robe, c(250, 250, 240), 0.35), 0.55); // sash
             // neck and face
-            Color skin = skinTone(r, aff);
+            Color skin = skinTone(r, aff, ch.skinTone);
             p.washRect(112, 176, 32, 40, mix(skin, c(60, 40, 30), 0.12), 3, 0.95, 0.04);
             // hair behind
             Color hair = ageT > 0.62 ? mix(c(40, 36, 36), c(236, 236, 232), Math.min(1, (ageT - 0.5) * 2.2)) : c(26 + r.nextInt(18), 22 + r.nextInt(14), 24 + r.nextInt(14));
@@ -173,11 +173,27 @@ final class ArtMore {
         return finish(im, r, true);
     }
 
-    private static Color skinTone(Random r, int aff) {
-        Color[] s = {c(246, 220, 196), c(240, 208, 180), c(228, 190, 156), c(206, 160, 124), c(168, 120, 90)};
-        Color k = s[r.nextInt(s.length)];
+    /** The skin tones a player may choose (light to dark); a character's skinTone is 1 + the index here, 0 = the portrait draws one of AUTO_SKINS from its seed. */
+    static final Color[] SKINS = {c(250, 232, 216), c(246, 220, 196), c(240, 208, 180), c(228, 190, 156), c(206, 160, 124), c(168, 120, 90), c(142, 98, 72), c(112, 76, 56), c(86, 58, 44)};
+    static final String[] SKIN_NAMES = {"Porcelain", "Fair", "Light", "Warm", "Tan", "Bronze", "Brown", "Dark brown", "Deep brown"};
+    private static final int[] AUTO_SKINS = {1, 2, 3, 4, 5};   // the five the portrait seed picks from (as before the choice existed)
+
+    private static Color skinTone(Random r, int aff, int chosen) {
+        Color k = SKINS[AUTO_SKINS[r.nextInt(AUTO_SKINS.length)]];  // (always drawn, so the rest of the portrait stays the same whatever is chosen)
+        if (chosen >= 1 && chosen <= SKINS.length) return SKINS[chosen - 1]; // a chosen tone is shown as chosen
         return aff < 0 ? mix(k, c(220, 214, 214), 0.25) : k;
     }
+
+    /** The tone of a child: one of its parents' chosen tones (a shade lighter or darker now and then); 0 when neither parent chose one. */
+    static int inheritSkin(int mother, int father, Random r) {
+        if (mother <= 0 && father <= 0) return 0;
+        int base = mother <= 0 ? father : father <= 0 ? mother : (r.nextBoolean() ? mother : father);
+        if (mother > 0 && father > 0 && r.nextInt(3) == 0) base = (mother + father + 1) / 2; // a blend
+        if (r.nextInt(4) == 0) base += r.nextBoolean() ? 1 : -1;
+        return Math.max(1, Math.min(SKINS.length, base));
+    }
+
+    static String skinName(int tone) { return tone >= 1 && tone <= SKIN_NAMES.length ? SKIN_NAMES[tone - 1] : "by the portrait's seed"; }
 
     private static Color robeColor(Character ch) {
         if (ch.trait != null) switch (ch.trait) {
@@ -247,7 +263,7 @@ final class ArtMore {
     }
 
     // ------------------------------------------------------------------ item icons
-    private static Color gradeColor(int lvl) {
+    static Color gradeColor(int lvl) {
         return lvl <= 2 ? c(150, 140, 126) : lvl <= 4 ? c(96, 160, 118) : lvl <= 6 ? c(196, 150, 70) : lvl <= 8 ? c(90, 140, 210) : c(236, 190, 70);
     }
 

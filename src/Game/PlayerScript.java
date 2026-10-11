@@ -30,6 +30,7 @@ public class PlayerScript implements java.io.Serializable {
                 case "repeat":   return "repeat " + (a == 0 ? "forever" : String.valueOf(a));
                 case "if":       return "if " + text + (op == '>' ? " >= " : " <= ") + a;
                 case "mode":     return "mode " + text;
+                case "cmd":      return "cmd " + text;
                 default:         return type;
             }
         }
@@ -52,6 +53,11 @@ public class PlayerScript implements java.io.Serializable {
         if (t.length == 0) return "Empty step.";
         Step s = new Step();
         s.type = t[0].toLowerCase();
+        if (s.type.equals("cmd")) return t.length < 2 ? "Usage: cmd <any command>   e.g. cmd buygear, cmd make food, cmd learn 1" : addCmd(java.util.Arrays.copyOfRange(t, 1, t.length));
+        boolean numeric = t.length > 1 && t[1].matches("\\d+"), until = t.length > 1 && t[1].equalsIgnoreCase("until");
+        if (!NATIVE.contains(s.type)) return addCmd(t);                                                              // any other word is a command of the game
+        if ((s.type.equals("craft") || s.type.equals("hunt") || s.type.equals("forage") || s.type.equals("mine") || s.type.equals("meditate")) && !numeric && !until) return addCmd(t); // "craft weapon", "hunt", "forage"
+        if ((s.type.equals("sell") && t.length > 1) || (s.type.equals("wait") && !numeric)) return addCmd(t);       // "sell goods", "sell 3", a bare "wait"
         try {
             switch (s.type) {
                 case "goto":
@@ -101,11 +107,30 @@ public class PlayerScript implements java.io.Serializable {
                     s.text = t[1].toLowerCase();
                     break;
                 default:
-                    return "Unknown step '" + s.type + "'. Steps: goto wait forage mine craft meditate hunt sell quest repeat if end mode";
+                    return "Unknown step '" + s.type + "'. Steps: goto wait forage mine craft meditate hunt sell quest repeat if end mode, or any command (cmd <command>)";
             }
         } catch (NumberFormatException e) {
             return "Expected a number.";
         }
+        steps.add(s);
+        return null;
+    }
+
+    /** The words that are steps of their own; any other first word is run as a game command. */
+    static final java.util.Set<String> NATIVE = new java.util.HashSet<>(java.util.Arrays.asList("goto", "wait", "forage", "mine", "craft", "meditate", "hunt", "sell", "quest", "repeat", "if", "end", "mode"));
+    /** Commands a script may not run: they would end or take over the script itself, or ask for typing. */
+    static final java.util.Set<String> NOT_IN_SCRIPT = new java.util.HashSet<>(java.util.Arrays.asList("script", "quit", "exit", "save", "load", "delsave", "retire", "control", "release", "auto", "manual", "stop", "hybrid", "watch", "e", "edit", "new", "cmds", "last", "again", "!!"));
+    private static final java.util.Set<String> MOVES = new java.util.HashSet<>(java.util.Arrays.asList("w", "a", "s", "d", "q", "e", "z", "c", "n", "ne", "nw", "se", "sw", "x", "north", "south", "east", "west", "stay"));
+
+    /** A step that runs one game command (anything the command box takes), with its arguments. */
+    private String addCmd(String[] t) {
+        String text = String.join(" ", t).trim();
+        String verb = text.toLowerCase().split("\\s+")[0];
+        if (verb.startsWith("!")) { verb = verb.substring(1); text = text.substring(1); }
+        if (NOT_IN_SCRIPT.contains(verb)) return "'" + verb + "' cannot be a script step (it would end or take over the script).";
+        if (!MOVES.contains(verb) && TermHelp.find(verb) == null && TermHelp.expand(verb) == null) return "Unknown step or command '" + verb + "'. 'help' lists the commands.";
+        Step s = new Step();
+        s.type = "cmd"; s.text = text;
         steps.add(s);
         return null;
     }
@@ -260,13 +285,13 @@ public class PlayerScript implements java.io.Serializable {
                 return WORKING;
             }
             case "craft": {
-                c.professionPicker();
+                if (c.hasTrade()) Profession.run(c); else c.professionPicker();
                 if (++counter >= s.a) { ip++; return DONE_TURN; }
                 return WORKING;
             }
             case "meditate": {
                 if (s.b > 0 && c.majorLvl >= s.b) { ip++; return DONE_FREE; }
-                c.cultivate();
+                c.meditate();
                 if (s.b == 0 && ++counter >= s.a) { ip++; return DONE_TURN; }
                 return WORKING;
             }
@@ -282,6 +307,27 @@ public class PlayerScript implements java.io.Serializable {
                 c.sell(c.location);
                 ip++;
                 return DONE_TURN;
+            }
+            case "cmd": {
+                if (counter > 0) { // a walk or a wait this step began is still going
+                    if (c.skipping > 0) {
+                        c.skipping--;
+                        if (c.movement == 'm') c.movement();
+                        else if (c.movement == 'c' && c.autoX >= 0) PlayerCommands.stepAuto(c);
+                        else c.movement(c.movement);
+                    }
+                    if (c.skipping > 0) { counter++; return WORKING; }
+                    ip++;
+                    return DONE_TURN;
+                }
+                PlayerControl pc = c.pc();
+                c.skipping = 0;
+                boolean used = PlayerCommands.handle(c, "!" + s.text);
+                if (c.dead) return BLOCKED;
+                if (pc.mode != PlayerControl.Mode.HYBRID || !running) { ip++; running = false; return BLOCKED; } // the command handed control back
+                if (c.skipping > 0) { counter = 1; return WORKING; }
+                ip++;
+                return used ? DONE_TURN : DONE_FREE;
             }
             case "quest": {
                 Quest q = c.findQueuedQuest(s.text);

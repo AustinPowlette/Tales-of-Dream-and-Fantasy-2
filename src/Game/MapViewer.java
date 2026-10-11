@@ -19,17 +19,43 @@ public class MapViewer extends JFrame {
 
     private volatile int exportTile = 0; // > 0 while the map is being drawn into an export image
     /** The map is square and centred in its panel; these are the pixel offsets of tile (0,0)'s corner. */
-    private int offX() { if (exportTile > 0 || mapPanel == null) return 0; return Math.max(0, (mapPanel.getWidth() - Map.range * tileSize()) / 2); }
-    private int offY() { if (exportTile > 0 || mapPanel == null) return 0; return Math.max(0, (mapPanel.getHeight() - Map.range * tileSize()) / 2); }
+    private int offX() { if (exportTile > 0 || mapPanel == null) return 0; return Math.max(0, (mapPanel.getWidth() - vis() * tileSize()) / 2); }
+    private int offY() { if (exportTile > 0 || mapPanel == null) return 0; return Math.max(0, (mapPanel.getHeight() - vis() * tileSize()) / 2); }
+
+    // ---- zoom: 1 = the whole world; higher shows fewer, bigger tiles around (viewX, viewY) (the world wraps round)
+    volatile int zoom = 1, viewX = 15, viewY = 15;
+    volatile boolean followMe = true;           // while zoomed, keep the player's tile in the middle
+    private JToggleButton followBtn;
+    private JLabel zoomLabel;
+    private boolean panDragged = false;
+    /** Tiles shown along one side. */
+    private int vis() { return (exportTile > 0 || zoom <= 1) ? Map.range : Math.max(5, (Map.range + zoom - 1) / zoom); }
+    private int originX() { return (exportTile > 0 || zoom <= 1) ? 0 : Math.floorMod(viewX - vis() / 2, Map.range); }
+    private int originY() { return (exportTile > 0 || zoom <= 1) ? 0 : Math.floorMod(viewY - vis() / 2, Map.range); }
+    /** Column / row (0 = left / top) of world tile x / y on screen, or -1 when it is out of view. */
+    private int colOf(int x) { int c = Math.floorMod(x - originX(), Map.range); return c < vis() ? c : -1; }
+    private int rowOf(int y) { int d = Math.floorMod(y - originY(), Map.range); return d < vis() ? vis() - 1 - d : -1; }
+    /** World tile under a screen position, or -1 outside the map. */
+    private int tileX(int px, int ts) { int c = Math.floorDiv(px - offX(), ts); return c < 0 || c >= vis() ? -1 : Math.floorMod(originX() + c, Map.range); }
+    private int tileY(int py, int ts) { int r = Math.floorDiv(py - offY(), ts); return r < 0 || r >= vis() ? -1 : Math.floorMod(originY() + vis() - 1 - r, Map.range); }
+
+    void setZoom(int z, int tx, int ty) {
+        z = Math.max(1, Math.min(5, z));
+        if (z == zoom) return;
+        if (zoom <= 1 && !followMe) { if (tx < 0) { tx = selX; ty = selY; } if (tx >= 0) { viewX = tx; viewY = ty; } }
+        else if (!followMe && tx >= 0) { viewX = tx; viewY = ty; }
+        zoom = z;
+        SwingUtilities.invokeLater(() -> { if (zoomLabel != null) zoomLabel.setText(zoom + "x"); if (mapPanel != null) { mapPanel.revalidate(); mapPanel.repaint(); } });
+    }
 
     private int tileSize() {
         if (exportTile > 0) return exportTile;
         int panelW = mapPanel != null ? mapPanel.getWidth()  : 0;
         int panelH = mapPanel != null ? mapPanel.getHeight() : 0;
         if (panelW > 10 && panelH > 10) {
-            return Math.max(4, Math.min(panelW, panelH) / Map.range);
+            return Math.max(4, Math.min(panelW, panelH) / vis());
         }
-        return Math.max(8, Math.min(32, 700 / Map.range));
+        return Math.max(8, Math.min(32, 700 / vis()));
     }
 
     public MapViewer() {
@@ -40,6 +66,7 @@ public class MapViewer extends JFrame {
         setBackground(Theme.BG);
 
         mapPanel = new MapPanel();
+        PlaceImages.thumbsReady = () -> mapPanel.repaint();
         JScrollPane mapScroll = new JScrollPane(mapPanel);
         mapScroll.getViewport().setBackground(Theme.BG);
         PlaceImages.ensureFolders();
@@ -159,9 +186,10 @@ public class MapViewer extends JFrame {
         mapPanel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                if (panDragged) { panDragged = false; return; }
                 int ts = tileSize();
-                int tx = Math.floorDiv(e.getX() - offX(), ts);
-                int ty = Map.range - 1 - Math.floorDiv(e.getY() - offY(), ts); // the map is drawn with north (+y) at the top
+                int tx = tileX(e.getX(), ts);
+                int ty = tileY(e.getY(), ts); // the map is drawn with north (+y) at the top
                 if (tx >= 0 && tx < Map.range && ty >= 0 && ty < Map.range) {
                     selX = tx;
                     selY = ty;
@@ -174,11 +202,30 @@ public class MapViewer extends JFrame {
             }
         });
 
+        MouseAdapter panAndZoom = new MouseAdapter() {
+            private int lastX, lastY;
+            @Override public void mousePressed(MouseEvent e) { lastX = e.getX(); lastY = e.getY(); panDragged = false; }
+            @Override public void mouseDragged(MouseEvent e) {
+                if (zoom <= 1 || !SwingUtilities.isLeftMouseButton(e)) return;
+                int ts = tileSize(), dx = (e.getX() - lastX) / ts, dy = (e.getY() - lastY) / ts;
+                if (dx == 0 && dy == 0) return;
+                viewX = Math.floorMod(viewX - dx, Map.range); viewY = Math.floorMod(viewY + dy, Map.range); // the map follows the hand; north is up
+                lastX += dx * ts; lastY += dy * ts; panDragged = true;
+                followMe = false; if (followBtn != null) followBtn.setSelected(false);
+                mapPanel.repaint();
+            }
+            @Override public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
+                int ts = tileSize();
+                setZoom(zoom + (e.getWheelRotation() < 0 ? 1 : -1), tileX(e.getX(), ts), tileY(e.getY(), ts));
+            }
+        };
+        mapPanel.addMouseListener(panAndZoom); mapPanel.addMouseMotionListener(panAndZoom); mapPanel.addMouseWheelListener(panAndZoom);
+
         mapPanel.addMouseListener(new MouseAdapter() {
             private void popup(MouseEvent e) {
                 if (!e.isPopupTrigger()) return;
                 int ts = tileSize();
-                int tx = Math.floorDiv(e.getX() - offX(), ts), ty = Map.range - 1 - Math.floorDiv(e.getY() - offY(), ts);
+                int tx = tileX(e.getX(), ts), ty = tileY(e.getY(), ts);
                 if (tx >= 0 && tx < Map.range && ty >= 0 && ty < Map.range) showTileMenu(tx, ty, e.getComponent(), e.getX(), e.getY());
             }
             @Override public void mousePressed(MouseEvent e) { popup(e); }
@@ -245,7 +292,11 @@ public class MapViewer extends JFrame {
                     chase.addActionListener(e -> queueInput("chase #" + c.id));
                     JMenuItem seek = new JMenuItem("Pin a quest to befriend");
                     seek.addActionListener(e -> queueInput("seek " + c.id + " friend"));
-                    who.add(open); who.add(chase); who.add(seek);
+                    JMenuItem seekTalk = new JMenuItem("Pin a quest to walk there and talk");
+                    seekTalk.addActionListener(e -> queueInput("seek " + c.id + " talk"));
+                    JMenuItem seekCourt = new JMenuItem("Pin a quest to walk there and court");
+                    seekCourt.addActionListener(e -> queueInput("seek " + c.id + " court"));
+                    who.add(open); who.add(chase); who.add(seekTalk); who.add(seekCourt); who.add(seek);
                     m.add(who);
                 }
             }
@@ -455,6 +506,14 @@ public class MapViewer extends JFrame {
             });
             p.add(b);
         }
+        JLabel zl = new JLabel("Zoom:"); zl.setForeground(fg); zl.setFont(Theme.bold(12)); p.add(zl);
+        JButton zout = makeBtn("−", () -> setZoom(zoom - 1, -1, -1)); zout.setToolTipText("Show more of the world (mouse wheel down)");
+        JButton zin = makeBtn("+", () -> setZoom(zoom + 1, -1, -1)); zin.setToolTipText("Bigger tiles, bigger pictures (mouse wheel up). Drag the map to move around.");
+        zoomLabel = new JLabel(zoom + "x"); zoomLabel.setForeground(fg); zoomLabel.setFont(Theme.bold(12));
+        followBtn = new JToggleButton("Follow me", followMe); followBtn.setFont(Theme.bold(12)); followBtn.setFocusable(false); Theme.chip(followBtn);
+        followBtn.setToolTipText("While zoomed in, keep your character in the middle of the map (dragging the map turns this off)");
+        followBtn.addActionListener(e -> { followMe = followBtn.isSelected(); mapPanel.repaint(); });
+        p.add(zout); p.add(zoomLabel); p.add(zin); p.add(followBtn);
         JButton legendBtn = makeBtn("Legend ▾", () -> { });
         legendBtn.setFont(Theme.bold(12)); Theme.fixSymbols(legendBtn, legendBtn.getText());
         legendBtn.addActionListener(e -> { JPopupMenu pm = new JPopupMenu(); pm.add(buildLegend()); pm.show(legendBtn, 0, legendBtn.getHeight()); });
@@ -503,7 +562,7 @@ public class MapViewer extends JFrame {
         sbBell = makeBtn("🔔 0", () -> GuiExtras.notificationsWindow(this));
         sbBell.setToolTipText("Notifications you have not read yet — click for the history");
         sbMusic = makeBtn("♪ off", () -> { Settings.music = !Settings.music; Settings.save(); Ambient.apply(); });
-        sbMusic.setToolTipText("Endless generated ambient music (volume and a new piece in Settings)");
+        sbMusic.setToolTipText("The game's music (volume and the next song in Settings, or: music list)");
         JButton sbGo = makeBtn("▶ Go", () -> queueInput("goquest"));
         sbGo.setToolTipText("Walk to the place of your top quest (or chase the person it names)");
         JButton sbQuit = makeBtn("⏻ Quit", this::confirmQuit);
@@ -523,7 +582,7 @@ public class MapViewer extends JFrame {
         int unread = Notifications.unread();
         sbMusic.setText(Settings.music ? (Ambient.status.equals("no audio device") ? "♪ no sound" : "♪ on") : "♪ off");
         sbMusic.setForeground(Settings.music ? Theme.ACCENT : Theme.DIM);
-        sbMusic.setToolTipText(Settings.music && !Ambient.nowPlaying.isEmpty() ? "Now playing: \"" + Ambient.nowPlaying + "\" (" + Ambient.engine + ") - click to switch off" : "Endless generated ambient music (volume, sound source and a new piece in Settings)");
+        sbMusic.setToolTipText(Settings.music && !Ambient.nowPlaying.isEmpty() ? "Now playing: \"" + Ambient.nowPlaying + "\" (" + Ambient.engine + ") - click to switch off" : "The game's music (volume, sound source and the next song in Settings)");
         sbBell.setText("🔔 " + unread);
         sbBell.setForeground(unread > 0 ? Theme.GOLD : Theme.TEXT);
         if (st.equals("saving") || st.equals("loading")) { sbSave.setForeground(new Color(255, 190, 70)); sbSave.setText("💾 " + st + "..."); }
@@ -705,7 +764,7 @@ public class MapViewer extends JFrame {
         d.getContentPane().setBackground(Theme.BG);
         d.setLayout(new BorderLayout());
         d.add(img != null ? new JLabel(new ImageIcon(img)) : new JLabel("  No picture for this place yet (see images/places/README.txt)  "), BorderLayout.CENTER);
-        JLabel cap = new JLabel(" " + area.name + "  " + PlayerControl.coord(area) + "  Lv." + area.lvl + (area.city ? "  City" : "") + (area.sect != null ? "  Sect: " + area.sect.name : "")
+        JLabel cap = new JLabel(" " + area.name + "  " + PlayerControl.coord(area) + "  Lv." + area.lvl + (area.city ? "  City Lv." + area.cityLevel() : "") + (area.sect != null ? "  Sect: " + area.sect.name : "")
                 + (area.crowdHotspot ? "  ⚠ overcrowded" : "") + "  " + new String[]{"Spring", "Summer", "Autumn", "Winter"}[GameDriver.currentSeason]);
         cap.setForeground(Theme.TEXT); cap.setFont(Theme.bold(15));
         JPanel capRow = new JPanel(new BorderLayout());
@@ -1009,7 +1068,7 @@ public class MapViewer extends JFrame {
         };
         if (kind.equals("people") || kind.equals("monsters")) {
             String[][] acts = {{"Talk", "talk #%d"}, {"Spar", "spar #%d"}, {"Attack", "attack #%d"}, {"Invite to party", "invite #%d"},
-                    {"Seek: befriend", "seek %d friend"}, {"Seek: fight", "seek %d fight"}, {"Seek: spar", "seek %d spar"}};
+                    {"Seek: befriend", "seek %d friend"}, {"Seek: talk", "seek %d talk"}, {"Seek: court", "seek %d court"}, {"Seek: fight", "seek %d fight"}, {"Seek: spar", "seek %d spar"}};
             for (String[] a : acts) actions.add(makeBtn(a[0], () -> {
                 Object o = selected.apply(a[0]);
                 if (o instanceof Character) queueInput(String.format(a[1], ((Character) o).id));
@@ -1060,110 +1119,7 @@ public class MapViewer extends JFrame {
 
     /** Non-modal editor for the controlled character's hybrid script. Every edit is sent as a `script ...` command so the game thread
      *  stays the only writer; the list refreshes from a snapshot twice a second. */
-    private void showScriptEditor() {
-        if (scriptDialog != null && scriptDialog.isDisplayable()) { scriptDialog.setVisible(true); scriptDialog.toFront(); return; }
-        Color bg = Theme.PANEL, fg = Theme.TEXT;
-        JDialog d = new JDialog(this, "Script Editor (Hybrid mode)", false);
-        d.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-        d.getContentPane().setBackground(bg);
-        d.setLayout(new BorderLayout(6, 6));
-
-        DefaultListModel<String> model = new DefaultListModel<>();
-        JList<String> list = new JList<>(model);
-        list.setFont(Theme.plain(16));
-        list.setBackground(Theme.FIELD);
-        list.setForeground(fg);
-        JScrollPane sp = new JScrollPane(list);
-        sp.setPreferredSize(new Dimension(420, 300));
-
-        JLabel status = new JLabel(" ");
-        status.setForeground(Theme.ACCENT);
-        status.setFont(Theme.bold(15));
-
-        String[] templates = {"goto 15 15", "wait 5", "forage 10", "forage until 500", "mine 10", "mine until 500", "craft 5",
-                "meditate 10", "meditate until major 3", "hunt 5", "sell", "quest Go: home", "repeat 3", "repeat forever",
-                "if ss >= 1000", "end", "mode manual", "mode auto"};
-        JComboBox<String> stepBox = new JComboBox<>(templates);
-        stepBox.setEditable(true);
-        stepBox.setFont(Theme.plain(16));
-
-        JPanel addRow = new JPanel(new BorderLayout(4, 0));
-        addRow.setBackground(bg);
-        addRow.add(stepBox, BorderLayout.CENTER);
-        addRow.add(makeBtn("Add step", () -> {
-            Object o = stepBox.getEditor().getItem();
-            String txt = o == null ? "" : o.toString().trim();
-            if (!txt.isEmpty()) queueInput("script add " + txt);
-        }), BorderLayout.EAST);
-
-        JPanel btns = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        btns.setBackground(bg);
-        btns.add(makeBtn("Delete selected", () -> { int i = list.getSelectedIndex(); if (i >= 0) queueInput("script del " + (i + 1)); }));
-        btns.add(makeBtn("Clear", () -> { if (GuiExtras.confirm(d, "Clear the whole script?")) queueInput("!script clear"); }));
-        JButton run = makeBtn("▶ Run", () -> queueInput("script run"));
-        run.setForeground(Theme.OK);
-        btns.add(run);
-        btns.add(makeBtn("Resume", () -> queueInput("script resume")));
-        JButton stop = makeBtn("■ Stop", () -> queueInput("script stop"));
-        stop.setForeground(Theme.DANGER);
-        btns.add(stop);
-
-        JPanel south = new JPanel(new BorderLayout(0, 4));
-        south.setBackground(bg);
-        south.add(addRow, BorderLayout.NORTH);
-        south.add(btns, BorderLayout.CENTER);
-        south.add(status, BorderLayout.SOUTH);
-
-        JLabel hint = new JLabel("<html>Steps run one turn at a time. 'repeat'/'if' need a matching 'end'. Editing is refused while a script is running.</html>");
-        hint.setForeground(Theme.DIM);
-        hint.setFont(Theme.plain(14));
-
-        JPanel northBox = new JPanel(new BorderLayout());
-        northBox.setBackground(bg);
-        northBox.add(GuiHub.header(this, "scripts", "Script Editor"), BorderLayout.NORTH);
-        northBox.add(hint, BorderLayout.CENTER);
-        d.add(northBox, BorderLayout.NORTH);
-        d.add(sp, BorderLayout.CENTER);
-        d.add(south, BorderLayout.SOUTH);
-
-        javax.swing.Timer refresh = new javax.swing.Timer(500, e -> World.read(60, () -> {
-            Character p = findPlayer();
-            if (p == null || p.pc == null) { status.setText("No player character."); return; }
-            PlayerControl pc = p.pc;
-            List<String> rows = new ArrayList<>();
-            int ip = -1; boolean running = false;
-            try {
-                PlayerScript sc = pc.script;
-                if (sc != null) {
-                    ip = sc.ip; running = sc.running;
-                    int depth = 0;
-                    List<PlayerScript.Step> steps = new ArrayList<>(sc.steps);
-                    for (int i = 0; i < steps.size(); i++) {
-                        PlayerScript.Step st = steps.get(i);
-                        if (st.type.equals("end")) depth = Math.max(0, depth - 1);
-                        rows.add((i + 1) + ". " + PlayerScript.spaces(2 * depth) + st + (running && i == ip ? "   ◀ here" : ""));
-                        if (st.type.equals("repeat") || st.type.equals("if")) depth++;
-                    }
-                }
-            } catch (Exception ignored) { return; } // the game thread changed the list mid-copy: try again next tick
-            int sel = list.getSelectedIndex();
-            if (!rows.equals(java.util.Collections.list(model.elements()))) {
-                model.clear();
-                for (String r : rows) model.addElement(r);
-                if (sel >= 0 && sel < model.size()) list.setSelectedIndex(sel);
-            }
-            status.setText(p.name + " — mode " + pc.mode + (running ? ", script step " + (ip + 1) : "")
-                    + (pc.script != null && !pc.script.lastReason.isEmpty() && !running ? " | last: " + pc.script.lastReason : ""));
-        }));
-        d.addWindowListener(new WindowAdapter() { @Override public void windowClosed(WindowEvent e) { refresh.stop(); } });
-        refresh.start();
-
-        d.setSize(480, 520);
-        d.setLocationRelativeTo(this);
-        GuiHub.restoreBounds(d, "scripts"); GuiHub.trackBounds(d, "scripts");
-        scriptDialog = d;
-        d.setVisible(true);
-    }
+    private void showScriptEditor() { GuiScripts.open(this); }
 
     private JPanel row(Color bg) {
         JPanel r = new JPanel(new FlowLayout(FlowLayout.CENTER, 2, 1));
@@ -1226,15 +1182,33 @@ public class MapViewer extends JFrame {
             empty.setFont(Theme.plain(16));
             trackerPanel.add(empty);
         } else {
+            boolean anyDead = false;
             for (int i = 0; i < Map.trackedCharacters.size(); i++) {
                 int cid = Map.trackedCharacters.get(i);
                 if (cid < 0 || cid >= Map.characters.size()) continue;
                 Character c = Map.characters.get(cid);
                 if (c == null || c.dead) {
-                    JLabel dead = new JLabel("† ID:" + cid + " (deceased)");
+                    JPanel drow = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+                    drow.setBackground(Theme.BG);
+                    drow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+                    drow.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    JLabel dead = new JLabel("† " + (c != null ? c.name + " " + c.lastName : "ID:" + cid) + " (deceased)");
                     dead.setForeground(dim);
                     dead.setFont(Theme.plain(16));
-                    trackerPanel.add(dead);
+                    final int goneCid = cid;
+                    JButton goneBtn = new JButton("×");
+                    goneBtn.setFont(Theme.bold(16));
+                    goneBtn.setForeground(red);
+                    goneBtn.setToolTipText("Take them off the tracker.");
+                    goneBtn.putClientProperty("JButton.buttonType", "toolBarButton");
+                    goneBtn.setBorderPainted(false);
+                    goneBtn.setFocusPainted(false);
+                    goneBtn.setMargin(new Insets(0, 2, 0, 2));
+                    goneBtn.addActionListener(e -> { Map.trackedCharacters.remove(Integer.valueOf(goneCid)); updateTracker(); });
+                    drow.add(dead);
+                    drow.add(goneBtn);
+                    trackerPanel.add(drow);
+                    anyDead = true;
                     continue;
                 }
                 JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
@@ -1274,6 +1248,16 @@ public class MapViewer extends JFrame {
                 row.add(info);
                 row.add(removeBtn);
                 trackerPanel.add(row);
+            }
+            if (anyDead) {
+                JButton clear = makeBtn("Clear deceased", "Take every dead character off the tracker.", () -> {
+                    for (int tid : new ArrayList<>(Map.trackedCharacters)) {
+                        Character tc = tid >= 0 && tid < Map.characters.size() ? Map.characters.get(tid) : null;
+                        if (tc == null || tc.dead) Map.trackedCharacters.remove(Integer.valueOf(tid));
+                    }
+                    updateTracker();
+                });
+                trackerPanel.add(clear);
             }
         }
         Ui.scale(trackerPanel, Settings.fontScale);
@@ -1322,11 +1306,11 @@ public class MapViewer extends JFrame {
         dlgLabel.accept("Cultivation: " + (int)c.cultivation + " / " + (int)c.cultivationBaseMax, dim);
         dlgLabel.accept("Age: " + c.age + " / " + c.maxAge + "  Potential: " + c.potentialLabel(), fg);
         dlgLabel.accept("Trait: " + c.getTrait() + "  Affiliation: " + c.affiliation + "  Gender: " + c.gender, fg);
-        dlgLabel.accept("Profession Lv." + c.professionLvl, dim);
+        dlgLabel.accept("Profession Lv." + c.professionShown(), dim);
         dlgLabel.accept("Wealth: " + c.ss + " SS  " + c.sc + " SC  " + c.dc + " DC", fg);
         dlgLabel.accept("Weapon: " + (c.equippedWeapon != null ? c.equippedWeapon.toString() : "None"), fg);
         dlgLabel.accept("Armor:  " + (c.equippedClothing != null ? c.equippedClothing.toString() : "None"), fg);
-        dlgLabel.accept("Kills: " + c.kills + "  Items crafted: " + c.itemsCrafted, dim);
+        dlgLabel.accept("Kills: " + c.kills + "  Items crafted: " + c.itemsCrafted + (c.trait == Character.Traits.Innovative ? "  Inspiration: " + c.inspiration + "/" + Character.INSPIRATION_NEEDED : ""), dim);
         if (c.sect != null) dlgLabel.accept("Sect: " + c.sect.name + " [" + c.sect.getRank(c) + "]", purple);
         if (c.spouse != null) dlgLabel.accept("Spouse: " + c.spouse.name + " " + c.spouse.lastName, new Color(255, 160, 200));
         dlgLabel.accept("Location: " + (c.location != null ? c.location.name + " [" + c.location.x + "," + c.location.y + "]" : "?"), dim);
@@ -1359,6 +1343,12 @@ public class MapViewer extends JFrame {
         JButton closeBtn = makeBtn("Close", dialog::dispose);
         JButton bioBtn = makeBtn("Biography", () -> GuiMore.biographyWindow(this, c));
 
+        Character me = findPlayer();
+        if (me != null && me != c && c.player != 1 && c.age >= 8 && c.trait != Character.Traits.Beast && c.trait != Character.Traits.Monster) { // from anywhere in the world: a quest that walks to them
+            final int cid = c.id;
+            btnRow.add(makeBtn("Go & talk", "Pin a quest that walks to them and talks (it follows them if they move).", () -> queueInput("seek " + cid + " talk")));
+            if (QuestLife.suitor(me, c)) btnRow.add(makeBtn("Go & court", "Pin a quest that walks to them and courts them.", () -> queueInput("seek " + cid + " court")));
+        }
         btnRow.add(bioBtn);
         btnRow.add(trackBtn);
         btnRow.add(controlBtn);
@@ -1405,7 +1395,7 @@ public class MapViewer extends JFrame {
             if (area.geoName != null && !area.geoName.equals(area.name)) addLabel("(the land here was called " + area.geoName + " before the settlement)", dim); // a founded city or a dungeon renames the tile
             String regionText = Regions.line(area);
             if (!regionText.isEmpty()) addLabel(regionText, dim);
-            String lvlLine = "Level " + area.lvl + (area.hotspot ? "  ★ Hotspot" : "");
+            String lvlLine = (area.city ? "City level " + area.cityLevel() + " (grows with the treasury)  ·  tile level " : "Level ") + area.lvl + (area.hotspot ? "  ★ Hotspot" : "");
             if (area.spiritualVein) lvlLine += "  ✦ Spirit Vein";
             addLabel(lvlLine, area.spiritualVein ? cyan : fg);
             addLabel("Tile [" + area.x + ", " + area.y + "]  Biome: " + area.biomeM, dim);
@@ -1577,7 +1567,7 @@ public class MapViewer extends JFrame {
                 @Override public void mouseClicked(MouseEvent e) {
                     if (e.getClickCount() != 2) return;
                     int ts = tileSize();
-                    int tx = Math.floorDiv(e.getX() - offX(), ts), ty = Map.range - 1 - Math.floorDiv(e.getY() - offY(), ts);
+                    int tx = tileX(e.getX(), ts), ty = tileY(e.getY(), ts);
                     if (tx >= 0 && tx < Map.range && ty >= 0 && ty < Map.range && Map.tiles[tx][ty] != null) showLargeView(Map.tiles[tx][ty]);
                 }
             });
@@ -1586,12 +1576,12 @@ public class MapViewer extends JFrame {
         @Override
         public Dimension getPreferredSize() {
             int ts = tileSize();
-            return new Dimension(Map.range * ts, Map.range * ts);
+            return new Dimension(vis() * ts, vis() * ts);
         }
 
         @Override public String getToolTipText(MouseEvent e) {
             int ts = tileSize();
-            final int tx = Math.floorDiv(e.getX() - offX(), ts), ty = Map.range - 1 - Math.floorDiv(e.getY() - offY(), ts);
+            final int tx = tileX(e.getX(), ts), ty = tileY(e.getY(), ts);
             if (tx < 0 || ty < 0 || tx >= Map.range || ty >= Map.range) return null;
             final String[] out = {null};
             World.read(40, () -> {
@@ -1601,13 +1591,17 @@ public class MapViewer extends JFrame {
                 try { pop = a.characters.size(); } catch (RuntimeException ignored) { }
                 String nm = a.name == null ? "" : a.name.replace("&", "&amp;").replace("<", "&lt;");
                 if (a.geoName != null && !a.geoName.equals(a.name)) nm += " <i>(" + a.geoName.replace("&", "&amp;").replace("<", "&lt;") + ")</i>";
-                out[0] = "<html><b>" + nm + "</b><br>[" + a.x + ", " + a.y + "]  Lv." + a.lvl + (a.city ? "  City" : "") + (a.sect != null ? "  Sect" : "")
+                out[0] = "<html><b>" + nm + "</b><br>[" + a.x + ", " + a.y + "]  Lv." + a.lvl + (a.city ? "  City Lv." + a.cityLevel() : "") + (a.sect != null ? "  Sect" : "")
                         + "<br>" + pop + " cultivators · " + a.monsters + " beasts" + (a.crowdHotspot ? "<br>overcrowded" : "") + "</html>";
             });
             return out[0];
         }
 
-        private Point center(Area a, int ts) { return new Point(a.x * ts + ts / 2, (Map.range - 1 - a.y) * ts + ts / 2); }
+        private Point center(Area a, int ts) {
+            int c = colOf(a.x), r = rowOf(a.y);
+            if (c < 0 || r < 0) return new Point(-9999, -9999); // out of view
+            return new Point(c * ts + ts / 2, r * ts + ts / 2);
+        }
 
         private BufferedImage buf;
 
@@ -1636,7 +1630,7 @@ public class MapViewer extends JFrame {
                 Graphics2D bg = target.createGraphics();
                 try {
                     bg.setColor(getBackground()); bg.fillRect(0, 0, w, h);
-                    int ox = offX(), oy = offY(), side = Map.range * tileSize();
+                    int ox = offX(), oy = offY(), side = vis() * tileSize();
                     bg.translate(ox, oy);
                     paintWorld(bg);
                     bg.translate(-ox, -oy);
@@ -1651,38 +1645,45 @@ public class MapViewer extends JFrame {
             int playerX = -1, playerY = -1;
             Character pl = findPlayer();
             if (pl != null && pl.location != null) { playerX = pl.location.x; playerY = pl.location.y; }
+            if (zoom > 1 && followMe && pl != null && pl.location != null) { viewX = pl.location.x; viewY = pl.location.y; } // zoomed: the player stays in the middle
             java.util.Set<Area> known = null;
             if (layerFog && pl != null) { try { known = new java.util.HashSet<>(pl.knownLocations); } catch (RuntimeException ignored) { known = null; } }
             final int mode = colorMode;
+            PlaceImages.thumbSync = exportTile > 0; // an export waits for every picture; the live map draws what is ready and gets the rest from a background thread
 
             for (int x = 0; x < Map.range; x++) {
+                int col = colOf(x);
+                if (col < 0) continue; // not in view (zoomed)
+                int px = col * ts;
                 for (int y = 0; y < Map.range; y++) {
+                    int row = rowOf(y);
+                    if (row < 0) continue;
                     Area area = Map.tiles[x][y];
-                    int sy = (Map.range - 1 - y) * ts; // screen row: +y (north, the 'w' key) is drawn upward
+                    int sy = row * ts; // screen row: +y (north, the 'w' key) is drawn upward
                     boolean fogged = known != null && (area == null || !known.contains(area));
                     g.setColor(fogged ? new Color(6, 6, 10) : tileColor(area, mode));
-                    g.fillRect(x * ts, sy, ts - 1, ts - 1);
+                    g.fillRect(px, sy, ts - 1, ts - 1);
                     if (!fogged && layerThumbs && area != null && ts >= 12) {
-                        BufferedImage im = PlaceImages.render(area, 96, 54, true);
+                        BufferedImage im = PlaceImages.thumb(area, ts);
                         if (im != null) {
                             int side = Math.min(im.getWidth(), im.getHeight()), sx0 = (im.getWidth() - side) / 2;
-                            g.drawImage(im, x * ts, sy, x * ts + ts - 1, sy + ts - 1, sx0, 0, sx0 + side, side, null);
+                            g.drawImage(im, px, sy, px + ts - 1, sy + ts - 1, sx0, 0, sx0 + side, side, null);
                         }
                     }
                     if (fogged) {
                         // nothing else is drawn for tiles the player has not seen (the selection ring and player marker below still are)
                     }
                     if (layerCrowd && area != null && !fogged) {
-                        if (area.crowdHotspot) { g.setColor(new Color(255, 40, 40)); g.drawRect(x * ts, sy, ts - 2, ts - 2); g.drawRect(x * ts + 1, sy + 1, ts - 4, ts - 4); }
-                        else if (!area.isOriginis() && area.characters.size() > area.crowdCapacity() * 0.8) { g.setColor(new Color(255, 190, 40)); g.drawRect(x * ts, sy, ts - 2, ts - 2); }
+                        if (area.crowdHotspot) { g.setColor(new Color(255, 40, 40)); g.drawRect(px, sy, ts - 2, ts - 2); g.drawRect(px + 1, sy + 1, ts - 4, ts - 4); }
+                        else if (!area.isOriginis() && area.characters.size() > area.crowdCapacity() * 0.8) { g.setColor(new Color(255, 190, 40)); g.drawRect(px, sy, ts - 2, ts - 2); }
                     }
                     if (x == selX && y == selY) {
                         g.setColor(Color.WHITE);
-                        g.drawRect(x * ts, sy, ts - 2, ts - 2);
+                        g.drawRect(px, sy, ts - 2, ts - 2);
                     }
                     if (x == playerX && y == playerY) {
                         g.setColor(new Color(255, 255, 100));
-                        int cx = x * ts + ts / 2, cy = sy + ts / 2, r = Math.max(2, ts / 4);
+                        int cx = px + ts / 2, cy = sy + ts / 2, r = Math.max(2, ts / 4);
                         g.fillOval(cx - r, cy - r, r * 2, r * 2);
                     }
                     // Tracked NPC dots (cyan)
@@ -1693,7 +1694,7 @@ public class MapViewer extends JFrame {
                                 && tc.location.x == x && tc.location.y == y
                                 && !(x == playerX && y == playerY)) {
                             g.setColor(new Color(0, 220, 220));
-                            int cx2 = x * ts + ts / 2, cy2 = sy + ts / 2, r2 = Math.max(2, ts / 5);
+                            int cx2 = px + ts / 2, cy2 = sy + ts / 2, r2 = Math.max(2, ts / 5);
                             g.fillOval(cx2 - r2, cy2 - r2, r2 * 2, r2 * 2);
                             break;
                         }

@@ -34,6 +34,7 @@ public class MoreGui {
         real = System.out;
         PcProbe.real = real; PcProbeGui.real = real;
         System.setIn(PcProbe.in);
+        GameDriver.frozenNpcs = true; // frozen before the first tick: the NPCs act before the human prompt of a tick, and one of them could otherwise ask the character a question before the probe is ready
         System.setOut(new PrintStream(PcProbe.cap, true));
         Thread t = new Thread(null, () -> { try { GameDriver.main(new String[0]); } catch (Throwable e) { PcProbe.gameError = e; e.printStackTrace(real); } }, "game", 512L << 20);
         t.setDaemon(true); t.start();
@@ -48,8 +49,13 @@ public class MoreGui {
 
     static void run() throws Exception {
         PcProbe.in.feed("y\ns\n1\nn\n");
-        long end = System.currentTimeMillis() + 240000;
-        while (System.currentTimeMillis() < end && !(GameDriver.mapViewer != null && GameDriver.waitingForInput && PcProbe.pc() != null)) Thread.sleep(200);
+        long end = System.currentTimeMillis() + Long.getLong("gui.waitMs", 240000L);
+        long lastManual = 0;
+        while (System.currentTimeMillis() < end && !(GameDriver.mapViewer != null && GameDriver.waitingForInput && PcProbe.pc() != null)) {
+            Character h = PcProbe.pc();
+            if (h != null && h.pc != null && h.pc.mode != PlayerControl.Mode.MANUAL && GameDriver.mapViewer != null && System.currentTimeMillis() - lastManual > 5000) { GameDriver.mapViewer.queueInput("manual"); lastManual = System.currentTimeMillis(); } // a saved game whose person was on AUTO never prompts
+            Thread.sleep(200);
+        }
         check("GUI opened and the player prompts", GameDriver.mapViewer != null && GameDriver.waitingForInput && PcProbe.pc() != null);
         Character p = PcProbe.pc();
         if (p == null) return;
@@ -73,16 +79,18 @@ public class MoreGui {
         Window bw = win("Backpack");
         check("Backpack window opens", bw != null);
         String bt = text(bw);
-        check("Backpack lists the new sword and the equipment line", bt.contains("Weapon:") && bt.contains("Sword") || bt.contains("lvl") || bt.contains("14"));
+        check("Backpack shows the worn weapon card and the fighting level", bt.contains("WEAPON") && bt.contains("ARMOR") && bt.contains("Fighting level"));
         List<JTable> tables = new ArrayList<>();
         if (bw != null) PcProbeGui.onEdt(() -> PcProbeGui.collect(((JDialog) bw).getContentPane(), JTable.class, tables));
-        check("Backpack has gear and technique tables", tables.size() >= 2);
-        if (!tables.isEmpty()) {
-            final JTable gt = tables.get(0);
-            PcProbeGui.onEdt(() -> { if (gt.getRowCount() > 0) gt.setRowSelectionInterval(0, 0); });
+        check("Backpack has technique and companion tables", tables.size() >= 2);
+        List<JList> lists = new ArrayList<>();
+        if (bw != null) PcProbeGui.onEdt(() -> PcProbeGui.collect(((JDialog) bw).getContentPane(), JList.class, lists));
+        check("Backpack has the gear, stores and goods lists", lists.size() >= 3);
+        if (!lists.isEmpty()) {
+            final JList gl = lists.get(0);
+            PcProbeGui.onEdt(() -> { if (gl.getModel().getSize() > 0) gl.setSelectedIndex(0); });
             Thread.sleep(300);
-            real.println("[M] info: tables=" + tables.size() + " rows=" + gt.getRowCount() + " cols=" + gt.getColumnCount() + " backpack=" + p.backpack.size() + " text=" + text(bw).replace((char) 10, (char) 32));
-            check("gear table has rows", gt.getRowCount() >= 2);
+            check("gear list has a row for every item in the bag", gl.getModel().getSize() == p.backpack.size());
             String hint = text(bw);
             check("selecting a row shows a comparison", hint.contains("Wearing it makes") || hint.contains("Not wearable"));
         }
@@ -98,7 +106,7 @@ public class MoreGui {
         PcProbeGui.onEdt(() -> GuiMore.placeWindow(mv, orig));
         Thread.sleep(1500);
         Window pw = win("Details");
-        check("City details window shows the lord, shops and history", pw != null && text(pw).contains("City of Originis") && text(pw).contains("History"));
+        check("City details window shows the lord, shops and history", pw != null && text(pw).contains("Originis") && text(pw).contains("SHOPS HERE") && text(pw).contains("HISTORY"));
         QolGui.closeAll("Details");
         check("terminal: sect/city by name resolve", TextTools.findPlaces("Originis", "city").size() == 1);
 
@@ -124,7 +132,7 @@ public class MoreGui {
         PcProbeGui.onEdt(() -> GuiMore.biographyWindow(mv, p));
         Thread.sleep(1500);
         Window gw = win("Biography");
-        check("Biography window opens with the life events", gw != null && text(gw).contains("Life events") );
+        check("Biography window opens with the life events", gw != null && text(gw).contains("LIFE EVENTS") );
         QolGui.closeAll("Biography");
 
         // ---------- notes ----------
@@ -157,7 +165,7 @@ public class MoreGui {
         if (!tp.isEmpty()) {
             PcProbeGui.onEdt(() -> { JTabbedPane x = tp.get(0); x.setSelectedIndex(x.getTabCount() - 1); });
             Thread.sleep(4500);
-            check("Dashboard tab text shows the realm histogram", text(rw).contains("Cultivators by major realm"));
+            check("Dashboard tab text shows the realm histogram", text(rw).contains("CULTIVATORS BY REALM"));
         }
         QolGui.closeAll("Rankings");
 

@@ -22,13 +22,13 @@ public class Area implements java.io.Serializable {
     ArrayList<Item> backpack;
     ArrayList<Item> materialBag;
     ArrayList<Item> pillBag;
-    ArrayList<Item> goodsBag = new ArrayList<>(); // the city market's food, wine and poison (see Life)
+    ArrayList<Item> goodsBag = new SafeList<>(); // the city market's food, wine and poison (see Life)
     ArrayList<Item> arrayBag;
-    ArrayList<Library> libraries = new ArrayList<>();
+    ArrayList<Library> libraries = new SafeList<>();
     Organization sect;
     boolean hasHeaven() { return heavenlyTechnique != null || heavenItem != null; }
     String heavenLabel() { return heavenlyTechnique != null ? heavenlyTechnique.name : heavenItem != null ? heavenItem.name + (heavenItem.quantity > 1 ? " x" + heavenItem.quantity : "") : ""; }
-    ArrayList<Item> auction() { if (auctionBag == null) auctionBag = new ArrayList<>(); return auctionBag; }
+    ArrayList<Item> auction() { if (auctionBag == null) auctionBag = new SafeList<>(); return auctionBag; }
     String biomeM = "";
     String biomem = "";
     float elev = 0.5f, moist = 0.5f, temp = 0.5f; // terrain fields of the tile (BiomeGen): elevation, moisture, temperature, 0-1
@@ -51,10 +51,10 @@ public class Area implements java.io.Serializable {
     long cityTreasury = 0;
     boolean spiritualVein = false;
 
-    ArrayList<Shop> shops = new ArrayList<>();
-    ArrayList<Quest> bounties = new ArrayList<>();
-    ArrayList<Character> characters = new ArrayList<>();
-    transient ArrayList<Character> deadCharacters = new ArrayList<>();
+    ArrayList<Shop> shops = new SafeList<>();
+    ArrayList<Quest> bounties = new SafeList<>();
+    ArrayList<Character> characters = new SafeList<>();
+    transient ArrayList<Character> deadCharacters = new SafeList<>();
 
     // City level 1-10, scaling with the coffers exactly like item prices (price = itemLvl^2.5 * 10, one city level per 10 item levels).
     // Level 1 needs no money; level 2 ~18k, 3 ~49k, 5 ~177k, 10 ~1M.
@@ -64,6 +64,7 @@ public class Area implements java.io.Serializable {
         return Math.max(1, Math.min(10, (int) (itemLvl / 10)));
     }
 
+    int siegeUntil = 0, siegeBy = -1;   // the week until which this city or sect seat counts as under attack, and who attacks it (see Defense)
     boolean crowdHotspot = false;   // overcrowded: beasts ambush the cultivators here until the tile thins out
     int crowdSurge = 0;             // level surge applied while crowdHotspot is set
 
@@ -72,6 +73,45 @@ public class Area implements java.io.Serializable {
     // Called every tick. An over-capacity tile becomes a hotspot (level surge) and beasts start ambushing its cultivators;
     // it returns to normal once the crowd drops under 80% of capacity.
     public boolean isOriginis() { return "Originis".equals(name); }
+
+    // A per-turn index of the weapons and clothes for sale here, counted by item level: {shop weapons, shop clothes, pool weapons, pool clothes}. It is only a hint (a list may change under it);
+    // the real purchase still reads the shelves. Lets a character tell in a few steps whether a city has anything worth a look.
+    private transient volatile int[][] gearIdx;
+    private transient volatile int gearIdxTime = -1, gearIdxSig = 0;
+
+    int[][] gearIndex() {
+        int sig = gearSignature();
+        int[][] g = gearIdx;
+        if (g != null && gearIdxTime == GameDriver.time && gearIdxSig == sig) return g;
+        synchronized (this) {
+            if (gearIdx != null && gearIdxTime == GameDriver.time && gearIdxSig == sig) return gearIdx;
+            int[][] n = new int[4][102];
+            try {
+                for (Shop sh : shops) for (Item it : sh.inventory) countGear(n, it, 0);
+                if (backpack != null) for (Item it : backpack) countGear(n, it, 2);
+            } catch (RuntimeException e) { /* the shelves changed while counting: the index is only a hint */ }
+            gearIdx = n; gearIdxTime = GameDriver.time; gearIdxSig = sig;
+            return n;
+        }
+    }
+
+    /** How many things are on the shelves and in the pool (a purchase or a sale inside the turn changes it, so the index is rebuilt). */
+    private int gearSignature() {
+        int sig = backpack == null ? 0 : backpack.size();
+        try { for (Shop sh : shops) sig = sig * 31 + sh.inventory.size(); } catch (RuntimeException e) { sig = -1; }
+        return sig;
+    }
+
+    private static void countGear(int[][] n, Item it, int base) {
+        if (it == null || it.lvl < 0) return;
+        int l = Math.min(101, it.lvl);
+        if (it.itemType == Item.ItemType.Weapon) n[base][l]++; else if (it.itemType == Item.ItemType.Clothing) n[base + 1][l]++;
+    }
+
+    /** A city or dungeon that renamed the tile is gone: the land has its own name again (lore sites and Originis keep theirs; `geoName` stays for the pictures). */
+    void restoreName() {
+        if (geoName != null && loreSite == null && !city && dungeonType == null && !isOriginis() && !geoName.equals(name)) name = geoName;
+    }
 
     /** Originis and the eight tiles around it, where the first generation is spread out at the start. */
     public boolean isStartZone() { return Math.abs(x - range / 2) <= 1 && Math.abs(y - range / 2) <= 1; }
@@ -136,8 +176,18 @@ public class Area implements java.io.Serializable {
     // Money paid to "the city": goes to the living lord, otherwise into the city treasury (never to a dead owner, never lost)
     public void receivePayment(long amount) {
         if (amount <= 0) return;
-        if (cityOwner != null && !cityOwner.dead) { cityOwner.ss += amount; cityOwner.convertCurrency(); }
+        long tenth = salesTax(amount);
+        amount -= tenth;
+        if (cityOwner != null && !cityOwner.dead) { cityOwner.credit(amount); }
         else cityTreasury += amount;
+    }
+
+    /** The city's cut of a sale: a tenth goes straight to the treasury (which sets the city level); the amount taken is returned. */
+    public long salesTax(long amount) {
+        if (!city || amount < 10) return 0;
+        long tenth = amount / 10;
+        cityTreasury += tenth;
+        return tenth;
     }
 
     // Shops a city can host: 3 per city level
@@ -145,9 +195,9 @@ public class Area implements java.io.Serializable {
 
     // Recent corpses only (Lucky characters loot them); unbounded growth was a memory leak and made the loot scan O(n)
     public void addDead(Character c) {
-        if (deadCharacters == null) deadCharacters = new ArrayList<>();
+        if (deadCharacters == null) deadCharacters = new SafeList<>();
         deadCharacters.add(c);
-        if (deadCharacters.size() > 50) deadCharacters.remove(0);
+        if (deadCharacters.size() > 12) Slim.husk(deadCharacters.remove(0)); // the corpses of the last few are lootable; an older one lets go of its lists
     }
 
     public void addChar(Character c) {
@@ -168,7 +218,7 @@ public class Area implements java.io.Serializable {
     }
 
     // Tournament registration
-    ArrayList<Character> tournamentRegistrants = new ArrayList<>();
+    ArrayList<Character> tournamentRegistrants = new SafeList<>();
     int tournamentTimer = 0;
     String tournamentName; // e.g. "Jade Dragon Tournament of Year 214"
     int tournamentMinMajor = 0;
@@ -197,10 +247,10 @@ public class Area implements java.io.Serializable {
         herbMaterials = rand.nextInt(1000000000);
         metalMaterials = rand.nextInt(1000000000);
         population = 100_000 + rand.nextInt(900_000); // the capital starts as a large but bounded city
-        backpack = new ArrayList<>();
-        materialBag = new ArrayList<>();
-        pillBag = new ArrayList<>();
-        arrayBag = new ArrayList<>();
+        backpack = new SafeList<>();
+        materialBag = new SafeList<>();
+        pillBag = new SafeList<>();
+        arrayBag = new SafeList<>();
         libraries.add(new Library(this));
         addCreatedArea(this);
     }
@@ -275,24 +325,28 @@ public class Area implements java.io.Serializable {
         herbMaterials = (int) Math.min((long) Integer.MAX_VALUE / 4, Math.max(1L, (long) (herbMaterials * (0.4 + 1.2 * moist))));
         metalMaterials = (int) Math.min((long) Integer.MAX_VALUE / 4, Math.max(1L, (long) (metalMaterials * (0.3 + 1.6 * elev))));
         if (rand.nextInt(100) == 0 || (elev > 0.74 && rand.nextInt(30) == 0)) spiritualVein = true;
-        backpack = new ArrayList<>();
-        materialBag = new ArrayList<>();
-        pillBag = new ArrayList<>();
-        arrayBag = new ArrayList<>();
+        backpack = new SafeList<>();
+        materialBag = new SafeList<>();
+        pillBag = new SafeList<>();
+        arrayBag = new SafeList<>();
         addCreatedArea(this);
         Lore.onTileCreated(this); // a tile that holds one of the lore's places takes its name
     }
 
     private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
         in.defaultReadObject();
-        if (deadCharacters == null) deadCharacters = new ArrayList<>();
-        if (characters == null) characters = new ArrayList<>();
+        if (deadCharacters == null) deadCharacters = new SafeList<>();
+        if (characters == null) characters = new SafeList<>();
         // Fields added after older saves were written deserialize as null
-        if (shops == null) shops = new ArrayList<>();
-        if (bounties == null) bounties = new ArrayList<>();
-        if (goodsBag == null) goodsBag = new ArrayList<>();
-        if (libraries == null) libraries = new ArrayList<>();
-        if (tournamentRegistrants == null) tournamentRegistrants = new ArrayList<>();
+        if (shops == null) shops = new SafeList<>();
+        if (bounties == null) bounties = new SafeList<>();
+        if (goodsBag == null) goodsBag = new SafeList<>();
+        if (libraries == null) libraries = new SafeList<>();
+        if (tournamentRegistrants == null) tournamentRegistrants = new SafeList<>();
+        // lists of a saved game are plain ArrayLists: the lists people on other tiles read are made safe for that (see SafeList)
+        characters = SafeList.of(characters); deadCharacters = SafeList.of(deadCharacters); shops = SafeList.of(shops); bounties = SafeList.of(bounties); goodsBag = SafeList.of(goodsBag);
+        libraries = SafeList.of(libraries); tournamentRegistrants = SafeList.of(tournamentRegistrants); backpack = SafeList.of(backpack); materialBag = SafeList.of(materialBag); pillBag = SafeList.of(pillBag);
+        arrayBag = SafeList.of(arrayBag); auctionBag = SafeList.of(auctionBag);
     }
 
     // Multiplicative growth capped at `cap`. A count of 0 stays 0 (emptied tiles/lairs stay empty on purpose); small positive counts
@@ -337,30 +391,70 @@ public class Area implements java.io.Serializable {
         }
         java.util.Collections.shuffle(tournamentRegistrants, rand);
         java.util.ArrayList<Character> pool = new java.util.ArrayList<>(tournamentRegistrants);
+        final java.util.ArrayList<Character> entrants = new java.util.ArrayList<>(tournamentRegistrants);
+        final java.util.IdentityHashMap<Character, StringBuilder> story = new java.util.IdentityHashMap<>(); // each human's bouts, in their own words
+        final java.util.IdentityHashMap<Character, Integer> out = new java.util.IdentityHashMap<>();       // the round a human fell in
+        int round = 1;
         while (pool.size() > 1) {
             java.util.ArrayList<Character> next = new java.util.ArrayList<>();
             for (int _i = 0; _i + 1 < pool.size(); _i += 2) {
                 Character a = pool.get(_i), b = pool.get(_i + 1);
-                if (a.dead) { next.add(b); continue; }
-                if (b.dead) { next.add(a); continue; }
+                if (a.dead) { next.add(b); noteBout(story, b, "Round " + round + ": your opponent had died, so you move on."); continue; }
+                if (b.dead) { next.add(a); noteBout(story, a, "Round " + round + ": your opponent had died, so you move on."); continue; }
                 a.tempLvlCheck(); b.tempLvlCheck();
                 int wc = Math.max(5, Math.min(95, 50 - 15 * (b.tempLvl - a.tempLvl)));
                 if (a.trait == Character.Traits.Lucky) wc = Math.min(95, wc + 45);
                 if (b.trait == Character.Traits.Lucky) wc = Math.max(5, wc - 45);
-                next.add(rand.nextInt(100) < wc ? a : b);
+                boolean aWins = rand.nextInt(100) < wc;
+                Character w = aWins ? a : b, l = aWins ? b : a;
+                next.add(w);
+                out.put(l, round);
+                noteBout(story, w, "Round " + round + ": you beat " + l.name + " " + l.lastName + " (Lv." + l.lvl + ", " + (aWins ? wc : 100 - wc) + "% to win).");
+                noteBout(story, l, "Round " + round + ": you lost to " + w.name + " " + w.lastName + " (Lv." + w.lvl + ", " + (aWins ? 100 - wc : wc) + "% to win).");
             }
-            if (pool.size() % 2 == 1) next.add(pool.get(pool.size() - 1));
+            if (pool.size() % 2 == 1) { Character bye = pool.get(pool.size() - 1); next.add(bye); noteBout(story, bye, "Round " + round + ": no opponent this round (a bye)."); }
             pool = next;
+            round++;
         }
+        final int rounds = round - 1;
         Character winner = pool.isEmpty() ? null : pool.get(0);
         if (winner != null && !winner.dead && tournamentPrize != null) {
             winner.backpack.add(tournamentPrize);
             winner.equip();
         }
         boolean hasPlayer = Map.characters.stream().anyMatch(c -> c != null && c.player > 0 && c.skipping <= 0);
+        final String title = name + (tournamentName == null ? "" : " (" + tournamentName + ")");
         if (hasPlayer && winner != null)
-            System.out.println("=== Tournament at " + name + (tournamentName == null ? "" : " (" + tournamentName + ")") + ": " + winner + " wins " + tournamentPrize + "! ===");
+            System.out.println("=== Tournament at " + title + ": " + winner + " wins " + tournamentPrize + "! ===");
+        if (winner != null) Chronicle.add("world", winner.name + " " + winner.lastName + " won the tournament at " + title + (tournamentPrize != null ? " and took " + tournamentPrize : "") + ".", winner.id);
+        for (Character h : entrants) if (h != null && h.player == 1) reportToHuman(h, title, entrants.size(), rounds, winner, tournamentPrize, story.get(h), out.get(h));
         tournamentRegistrants.clear(); tournamentPrize = null; tournamentOrganizer = null;
+    }
+
+    private static void noteBout(java.util.IdentityHashMap<Character, StringBuilder> story, Character c, String what) {
+        if (c == null || c.player != 1) return;
+        StringBuilder sb = story.get(c);
+        if (sb == null) { sb = new StringBuilder(); story.put(c, sb); }
+        sb.append("  ").append(what).append("\n");
+    }
+
+    /** Tells a human who entered what happened: a notice, and a window with each bout and the result. */
+    static void reportToHuman(Character h, String title, int field, int rounds, Character winner, Item prize, StringBuilder bouts, Integer fellIn) {
+        boolean won = winner == h;
+        StringBuilder sb = new StringBuilder("=== Tournament at " + title + " ===\n");
+        sb.append(field).append(" fighters entered; ").append(rounds).append(rounds == 1 ? " round.\n\n" : " rounds.\n\n");
+        sb.append("Your bouts:\n").append(bouts == null ? "  (you were not matched)\n" : bouts.toString()).append("\n");
+        String head;
+        if (won) {
+            head = "You won the tournament at " + title + "!";
+            sb.append("YOU WON THE TOURNAMENT!").append(prize != null ? "\nPrize: " + prize + " (in your backpack)." : "").append("\n");
+        } else {
+            head = "You lost the tournament at " + title + (fellIn != null ? " in round " + fellIn + " of " + rounds : "") + ".";
+            sb.append(fellIn != null ? "You were knocked out in round " + fellIn + " of " + rounds + ".\n" : "");
+            if (winner != null) sb.append("Champion: ").append(winner.name).append(" ").append(winner.lastName).append(" (Lv.").append(winner.lvl).append(").\n");
+        }
+        Notifications.post("fight", head, -1, h.id);
+        GameDriver.showGuiInfo("Tournament result", sb.toString());
     }
 
     public String toString() {

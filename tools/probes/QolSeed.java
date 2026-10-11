@@ -12,9 +12,13 @@ public class QolSeed {
         t.setDaemon(true); t.start();
         PcProbe.in.feed("n\ns\n1\nn\n");
         PcProbe.awaitBlocked(180);
+        PcProbe.pc().pc().squadPolicy = 2; // a squad request would ask a question and swallow the next command
         GameDriver.time = Math.max(GameDriver.time, 60);
         PcProbe.cmd("save seed");
         PcProbe.cmd("x");
+        java.io.File meta = new java.io.File("saves/seed.meta"), dat = new java.io.File("saves/seed.dat");
+        for (int i = 0; i < 600 && !(meta.exists() && dat.exists()); i++) Thread.sleep(100); // the save is written at the start of the next turn: wait for it before exiting
+        Thread.sleep(1500);
         PcProbe.real.println("[T] seeded a save at week " + GameDriver.time);
         System.exit(0);
     }

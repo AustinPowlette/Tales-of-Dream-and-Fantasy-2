@@ -13,6 +13,10 @@ final class Taming {
     private static final Random rand = Long.getLong("tdf.seed") != null ? new Random(Long.getLong("tdf.seed") + 2) : new Random();
 
     /** A Beast Tamer may keep Major Lvl + 1 companions; everybody else may keep one. */
+    static volatile int keptCount = 0;     // beasts people keep right now (recounted every year, +1 for each one tamed)
+    static final int NPC_SHARE = 12;       // percent of the people: past it, a person who is not a Beast Tamer wins no new beast over (a world where half of all people kept one filled the memory)
+    static boolean roomForAnother() { return keptCount * 100L < (long) Map.population * NPC_SHARE; }
+
     static int cap(Character c) { return c.trait == Character.Traits.Tamer ? c.majorLvl + 1 : 1; }
 
     /** charById that also sees characters born (or tamed) this tick and not yet merged into the list. */
@@ -75,7 +79,7 @@ final class Taming {
             enlist(c, beast);
             if (c.player > 0 && c.skipping <= 0) System.out.println(beast.name + " " + beast.lastName + " (Lv." + beast.lvl + ") accepts you as its master! (" + beasts(c).size() + "/" + cap(c) + ")");
             if (c.player > 0) RunStats.onTamed();
-            Chronicle.add("world", c.name + " " + c.lastName + " tamed " + beast.name + " " + beast.lastName + " (Lv." + beast.lvl + ").", c.id);
+            if (c.player > 0 || beast.lvl >= 25) Chronicle.add("world", c.name + " " + c.lastName + " tamed " + beast.name + " " + beast.lastName + " (Lv." + beast.lvl + ").", c.id);
             return null;
         }
         if (rand.nextBoolean()) { // it turns on you
@@ -85,9 +89,22 @@ final class Taming {
         return "The " + beast.lastName + " would not be tamed and slipped away.";
     }
 
+    /** A named companion of a story (a legendary beast of the Tamer's Daughter): made like a tamed beast of this tile, at the given level and name, and kept whatever the cap says. */
+    static Character legend(Character c, String name, String species, int lvl) {
+        Character beast = new Character(c.location, c);
+        beast.lvl = Math.max(1, lvl); beast.majorLvl = beast.lvl / 10; beast.minorLvl = beast.lvl % 10; beast.tempLvl = beast.lvl;
+        beast.potential = Math.max(beast.potential, 85);
+        beast.cultivationBaseMax = Math.pow(beast.lvl, 3) * (((70. + 1. / 3.) + ((11. / 6.) * beast.lvl)) / 25.);
+        beast.cultivation = (Math.pow(beast.potential, 2) * Math.sqrt(beast.lvl)) / (52. * Math.sqrt(beast.potential));
+        enlist(c, beast);
+        beast.name = name; beast.lastName = species;
+        if (c.player > 0 && c.skipping <= 0) System.out.println(name + " the " + species + " (Lv." + beast.lvl + ") is yours.");
+        return beast;
+    }
+
     private static void enlist(Character c, Character beast) {
         beast.name = Naming.petName(beast);
-        beast.id = GameDriver.UID++;
+        beast.id = GameDriver.nextUid();
         beast.wasTamed = true;
         beast.born = true;
         beast.time = 0;
@@ -99,7 +116,8 @@ final class Taming {
         beast.knownLocations.add(c.location);
         if (c.beastIds == null) c.beastIds = new ArrayList<>();
         c.beastIds.add(beast.id);
-        Map.population--;     // beasts are not counted in the population (the births merge adds one back)
+        keptCount++;
+        Map.addPopulation(-1);     // beasts are not counted in the population (the births merge adds one back)
         Map.addTemp(beast);
     }
 
@@ -215,11 +233,42 @@ final class Taming {
         if (n < 1 || n > bs.size()) return "No companion #" + n + ". See 'companions'.";
         Item food = Life.firstOf(c, Item.ItemType.Food);
         if (food == null) return "You have no food to give.";
-        Character b = bs.get(n - 1);
+        return give(c, bs.get(n - 1), food);
+    }
+
+    /** One portion of `food` from the master's goods goes to the companion: it cultivates for as many weeks as the food's level. */
+    private static String give(Character c, Character b, Item food) {
         food.quantity--;
         if (food.quantity <= 0) Life.goods(c).remove(food);
         for (int i = 0; i < Math.max(1, food.lvl); i++) b.cultivate();
         return b.name + " " + b.lastName + " eats " + food.name + " and grows (Lv." + b.lvl + ").";
+    }
+
+    static final int KEEP_FOR_SELF = 3;   // "leftovers" feeds a companion only with the food beyond this many portions
+    static final int FEED_EVERY = 4;      // weeks between two portions for one companion
+
+    /** The cheapest food the master can spare when he keeps KEEP_FOR_SELF portions for himself (null if there is none to spare). */
+    private static Item spareFood(Character c) {
+        if (c.goods == null) return null;
+        int held = 0; Item low = null;
+        for (Item it : c.goods) if (it.itemType == Item.ItemType.Food && it.quantity > 0) { held += it.quantity; if (low == null || it.lvl < low.lvl) low = it; }
+        return held > KEEP_FOR_SELF ? low : null;
+    }
+
+    /** The feed policy of a character who is not at the keys (AUTO, or a script): each companion gets a portion every FEED_EVERY weeks. Returns the number fed. */
+    static int autoFeed(Character c) {
+        PlayerControl pc = c.pc;
+        if (pc == null || c.player < 1 || c.beastIds == null || c.beastIds.isEmpty() || pc.feedPolicy < 0 || pc.feedPolicy >= 2) return 0;
+        if (GameDriver.time % FEED_EVERY != Math.floorMod(c.id, FEED_EVERY)) return 0;
+        int fed = 0;
+        for (Character b : beasts(c)) {
+            Item food = pc.feedPolicy == 1 ? Life.firstOf(c, Item.ItemType.Food) : spareFood(c);
+            if (food == null) break;
+            String msg = give(c, b, food);
+            fed++;
+            if (c.skipping <= 0) System.out.println(msg);
+        }
+        return fed;
     }
 
     static String describe(Character c) {

@@ -36,6 +36,26 @@ public class DecisionBroker {
         return ask(c, prompt, new String[]{"Yes", "No"}, defaultYes ? 0 : 1) == 0;
     }
 
+    /** The same question put by `speaker` in their own words (a friendship, a squad, a challenge, a sect's offer; `kind` picks the words, see Dialogue): in the GUI a window with
+     *  their portrait, in the terminal their line before the question, and for a character that is not asked (AUTO, a script) just the line in the log. */
+    static int ask(Character c, String prompt, String[] options, int policyIdx, Character speaker, String kind) {
+        String line = speaker == null || c == null ? null : Dialogue.line(kind, speaker, c);
+        if (!promptable(c)) {
+            if (line != null) Dialogue.flavor(speaker, c, line);
+            return policyIdx;
+        }
+        if (scripted == null && GameDriver.guiEnabled && GameDriver.mapViewer != null && Settings.dialoguePopups && line != null) {
+            prompts++;
+            return GuiDialogue.decide(c, speaker, line, prompt, options, policyIdx, timeoutOf(c));
+        }
+        if (line != null && scripted == null) Dialogue.flavor(speaker, c, line);
+        return ask(c, prompt, options, policyIdx);
+    }
+
+    static boolean askYesNo(Character c, String prompt, boolean defaultYes, Character speaker, String kind) {
+        return ask(c, prompt, new String[]{"Yes", "No"}, defaultYes ? 0 : 1, speaker, kind) == 0;
+    }
+
     /** Returns the 0-based index of the chosen option; `policyIdx` is used when the character isn't promptable, input is unavailable
      *  or the character's decision timeout runs out. */
     static synchronized int ask(Character c, String prompt, String[] options, int policyIdx) {

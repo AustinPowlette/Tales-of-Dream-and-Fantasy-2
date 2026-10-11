@@ -51,6 +51,11 @@ final class Lore {
         int blood;                           // potential every cultivator born from now on gets: 5 for each who fell on the Gardener's array (stacks)
         HashMap<Integer, Integer> stayers;   // NPC seekers who crossed and stayed: id -> -1 Evil, 0 Neutral, 1 Good (null in older saves)
         boolean gardenDestroyed;             // the Gardener is dead: the Garden went out
+        int erasedNext;                      // the year the next seeker is put out by the Hollow Court (one in a century; 0 = not set yet)
+        int erasedWarn = -1;                 // the seeker the warning was given for (put out the year after), or -1
+        ArrayList<String> erased;            // "Name Last|year" of everyone put out (null in older saves)
+        ArrayList<SeekerArcs.Arc> arcs;      // the small arcs of the NPC seekers that are running (null in older saves)
+        int dimNext, dimmings;               // the year of the next Dimming (the sky over a city goes out) and how many there have been
     }
 
     static int[] newLamps() { int[] l = new int[9]; Arrays.fill(l, -1); return l; }
@@ -61,6 +66,7 @@ final class Lore {
         int step;                        // index into CHAIN
         int peakMajor, peakPoints;       // best realm / merit reached in any life (the story is about the soul, not the body)
         int registeredYear;              // Convocation year this human registered for (0 = never)
+        int announcedYear;               // Convocation year the 'it is open, type lore register' line was shown for
         int tries;                       // Convocations entered
         String result;                   // "PASS" / "FAIL" / "INVITE" while the scene is still to be shown
         int resultRound, resultRounds, resultYear;
@@ -79,6 +85,8 @@ final class Lore {
         boolean darkPath, secretDone, stewardActive;   // the Usurper's path, the hidden ending reached, a Steward in office
         int idleUntil;                                 // the week the Idler's Garden goes out (0 = never)
         HashSet<String> prints;                        // Giant Footprints read (null until the first)
+        ArrayList<String> remembered;                  // people the Hollow Court put out whom this human knew and alone remembers ("Name Last (year N)")
+        String lastErased = "";                        // the last of them (for the scene)
         boolean metOldMan, stayed, counted;            // the Old Man has spoken; the ending is a Stay (it can be undone with `lore leave`); the crossing is counted in the Roll
     }
 
@@ -89,18 +97,18 @@ final class Lore {
     }
     static String[] ids(String... s) { return s; }
     static final Step[] CHAIN = {
-            new Step(1, "REGISTER", 0, null, "Present yourself at Originis and register for the Convocation of the First Gate ('do Register Tournament' there).", null),
+            new Step(1, "REGISTER", 0, null, "Go to Originis and sign up for the Convocation of the First Gate ('do Register Tournament' there).", null),
             new Step(1, "ADMIT", 0, null, "Win a place in the Palace of the Oldest Order.", null),
-            new Step(2, "SITE", 0, ids("wayhouse"), "Find the Unlit Wayhouse the Order spoke of.", null),
+            new Step(2, "SITE", 0, ids("wayhouse"), "Find the Unlit Wayhouse the Order told you about.", null),
             new Step(2, "POINTS", 30, null, "Earn 30 merit for the Order: sect missions, donations, delving ruins.", null),
-            new Step(2, "MAJOR", 2, null, "Cross the second gate: reach Major Lvl 2 (Core Formation). The Order will take you into the Inner Court.", "INNER"),
+            new Step(2, "MAJOR", 2, null, "Pass the second gate: reach Major Lvl 2 (Core Formation). The Order will take you into the Inner Court.", "INNER"),
             new Step(3, "SITES", 2, ids("weaver", "cistern", "assayer"), "Read two of these three places: the Weaver's Wall, the Cistern of Returning, the Assayer's Hall.", null),
             new Step(3, "MAJOR", 4, null, "Reach Major Lvl 4 (Nascent Soul).", null),
             new Step(4, "SITES", 2, ids("shed", "thinsky", "lanternroad"), "Read two of these three places: the Gardener's Shed, the Thin Sky, the Road of Unreturned Lanterns.", null),
-            new Step(4, "ELDER", 5, null, "Take a lamp among the Nine: reach Major Lvl 5 (Ensoulment) with 200 merit.", "ELDER"),
+            new Step(4, "ELDER", 5, null, "Take a lamp of the Nine: reach Major Lvl 5 (Ensoulment) and 200 merit.", "ELDER"),
             new Step(5, "SITES", 2, ids("menagerie", "garrison"), "Read both of the far places: the Menagerie of Practice and the Garrison of the Crossed.", null),
             new Step(5, "MAJOR", 8, null, "Reach Major Lvl 8 (Half-Immortal).", null),
-            new Step(6, "SEAT", 0, null, "Go to the Empty Seat at Originis (an Elder who has read the nine places).", null),
+            new Step(6, "SEAT", 0, null, "Go to the Empty Seat at Originis. You must be an Elder who has read all nine places.", null),
             new Step(6, "MAJOR", 9, null, "Reach Major Lvl 9 (Pseudo Immortal).", null),
             new Step(7, "MAJOR", 10, null, "Open the Door: reach Major Lvl 10, level 101 (True Immortal).", null),
             new Step(7, "CROSS", 0, null, "Go through the Seam under the Empty Seat ('lore cross' at Originis) and meet the Gardener.", null),
@@ -217,6 +225,9 @@ final class Lore {
         Collections.sort(candidates, (a, b) -> Integer.compare(b.lvl, a.lvl));
         for (Character cand : candidates) { int free = freeLamp(s); if (free < 0) break; seatLamp(s, pal, cand, free); }
         omens(year);
+        erasedYearly(year);
+        SeekerArcs.yearly(s, year);
+        HollowCourt.yearly(year);
         LoreEndings.yearly(s, pal); // seekers walk the road, a Steward keeps their promise
     }
 
@@ -269,7 +280,8 @@ final class Lore {
         ArrayList<Area> cities = new ArrayList<>();
         for (Area a : Map.createdAreas) if (a != null && a.city) cities.add(a);
         Area at = cities.isEmpty() || GameDriver.rand.nextInt(3) == 0 ? palaceArea() : cities.get(GameDriver.rand.nextInt(cities.size()));
-        String text = LoreText.OMENS[GameDriver.rand.nextInt(LoreText.OMENS.length)].replace("{place}", at == null ? "Originis" : at.name);
+        String[] pool = year >= 100 && GameDriver.rand.nextInt(2) == 0 ? LoreText.OMENS_LATE : LoreText.OMENS; // the omens grow stranger with the years
+        String text = pool[GameDriver.rand.nextInt(pool.length)].replace("{place}", at == null ? "Originis" : at.name);
         s.omens++;
         Chronicle.add("world", "Omen: " + text);
         System.out.println("[Omen] " + text);
@@ -279,6 +291,90 @@ final class Lore {
             if (p != null && p.found.contains("thinsky")) Notifications.post("lore", "An omen: " + text, -1, h.id);
             if (p != null && !p.ended) queueScene(p, "omen", true);
         }
+    }
+
+    // ------------------------------------------------------------------ the Erased: the Hollow Court puts out one seeker in a century
+    /** Once in a century (a year chosen at random, then about 100 years apart) the Hollow Court puts out one seeker of the Palace, preferring one that a human knows.
+     *  The year before, the lanterns near them dim (a warning for the humans who know them); the year after they are gone: no death, no notice, no name in the chronicle, and only
+     *  the humans who knew them remember (Journal: "remembered by you alone"). */
+    static void erasedYearly(int year) {
+        State s = state;
+        if (s == null || s.silenced || year < 30) return;
+        if (s.erased == null) s.erased = new ArrayList<>();
+        if (s.erasedNext == 0) s.erasedNext = Math.max(year + 1, 50 + GameDriver.rand.nextInt(40));
+        if (s.erasedWarn >= 0) {
+            Character m = Character.charById(s.erasedWarn);
+            s.erasedWarn = -1;
+            if (m != null && !m.dead) { erase(m, year); s.erasedNext = year + 95 + GameDriver.rand.nextInt(11); }
+            else s.erasedNext = year + 1; // they died first: someone else will be chosen
+            return;
+        }
+        if (year < s.erasedNext) return;
+        Character pick = pickErased(s);
+        if (pick == null) return; // no seeker yet: try again next year
+        s.erasedWarn = pick.id;
+        warnErased(pick);
+    }
+
+    /** Whether a living human has a relationship with `m` (they know each other). */
+    static boolean knownByHuman(Character m) {
+        for (Character h : Notifications.humans()) if (h != null && !h.dead && h.player == 1 && h.relationshipList.contains(m.id) != null) return true;
+        return false;
+    }
+
+    private static Character pickErased(State s) {
+        ArrayList<Character> known = new ArrayList<>(), any = new ArrayList<>();
+        if (s.seekers != null) for (Integer id : new ArrayList<>(s.seekers.keySet())) {
+            Character m = Character.charById(id);
+            if (m == null || m.dead || m.player != 0 || m.trait == Character.Traits.Beast || m.trait == Character.Traits.Monster) continue;
+            any.add(m);
+            if (knownByHuman(m)) known.add(m);
+        }
+        ArrayList<Character> pool = !known.isEmpty() ? known : any;
+        return pool.isEmpty() ? null : pool.get(GameDriver.rand.nextInt(pool.size()));
+    }
+
+    private static void warnErased(Character m) {
+        Area at = m.location != null && m.location.city ? m.location : palaceArea();
+        String place = at == null ? "Originis" : at.name;
+        String text = "Every lantern in " + place + " dimmed together, as if holding its breath. One of them did not come back.";
+        state.omens++;
+        Chronicle.add("world", "Omen: " + text);
+        System.out.println("[Omen] " + text);
+        for (Character h : Notifications.humans()) {
+            if (h == null || h.dead || h.player != 1) continue;
+            if (h.relationshipList.contains(m.id) != null) Notifications.post("lore", "The lanterns near " + m.name + " " + m.lastName + " dimmed tonight, and " + m.name + " was standing under them. Something is wrong.", m.id, h.id);
+            else if (isMember(h)) Notifications.post("lore", "An omen: " + text, -1, h.id);
+        }
+    }
+
+    /** The Hollow Court puts `m` out: gone without a death, a notice or a name in the chronicle. Only the humans who knew them remember. */
+    static void erase(Character m, int year) {
+        State s = state;
+        if (s.erased == null) s.erased = new ArrayList<>();
+        String who = m.name + " " + m.lastName;
+        for (Character h : Notifications.humans()) {
+            if (h == null || h.dead || h.player != 1 || h.relationshipList.contains(m.id) == null) continue;
+            PState p = s.humans.get(h.id);
+            Notifications.post("lore", "Everyone has forgotten " + who + ". You haven't.", -1, h.id);
+            System.out.println("[Lore] Everyone has forgotten " + who + ". You haven't.");
+            if (p == null) continue;
+            if (p.remembered == null) p.remembered = new ArrayList<>();
+            p.remembered.add(who + " (year " + year + ")");
+            p.lastErased = who;
+            p.scenes.remove("erased");
+            queueScene(p, "erased", true);
+        }
+        for (int i = 0; i < s.lamps.length; i++) if (s.lamps[i] == m.id) s.lamps[i] = -1;
+        if (s.seekers != null) s.seekers.remove(m.id);
+        if (s.stayers != null) s.stayers.remove(m.id);
+        s.passes.remove(m.id);
+        synchronized (Chronicle.log) { Chronicle.log.removeIf(e -> e.text.contains(who)); }
+        s.erased.add(who + "|" + year);
+        m.fatedTo = 0;
+        m.deathCause = "put out by the Hollow Court";
+        m.reincarnating = true; // (no chronicle line, no death notice, no body)
+        try { m.dead(); } finally { m.reincarnating = false; }
     }
 
     // ------------------------------------------------------------------ the Convocation (the entrance tournament)
@@ -358,6 +454,21 @@ final class Lore {
                 Starts.givePills(champion, Item.PillType.Cultivation, Math.max(1, Math.min(10, champion.majorLvl + 1)), 2);
             } catch (RuntimeException ignored) { /* a prize is a courtesy: never let it stop the Gate */ }
         }
+        for (Character c : pool) {
+            if (c.player != 1) continue; // every human who entered is told how it went, win or lose
+            boolean champ = c == champion;
+            Integer rr = reached.get(c);
+            StringBuilder sb = new StringBuilder("=== Convocation of the First Gate, Year " + s.convocationYear + " ===\n" + n + " came to Originis; " + rounds + " rounds were fought.\n\nYour bouts:\n");
+            String bouts = story.get(c) == null ? "no bouts" : story.get(c).toString();
+            for (String b : bouts.split("; ")) sb.append("  ").append(b.substring(0, 1).toUpperCase()).append(b.substring(1)).append("\n");
+            sb.append("\n");
+            PState hp = s.humans.get(c.id);
+            if (champ) sb.append("YOU WON THE CONVOCATION! You beat every other cultivator who came. The prize is yours: a weapon and Cultivation Pills.\n");
+            else sb.append("You fell in round ").append(rr == null ? "?" : String.valueOf(rr)).append(" of ").append(rounds).append(". The winner was ").append(champion == null ? "no one" : champion.name + " " + champion.lastName + " (Lv." + champion.lvl + ")").append(".\n");
+            sb.append(hp != null && "PASS".equals(hp.result) ? "The Palace lets you in: you passed the Gate." : "The Gate stays shut for you this year.");
+            Notifications.post("fight", champ ? "You won the Convocation of the First Gate!" : "The Convocation of the First Gate: you fell in round " + rr + " of " + rounds + ".", -1, c.id);
+            GameDriver.showGuiInfo("Convocation result", sb.toString());
+        }
         String line = "The Convocation of the First Gate (Year " + s.convocationYear + "): " + n + " came, " + admitted + " were let in" + (champion == null ? "." : "; " + champion.name + " " + champion.lastName + " won the final (" + rounds + " rounds).");
         s.lastResult = line;
         System.out.println("=== " + line + " ===");
@@ -428,12 +539,32 @@ final class Lore {
 
     private static boolean inBand(Character c, Area home) { return c.majorLvl >= home.tournamentMinMajor && c.majorLvl <= home.tournamentMaxMajor; }
 
+    /** On the road of the story: a member of the Palace, or an NPC seeker it admitted (the epoch spares them, so the story always has people to walk it). */
+    static boolean onStoryPath(Character c) {
+        State s = state;
+        if (s == null || !Settings.lore || c == null) return false;
+        Organization pal = palace();
+        if (pal != null && c.sect == pal) return true;
+        return (s.seekers != null && s.seekers.containsKey(c.id)) || (s.stayers != null && s.stayers.containsKey(c.id));
+    }
+
+    /** Whether the tournament open at this tile is the Convocation (a tournament to join a sect: someone who already belongs to a sect has no business in it; prize tournaments are another matter). */
+    static boolean isEntryTournament(Area a) {
+        State s = state;
+        return s != null && Settings.lore && s.convocationOpen && a != null && a == palaceArea();
+    }
+
     private static void convocation(Character c, PState p, State s, Area home, Organization pal) {
-        boolean member = c.sect == pal;
+        boolean member = c.sect != null; // (the Palace's, or another sect's: the Convocation is a way into a sect)
         if (s.convocationOpen && c.location == home && !member && p.registeredYear != s.convocationYear && inBand(c, home)
                 && !home.tournamentRegistrants.contains(c) && c.pc() != null && c.pc().mode != PlayerControl.Mode.MANUAL) {
             home.tournamentRegistrants.add(c); // a human on autopilot does what the quest asks
             say(c, "You registered for the " + home.tournamentName + ".");
+        }
+        if (s.convocationOpen && c.location == home && !member && p.registeredYear != s.convocationYear && p.announcedYear != s.convocationYear && inBand(c, home)
+                && !home.tournamentRegistrants.contains(c)) {
+            p.announcedYear = s.convocationYear; // standing at Originis there is no walk to take, so nothing else would tell a player that the gate is open
+            Notifications.post("lore", "The Convocation of the First Gate is open for " + home.tournamentTimer + " weeks: type 'lore register' to put your name in the ledger.", -1, c.id);
         }
         if (s.convocationOpen && home.tournamentRegistrants.contains(c) && p.registeredYear != s.convocationYear) {
             p.registeredYear = s.convocationYear;
@@ -520,7 +651,7 @@ final class Lore {
         Map.currentCharacter = keep;
         if (a == null) return;
         p.revealed.add(id);
-        if (c.knownLocations != null && !c.knownLocations.contains(a)) c.knownLocations.add(a);
+        c.learnPlace(a);
     }
 
     private static void complete(Character c, PState p, State s, Organization pal, Step st) {
@@ -578,7 +709,8 @@ final class Lore {
         boolean member = c.sect == pal;
         switch (st.kind) {
             case "REGISTER": case "ADMIT":
-                if (s.convocationOpen && p.registeredYear != s.convocationYear && !member) { label = "Palace: Register for the Convocation of the First Gate (do Register Tournament)"; target = home; }
+                if (s.convocationOpen && p.registeredYear != s.convocationYear && !member && c.sect == null) { label = "Palace: Register for the Convocation of the First Gate (do Register Tournament)"; target = home; }
+                else if (c.sect != null && !member) label = "Palace: You belong to " + c.sect.name + "; the Palace takes those who belong to no sect";
                 else if (s.convocationOpen && !member) label = "Palace: Wait at Originis for the Convocation's verdict";
                 else if (!member) label = "Palace: Return to the Convocation (Year " + (s.pending || s.held == 0 ? s.convocationYear : s.convocationYear + 1) + ") or cross the second gate (Major Lvl 2)";
                 else label = "Palace: Present yourself to the Order";
@@ -653,6 +785,7 @@ final class Lore {
         v.put("lamp", p != null && p.lampIdx >= 0 ? LoreText.LAMPS[p.lampIdx] : "Dawn");
         v.put("convo", state == null ? "?" : "Year " + (state.convocationOpen ? state.convocationYear : state.convocationYear + (state.pending ? 0 : 1)));
         v.put("n", "");
+        v.put("erased", p == null || p.lastErased == null || p.lastErased.isEmpty() ? "someone" : p.lastErased);
         v.put("lamps", String.valueOf(LoreEndings.lampsCarried(state)));
         v.put("lampNo", String.valueOf(LoreEndings.lampsCarried(state) + 1));
         return v;
@@ -687,6 +820,15 @@ final class Lore {
         String text = pool.get(GameDriver.rand.nextInt(pool.size()));
         System.out.println("[Lore] ??? whispers: \"" + text + "\"");
         Notifications.post("lore", "??? whispers: " + text, -1, c.id);
+    }
+
+    /** For the terminal's 'next:' line: the Convocation is open, this human is eligible and has not registered (null otherwise). */
+    static String registerHint(Character c) {
+        State s = state; PState p = pstate(c);
+        if (s == null || p == null || !Settings.lore || !s.convocationOpen) return null;
+        Area home = palaceArea();
+        if (home == null || c.location != home || c.sect != null || p.registeredYear == s.convocationYear || !inBand(c, home) || home.tournamentRegistrants.contains(c)) return null;
+        return "next: register for the Convocation of the First Gate (" + home.tournamentTimer + " weeks left)   -> lore register";
     }
 
     static void say(Character c, String text) { if (c != null && c.player > 0 && c.skipping <= 0) System.out.println("[Lore] " + text); }
@@ -761,6 +903,7 @@ final class Lore {
                 Area home = palaceArea();
                 if (c.location != home) { PlayerCommands.say("Register at Originis."); return false; }
                 if (c.sect == palace()) { PlayerCommands.say("You are already in the Palace."); return false; }
+                if (c.sect != null) { PlayerCommands.say("You already belong to " + c.sect.name + ": the Convocation is a way into a sect. Leave it first if you want the Palace."); return false; }
                 return PlayerCommands.handle(c, "!do Register Tournament");
             }
             case "join": {
@@ -831,6 +974,10 @@ final class Lore {
             sb.append(++n).append(". ").append(cl.title).append("\n     ").append(cl.truth).append('\n');
         }
         if (n == 0) sb.append("  Nothing yet. The Palace's roads lead to nine places; the Wayhouse is the first.\n");
+        if (p.remembered != null && !p.remembered.isEmpty()) {
+            sb.append("Remembered by you alone (the Hollow Court put them out):\n");
+            for (String r : p.remembered) sb.append("  ").append(r).append('\n');
+        }
         if (p.prints != null && !p.prints.isEmpty()) {
             sb.append("Giant Footprints (").append(p.prints.size()).append(" of ").append(LoreSites.FOOT_NAMES.length).append("):\n");
             for (int k = 0; k < LoreSites.FOOT_NAMES.length; k++) if (p.prints.contains("foot" + k)) sb.append("  ").append(LoreSites.FOOT_NAMES[k]).append(": ").append(LoreSites.FOOT_CLUES[k]).append('\n');

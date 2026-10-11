@@ -51,17 +51,17 @@ public class Item implements java.io.Serializable {
         this.itemType = itemType;
         this.lvl = lvl;
         this.quantity = quantity;
-        this.name = name;
+        this.name = name == null ? null : name.intern();
         stackable = true;
     }
     // Constructor for Herbs and Metals
     public Item(ItemType itemType, int lvl, int quantity) {
         switch (itemType) {
             case Herb:
-                name = Naming.herb(lvl);
+                name = Naming.herb(lvl).intern();
                 break;
             case Metal:
-                name = Naming.metal(lvl);
+                name = Naming.metal(lvl).intern();
                 break;
         }
         this.itemType = itemType;
@@ -74,30 +74,30 @@ public class Item implements java.io.Serializable {
         this.itemType = ItemType.Weapon;
         this.weaponType = weaponType;
         this.lvl = lvl;
-        this.maker = maker.name + " " + maker.lastName;
+        this.maker = (maker.name + " " + maker.lastName).intern();
         this.makerID = maker.id;
         stackable = false;
-        name = Naming.weapon(lvl, getWeaponType());
+        name = Naming.weapon(lvl, getWeaponType()).intern();
 
     }
 
     //Constructor for creating Arrays and Clothing
     public Item(Character maker, int lvl, ItemType itemType) {
         this.lvl = lvl;
-        this.maker = maker.name + " " + maker.lastName;
+        this.maker = (maker.name + " " + maker.lastName).intern();
         this.makerID = maker.id;
         stackable = false;
         if (itemType == ItemType.Array) {
             this.itemType = ItemType.Array;
-            name = Naming.array(lvl, arrayTypes[rand.nextInt(arrayTypes.length)]);
+            name = Naming.array(lvl, arrayTypes[rand.nextInt(arrayTypes.length)]).intern();
         }
         else if (itemType == ItemType.Instrument) {
             this.itemType = ItemType.Instrument;
-            name = Naming.instrument(lvl);
+            name = Naming.instrument(lvl).intern();
         }
         else if (itemType == ItemType.Clothing) {
             this.itemType = ItemType.Clothing;
-            name = Naming.clothing(lvl, clothingNames[rand.nextInt(clothingNames.length)]);
+            name = Naming.clothing(lvl, clothingNames[rand.nextInt(clothingNames.length)]).intern();
         }
 
     }
@@ -120,7 +120,7 @@ public class Item implements java.io.Serializable {
         this.quantity = quantity;
         stackable = true;
         if (pillType != PillType.Potential) {
-            name = "" + getPillName() + " Pill";
+            name = ("" + getPillName() + " Pill").intern();
         }
         else {
             name = "Potential Pill";

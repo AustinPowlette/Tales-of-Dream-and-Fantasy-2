@@ -96,7 +96,8 @@ public class Notifications {
             String rel = relationLabel(h, dead);
             if (rel == null) continue;
             String how = killer != null ? ", killed by " + killer.name + " " + killer.lastName : "";
-            post("death", "Your " + rel + " " + dead.name + " " + dead.lastName + " has died" + how + ".", dead.id, h.id);
+            post("death", dead.purgedByHeaven() ? "Heaven has consumed your " + rel + " " + dead.name + " " + dead.lastName + " in the epoch."
+                    : "Your " + rel + " " + dead.name + " " + dead.lastName + " has died" + how + ".", dead.id, h.id);
             RunStats.onLoved();
         }
     }
@@ -141,7 +142,7 @@ public class Notifications {
         }
         if (c.majorLvl > st[0]) {
             post("breakthrough", "You broke through to Major Lvl " + c.majorLvl + "!", -1, c.id);
-            Hints.trigger(c, "first-breakthrough", "Breakthroughs unlock bigger things: Major 2 can found a sect, Major 3 a city. Check the Manage window.");
+            Hints.trigger(c, "first-breakthrough", "Breakthroughs unlock bigger things: Major 2 can found a sect or a city. Check the Manage window.");
         } else if (c.lvl > st[1] && c.majorLvl == st[0]) post("level", "You reached level " + c.lvl + ".", -1, c.id);
         st[0] = c.majorLvl; st[1] = c.lvl;
         boolean hot = c.location != null && c.location.crowdHotspot;

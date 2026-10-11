@@ -516,7 +516,7 @@ public class ArtGen {
                 for (int i = 0; i < 34; i++) { double x = 211 + r.nextInt(84); p.stroke(x, 62, x + r.nextGaussian() * 1.5, 250, 2.2, i % 3 == 0 ? pal.water : c(255, 255, 255), 0.5); }
                 for (int i = 0; i < 9; i++) p.washCircle(196 + r.nextInt(120), 252 + r.nextInt(26), 20 + r.nextInt(24), 9, c(255, 255, 255), 3, 0.7, 0.2);
                 p.mist(258, 34, 0.45);
-                for (int i = 0; i < 6; i++) p.pine(16 + r.nextInt(180), 40 + r.nextInt(70), 28, pal.leafDark);
+                for (int i = 0; i < 7; i++) p.pine(r.nextBoolean() ? 16 + r.nextInt(170) : 336 + r.nextInt(160), 40 + r.nextInt(70), 28, pal.leafDark); // both banks, not only the left one
                 break;
             }
             case "cave": {

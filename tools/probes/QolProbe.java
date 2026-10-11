@@ -145,7 +145,7 @@ public class QolProbe {
         DecisionBroker.scripted.add(0);
         cmd("control #" + x.id);
         Character np = PcProbe.pc();
-        check("Q5 control switched the player", np == x && p.player == 2 && x.player == 1 && x.pc != null);
+        check("Q5 control switched the player", np == x && p.player == 0 && x.player == 1 && x.pc != null);
         check("Q5 controlled character is prompted", PcProbe.in.blocked);
         DecisionBroker.scripted.add(0);
         m = PcProbe.mark(); cmd("control #" + oldId);

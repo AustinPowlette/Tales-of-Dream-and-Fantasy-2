@@ -17,6 +17,7 @@ public class GameDriver {
     static final boolean printBreakthroughs = false;
     static final boolean changeMc = true;
     public static int UID = 0;
+    static synchronized int nextUid() { return UID++; } // (turns of different tiles may run together)
     static boolean guiEnabled = false;
     static MapViewer mapViewer = null;
     static LinkedBlockingQueue<String> guiInputQueue = new LinkedBlockingQueue<>();
@@ -52,7 +53,13 @@ public class GameDriver {
             catch (RuntimeException e) { return "x"; }
             finally { waitingForInput = false; }
         }
-        return blocked(() -> scan.next());
+        return blocked(() -> nextToken());
+    }
+    /** The next word typed; the rest of that line is dropped (a reply like "no thanks" used to leave "thanks" to run as a command). */
+    private static String nextToken() {
+        String w = scan.next();
+        try { scan.nextLine(); } catch (NoSuchElementException e) { }
+        return w;
     }
     static int readInt() {
         if (guiEnabled) {
@@ -74,7 +81,7 @@ public class GameDriver {
         return blocked(() -> {
             long end = System.currentTimeMillis() + seconds * 1000L;
             while (System.currentTimeMillis() < end) {
-                if (System.in.available() > 0) return scan.next();
+                if (System.in.available() > 0) return nextToken();
                 Thread.sleep(50);
             }
             return null;
@@ -104,6 +111,19 @@ public class GameDriver {
                 }
             }
         });
+    }
+
+    /** While the game is paused (and not waiting at a prompt) the info commands queued by buttons are run now, so their pop-ups open; every other command waits for the game to resume, in order. */
+    static void servePausedInfo() {
+        if (!guiEnabled || guiInputQueue.isEmpty()) return;
+        Character who = mapViewer == null ? null : mapViewer.findPlayer();
+        java.util.ArrayList<String> keep = new java.util.ArrayList<>();
+        String cmd;
+        while ((cmd = guiInputQueue.poll()) != null) {
+            if (who != null && !who.dead && PlayerCommands.isInfoCommand(cmd)) { try { PlayerCommands.handle(who, cmd); } catch (RuntimeException e) { System.out.println("(that command failed while paused: " + e + ")"); } }
+            else keep.add(cmd);
+        }
+        guiInputQueue.addAll(keep);
     }
 
     /** Non-blocking read for characters running on their own (AUTO / scripts): a typed command such as 'stop', or null. */
@@ -145,100 +165,23 @@ public class GameDriver {
     }
 
     /** Interactive character editing; used at startup and in-game via 'e'. */
-    static void editCharacterInteractive(Character c) {
+    static void editCharacterInteractive(Character c) { editCharacterInteractive(c, false); }
+
+    /** `creation`: the editor offered while the character is being made (the potential may be set); in a running game only a Cheater may change it. */
+    static void editCharacterInteractive(Character c, boolean creation) {
         if (guiEnabled && mapViewer != null) {
-            boolean editing = true;
-            while (editing) {
-                String info = "Editing: " + c.name + " " + c.lastName
-                        + "\nTrait: " + c.getTrait() + "  Potential: " + c.potential
-                        + "\nAffiliation: " + c.affiliation + "  Gender: " + c.gender;
-                String[] topOpts = {"Name", "Trait", "Potential", "Affiliation", "Gender", "Done"};
-                final int[] sel = {5};
-                try {
-                    edtWait(() ->
-                        sel[0] = javax.swing.JOptionPane.showOptionDialog(mapViewer, info, "Edit Character",
-                            javax.swing.JOptionPane.DEFAULT_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE,
-                            null, topOpts, topOpts[5]));
-                } catch (Exception ignored) {}
-                switch (sel[0]) {
-                    case 0: { // Name
-                        final String[] nm = {c.name, c.lastName};
-                        try {
-                            edtWait(() -> {
-                                String fn = javax.swing.JOptionPane.showInputDialog(mapViewer, "First name:", c.name);
-                                if (fn != null && !fn.trim().isEmpty()) nm[0] = fn.trim();
-                                String ln = javax.swing.JOptionPane.showInputDialog(mapViewer, "Last name:", c.lastName);
-                                if (ln != null && !ln.trim().isEmpty()) nm[1] = ln.trim();
-                            });
-                        } catch (Exception ignored) {}
-                        c.name = nm[0]; c.lastName = nm[1];
-                        break;
-                    }
-                    case 1: { // Trait
-                        Character.Traits[] allTraits = Character.Traits.values();
-                        String[] traitNames = new String[allTraits.length];
-                        for (int _i = 0; _i < allTraits.length; _i++) traitNames[_i] = allTraits[_i].toString();
-                        final int[] tr = {-1};
-                        try {
-                            edtWait(() ->
-                                tr[0] = javax.swing.JOptionPane.showOptionDialog(mapViewer, "Choose trait:", "Trait",
-                                    javax.swing.JOptionPane.DEFAULT_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE,
-                                    null, traitNames, c.getTrait()));
-                        } catch (Exception ignored) {}
-                        if (tr[0] >= 0 && tr[0] < allTraits.length) c.trait = allTraits[tr[0]];
-                        break;
-                    }
-                    case 2: { // Potential
-                        final String[] potStr = {String.valueOf(c.potential)};
-                        try {
-                            edtWait(() -> {
-                                String s = javax.swing.JOptionPane.showInputDialog(mapViewer, "Potential (1-100):", c.potential);
-                                if (s != null && !s.trim().isEmpty()) potStr[0] = s.trim();
-                            });
-                        } catch (Exception ignored) {}
-                        try { c.potential = Math.min(100, Math.max(1, Integer.parseInt(potStr[0]))); } catch (Exception ignored) {}
-                        break;
-                    }
-                    case 3: { // Affiliation
-                        String[] affOpts = {"Good", "Neutral", "Evil"};
-                        final int[] aff = {1};
-                        try {
-                            edtWait(() ->
-                                aff[0] = javax.swing.JOptionPane.showOptionDialog(mapViewer, "Affiliation:", "Affiliation",
-                                    javax.swing.JOptionPane.DEFAULT_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE,
-                                    null, affOpts, c.affiliation));
-                        } catch (Exception ignored) {}
-                        if (aff[0] == 0) c.affiliation = "Good";
-                        else if (aff[0] == 2) c.affiliation = "Evil";
-                        else c.affiliation = "Neutral";
-                        break;
-                    }
-                    case 4: { // Gender
-                        String[] genOpts = {"Male", "Female"};
-                        final int[] gen = {0};
-                        try {
-                            edtWait(() ->
-                                gen[0] = javax.swing.JOptionPane.showOptionDialog(mapViewer, "Gender:", "Gender",
-                                    javax.swing.JOptionPane.DEFAULT_OPTION, javax.swing.JOptionPane.PLAIN_MESSAGE,
-                                    null, genOpts, c.gender));
-                        } catch (Exception ignored) {}
-                        if (gen[0] == 0) c.gender = "Male";
-                        else if (gen[0] == 1) c.gender = "Female";
-                        break;
-                    }
-                    default: editing = false; break;
-                }
-            }
+            try { edtWait(() -> GuiEditSelf.show(mapViewer, c, creation)); } catch (Exception ignored) { }
             return;
         }
         // Terminal mode
         boolean editing = true;
         while (editing) {
-            System.out.println("Edit: (N)ame (T)rait (P)otential (A)ffiliation (G)ender (D)one");
+            System.out.println("Edit: (N)ame (T)rait (P)otential (A)ffiliation (G)ender (S)kin (D)one");
             System.out.println("  Current: " + c.name + " " + c.lastName
                     + "  Trait:" + c.getTrait() + "  Pot:" + c.potential
-                    + "  Aff:" + c.affiliation + "  Gender:" + c.gender);
-            char opt = readInput().charAt(0);
+                    + "  Aff:" + c.affiliation + "  Gender:" + c.gender + "  Skin:" + ArtMore.skinName(c.skinTone));
+            String optIn = readInput();
+            char opt = optIn.isEmpty() ? '?' : optIn.charAt(0);
             switch (opt) {
                 case 'N': case 'n':
                     System.out.println("First name:"); c.name = readInput();
@@ -247,6 +190,13 @@ public class GameDriver {
                 case 'T': case 't':
                     System.out.println("Trait: A=Alchemist B=Blacksmith T=Tailor S=Scribe I=Innovative L=Leader M=Merchant R=Runner G=Ghost Ga=Gatherer Mi=Miner Tm=Tamer Po=Poisoner Dr=Drunken Ch=Chef Mu=Musician Fr=Friendly Ck=Cheater Lk=Lucky Ib=IronBody Sv=SpiritVein Hr=HeavenlyRoot");
                     String tc = readInput().toLowerCase();
+                    boolean known = true;
+                    if (tc.length() > 2) { // the trait's name works as well as its code
+                        known = false;
+                        for (Character.Traits tr : Character.Traits.values()) if (tr != Character.Traits.Monster && tr != Character.Traits.Beast && tr.name().toLowerCase().startsWith(tc)) { c.trait = tr; known = true; break; }
+                        if (!known && tc.equals("innovator")) { c.trait = Character.Traits.Innovative; known = true; }
+                        tc = "";
+                    }
                     switch (tc) {
                         case "a":  c.trait = Character.Traits.Alchemist;    break;
                         case "b":  c.trait = Character.Traits.Blacksmith;   break;
@@ -270,24 +220,37 @@ public class GameDriver {
                         case "dr": c.trait = Character.Traits.Drunken;      break;
                         case "ch": c.trait = Character.Traits.Chef;         break;
                         case "mu": c.trait = Character.Traits.Musician;     break;
+                        case "":  break;
+                        default:   known = false;
                     }
+                    if (!known) System.out.println("Not a trait: type its code (A, B, I, Ga, ...) or its name (Innovative, Tamer, ...).");
                     break;
                 case 'P': case 'p':
+                    if (!creation && c.trait != Character.Traits.Cheater) { System.out.println("Potential can only be changed by a Cheater (pick the Cheater trait first)."); break; }
                     System.out.println("Potential (1-100):");
                     try { c.potential = Math.min(100, Math.max(1, Integer.parseInt(readInput()))); } catch (Exception ignored) {}
                     break;
                 case 'A': case 'a':
                     System.out.println("Affiliation: G=Good N=Neutral E=Evil");
-                    char ac = readInput().charAt(0);
+                    String acIn = readInput();
+                    char ac = acIn.isEmpty() ? 'n' : acIn.charAt(0);
                     if (ac == 'G' || ac == 'g') c.affiliation = "Good";
                     else if (ac == 'E' || ac == 'e') c.affiliation = "Evil";
                     else c.affiliation = "Neutral";
                     break;
                 case 'G': case 'g':
                     System.out.println("Gender: M=Male F=Female");
-                    char gc = readInput().charAt(0);
+                    String gcIn = readInput();
+                    char gc = gcIn.isEmpty() ? 'm' : gcIn.charAt(0);
                     c.gender = (gc == 'M' || gc == 'm') ? "Male" : "Female";
                     break;
+                case 'S': case 's': {
+                    StringBuilder sk = new StringBuilder("Skin tone (the portrait): 0 = by the portrait's seed");
+                    for (int i = 0; i < ArtMore.SKIN_NAMES.length; i++) sk.append(", ").append(i + 1).append(" = ").append(ArtMore.SKIN_NAMES[i]);
+                    System.out.println(sk);
+                    try { c.skinTone = Math.max(0, Math.min(ArtMore.SKINS.length, Integer.parseInt(readInput().trim()))); } catch (Exception ignored) { }
+                    break;
+                }
                 case 'D': case 'd': editing = false; break;
             }
         }
@@ -392,8 +355,7 @@ public class GameDriver {
                 Character leader = Character.charById(npc.partyLeaderId);
                 if (leader == null || leader.dead) {
                     npc.leaveParty();
-                    npc.movement();
-                    npc.quest();
+                    actThenWander(npc);
                 } else {
                     // Abandon party only if follower's top quest outprioritises the party's purpose
                     Quest topQ = npc.targetQuests.peek();
@@ -401,22 +363,193 @@ public class GameDriver {
                     if (topQ != null && topQ.priority > leaderPriority
                             && topQ.targetArea != null && topQ.targetArea != leader.location) {
                         npc.leaveParty();
-                        npc.movement();
-                        npc.quest();
+                        actThenWander(npc);
+                    } else if (npc.location == leader.location) {
+                        npc.quest();           // standing with the leader: the quest routine here, then on with him wherever his step takes him
+                        npc.ride(leader);
                     } else {
-                        // Move toward leader; quest only when co-located
-                        npc.pathfinder(leader.location);
-                        if (npc.location == leader.location) npc.quest();
+                        npc.pathfinder(leader.location); // not with him yet: a step toward him
                     }
                 }
             } else {
-                if (npc.exploreTicks > 0) npc.movement(npc.exploreDir);
-                else npc.movement();
-                npc.quest();
+                actThenWander(npc);
             }
         } else {
             npc.quest();
         }
+    }
+
+    /** Act on the tile you stand in (the quest routine: spot quests, the target quest's work, its step), and only then, with no step planned by a quest, wander one step. A step is the last thing of a turn. */
+    static void actThenWander(Character npc) {
+        final boolean exploring = npc.exploreTicks > 0;
+        npc.quest();
+        if (npc.dead) return;
+        if (npc.movedTick != time) { // no step yet this week
+            if (exploring) npc.movement(npc.exploreDir);
+            else npc.movement();
+        }
+    }
+
+    /** The steps of a big crowd taken on several cores: first everybody leaves the tile he stood on (one core per tile left), then everybody arrives (one core per tile entered), so no two cores ever touch the same tile's list. */
+    static void applyStepsInParallel(List<Character> moved) {
+        final ArrayList<Character> steppers = new ArrayList<>(moved.size());
+        for (Character c : moved) {
+            if (c.pendTo != null && !c.dead && c.location == c.pendFrom && c.pendTo != c.location) steppers.add(c);
+            else { c.pendTo = null; if (c.rideId < 0) c.pendFrom = null; }
+        }
+        forEachTile(steppers, c -> c.location, Character::leaveTile);
+        forEachTile(steppers, c -> c.pendTo, Character::arriveTile);
+    }
+
+    /** Groups people by a tile and plays each group on one core (the biggest first, each core taking the next group when it is free). */
+    static void forEachTile(List<Character> people, java.util.function.Function<Character, Area> tileOf, java.util.function.Consumer<Character> action) {
+        java.util.HashMap<Area, ArrayList<Character>> byTile = new java.util.HashMap<>(2048);
+        for (Character c : people) { Area t = tileOf.apply(c); ArrayList<Character> g = byTile.get(t); if (g == null) byTile.put(t, g = new ArrayList<>()); g.add(c); }
+        final ArrayList<ArrayList<Character>> groups = new ArrayList<>(byTile.values());
+        groups.sort((u, v) -> Integer.compare(v.size(), u.size()));
+        final java.util.concurrent.atomic.AtomicInteger next = new java.util.concurrent.atomic.AtomicInteger();
+        final List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+        for (int w = Math.max(1, Math.min(tickPool.getParallelism(), groups.size())); w > 0; w--) futures.add(tickPool.submit(() -> {
+            int gi;
+            while ((gi = next.getAndIncrement()) < groups.size()) for (Character c : groups.get(gi)) { try { action.accept(c); } catch (Throwable t) { parallelError(t); } }
+        }));
+        for (java.util.concurrent.Future<?> f : futures) { try { f.get(); } catch (Exception e) { parallelError(e); } }
+    }
+
+    /** Every tamed companion goes to the tile its master ended the turn on (a pure update of its own place, so the beasts are played together on all cores); one whose master is gone goes back to the wild, one after the other. */
+    static void followAllCompanions(List<Character> snap) {
+        final java.util.concurrent.ConcurrentLinkedQueue<Character> orphans = new java.util.concurrent.ConcurrentLinkedQueue<>();
+        try {
+            tickPool.submit(() -> snap.parallelStream().forEach(b -> {
+                if (b.masterId < 0 || b.dead) return;
+                Character m = Taming.byId(b.masterId);
+                if (m == null || m.dead) { orphans.add(b); return; }
+                if (m.location != null) b.location = m.location;
+                b.partyLeaderId = m.id;
+            })).get();
+        } catch (Exception e) { for (Character b : snap) if (b.masterId >= 0 && !b.dead) Taming.follow(b); return; }
+        for (Character b : orphans) Taming.follow(b);
+    }
+
+    /** Phase 2A: the people who play (and the tracked NPCs), serial: interactive I/O must stay single-threaded. */
+    static void peoplePhase(List<Character> tickSnap) {
+        for (Character character : tickSnap) { // tickSnap: only live born chars
+            if (character.player < 1 || character.dead) continue; // died earlier this tick (reincarnation is handled below)
+            currentCharacter = character;
+            if (character.age < 8) {
+                character.quest();
+            } else if (character.player == 2) {
+                character.planning = true;
+                npcTurn(character); // a tracked NPC runs on the same pipeline as an AUTO player character
+                character.planning = false; character.rideId = -1; character.applyMove();
+                System.out.println("[Follow] " + character + character.location);
+            } else {
+                playerTurn(character);
+            }
+            syncMotherChildren(character);
+        }
+    }
+
+    /** Whether the NPC steps have been decided and are waiting to be taken (the person who plays acts in between; see Character.interceptAim). */
+    static volatile boolean movesPlanned = false;
+
+    /** The NPC phase: every NPC acts on the tile it stands in and plans its step. One after the other, or (Settings.parallelNpcs) the turns of different tiles together on several cores. */
+    static void npcPhase(List<Character> tickSnap, ArrayList<Character> moved) {
+        if (frozenNpcs) return; // tests only
+        if (Settings.parallelNpcs && tickPool.getParallelism() > 1) { parallelNpcPhase(tickSnap, moved); return; }
+        if (rand instanceof ParallelRandom) rand = new Random();
+        for (Character npc : tickSnap) {
+            if (!npcCanAct(npc)) continue;
+            currentCharacter = npc;
+            runNpcTurn(npc, moved);
+        }
+    }
+
+    /** Killed earlier this tick: must not move (re-adding itself to a tile) or quest; a tamed beast has no turn (it follows its master); a waiting one stays put. */
+    static boolean npcCanAct(Character npc) { return npc.player < 1 && !npc.dead && npc.masterId < 0 && npc.waitingSoul < 0; }
+
+    static void runNpcTurn(Character npc, List<Character> moved) {
+        npc.pendTo = null; npc.pendFrom = null; npc.rideId = -1; // (a turn that failed last week must not leave a step planned that blocks every step after it)
+        npc.planning = true;
+        try { npcTurn(npc); } finally { npc.planning = false; }
+        npc.turnT = time;
+        if (npc.pendTo != null || npc.rideId >= 0) moved.add(npc);
+    }
+
+    /** How many NPC turns failed in a parallel phase (each loses the rest of its turn), and where: the first Game frame of the stack, counted (printed now and then, so the sites can be fixed one by one). */
+    static final java.util.concurrent.atomic.AtomicLong parallelErrors = new java.util.concurrent.atomic.AtomicLong();
+    static final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicLong> parallelSites = new java.util.concurrent.ConcurrentHashMap<>();
+    static void parallelError(Throwable t) {
+        long n = parallelErrors.incrementAndGet();
+        String site = t.getClass().getSimpleName();
+        StackTraceElement[] st = t.getStackTrace();
+        for (StackTraceElement e : st) if (e.getClassName().startsWith("Game.") && !e.getClassName().startsWith("Game.GameDriver")) { site += " @ " + e.getClassName().substring(5) + "." + e.getMethodName() + ":" + e.getLineNumber(); break; }
+        parallelSites.computeIfAbsent(site, k -> new java.util.concurrent.atomic.AtomicLong()).incrementAndGet();
+        if (n <= 3) { System.err.println("[PARALLEL] an NPC turn failed (" + n + "): " + t); t.printStackTrace(); }
+        if (n % 1000 == 0) System.err.println("[PARALLEL] " + n + " turns failed so far; " + parallelSummary());
+    }
+    static String parallelSummary() {
+        StringBuilder sb = new StringBuilder();
+        parallelSites.entrySet().stream().sorted((a, b) -> Long.compare(b.getValue().get(), a.getValue().get())).limit(12).forEach(e -> sb.append(e.getValue().get()).append("x ").append(e.getKey()).append("; "));
+        return sb.toString();
+    }
+
+    /** Experimental: the NPCs are grouped by the tile they stand on and the groups are shared out over the cores (the biggest first, each core taking the next group when it is free). Everything a turn
+     *  does that reaches beyond its tile has to be safe for that (see Parallel Turns in Game Info.md); the steps are only planned, so nobody changes tile meanwhile. */
+    static void parallelNpcPhase(List<Character> tickSnap, ArrayList<Character> moved) {
+        if (!(rand instanceof ParallelRandom)) rand = new ParallelRandom();
+        // A turn may have to ask a person who plays (a friendship, a challenge, a squad): that waits for the console on the game thread. The tiles where such a person stands are
+        // played one NPC after the other on the game thread, after the rest has been played together.
+        final java.util.HashSet<Area> peopleTiles = new java.util.HashSet<>();
+        for (Character c : tickSnap) if (c.player >= 1 && !c.dead && c.location != null) peopleTiles.add(c.location);
+        java.util.HashMap<Area, ArrayList<Character>> byTile = new java.util.HashMap<>(2048);
+        final ArrayList<Character> onGameThread = new ArrayList<>();
+        for (Character npc : tickSnap) {
+            if (!npcCanAct(npc)) continue;
+            if (peopleTiles.contains(npc.location)) { onGameThread.add(npc); continue; }
+            ArrayList<Character> g = byTile.get(npc.location);
+            if (g == null) byTile.put(npc.location, g = new ArrayList<>());
+            g.add(npc);
+        }
+        final ArrayList<ArrayList<Character>> groups = new ArrayList<>(byTile.values());
+        groups.sort((x, y) -> Integer.compare(y.size(), x.size()));
+        final int workers = Math.max(1, Math.min(tickPool.getParallelism(), groups.size()));
+        final java.util.concurrent.atomic.AtomicInteger next = new java.util.concurrent.atomic.AtomicInteger();
+        final List<List<Character>> movedBy = new ArrayList<>();
+        final List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+        Map.parallelPhase = true;
+        for (int w = 0; w < workers; w++) {
+            final List<Character> mine = new ArrayList<>();
+            movedBy.add(mine);
+            futures.add(tickPool.submit(() -> {
+                int gi;
+                while ((gi = next.getAndIncrement()) < groups.size()) {
+                    for (Character npc : groups.get(gi)) {
+                        if (!npcCanAct(npc)) continue;
+                        try { runNpcTurn(npc, mine); } catch (Throwable t) { parallelError(t); }
+                    }
+                }
+            }));
+        }
+        for (java.util.concurrent.Future<?> f : futures) {
+            try { f.get(); } catch (Exception e) { parallelError(e); }
+        }
+        Map.parallelPhase = false;
+        Map.runDeferred(); // what reached beyond a tile (friends' lists, sects, distant boards, payments) happens now, on the game thread
+        for (List<Character> m : movedBy) moved.addAll(m);
+        for (Character npc : onGameThread) {
+            if (!npcCanAct(npc)) continue;
+            currentCharacter = npc;
+            runNpcTurn(npc, moved);
+        }
+    }
+
+    /** Takes the planned steps of the NPC phase together, then the party members who stood with their leaders, then the children who follow their mothers. */
+    static void applyMoves(List<Character> moved, List<Character> everyone) {
+        if (Settings.parallelNpcs && moved.size() >= 4000 && tickPool.getParallelism() > 1) applyStepsInParallel(moved);
+        else for (Character c : moved) c.applyMove();
+        for (Character c : moved) if (c.rideId >= 0) c.applyRide();
+        for (Character c : everyone) if (c.player == 0 && !c.dead && c.children != null && !c.children.isEmpty() && c.gender.equals("Female")) syncMotherChildren(c); // (the NPC mothers: a human mother brings her children along in her own turn)
     }
 
     /** Children follow their mother's tile until they are old enough to walk on their own. */
@@ -429,9 +562,7 @@ public class GameDriver {
                     if (child.areaIdx < 0) {
                         child.location.addChar(child);
                     }
-                    if (!child.knownLocations.contains(child.location)) {
-                        child.knownLocations.add(child.location);
-                    }
+                    child.learnPlace(child.location);
                 }
             }
         }
@@ -506,7 +637,9 @@ public class GameDriver {
     static void runOnItsOwn(Character c, PlayerControl pc) {
         if (pc.mode == PlayerControl.Mode.AUTO) {
             c.skipping = 1; // routine gathering/crafting lines are silenced while running on its own (fights, deaths and breakthroughs still print)
-            npcTurn(c);
+            c.planning = true;
+            npcTurn(c); // (acts where it stands, then takes its step)
+            c.planning = false; c.rideId = -1; c.applyMove();
             c.skipping = 0;
             if (c.dead) return;
             if (pc.autoTurns > 0 && --pc.autoTurns == 0) {
@@ -683,23 +816,54 @@ public class GameDriver {
 
     // Population control
     // A tile's capacity is a fixed share of the STARTING population (never the current one, so a booming world can't raise its own ceiling),
-    // scaled by map area: CROWD_PERCENT of the starting population on the reference 31x31 map, proportionally less on a bigger map
-    // (people spread over more tiles) and more on a smaller one. Equivalent to CROWD_PERCENT * 961 times the even-spread density.
-    static final double CROWD_PERCENT = 0.02;
-    static final int CROWD_REFERENCE_TILES = 31 * 31;
+    // a multiple (Settings.crowdFactor, 3.5) of the tile's fair share, the starting population spread evenly over the map's tiles: 365 on a wild tile of the usual 31x31 map at 100,000 people,
+    // proportionally less on a bigger map and more on a smaller one.
     static int difficulty = 0;                    // world difficulty chosen at the start: 0 Story/Standard, 1 Hard, 2 Brutal (see Starts)
     static final int START_AGE = 18;              // age of the first generation (players and NPCs); cultivators born later start at 8
     static final int TRUCE_WEEKS = 52;            // nobody may start a fight with another cultivator in Originis during the first game year
     static final int CROWD_MIN_CAPACITY = 20;     // floor so tiny test populations don't turn every tile into a hotspot
-    static final int CROWD_CAPACITY = Math.max(CROWD_MIN_CAPACITY,
-            (int) Math.round(startingPopulation * CROWD_PERCENT * CROWD_REFERENCE_TILES / (double) (range * range)));  // wild tile
-    static final int CROWD_CAPACITY_CITY = CROWD_CAPACITY * 4;   // cities support more (Originis is exempt entirely)
+    static int CROWD_CAPACITY = crowdFor(startingPopulation);       // wild tile
+    static int CROWD_CAPACITY_CITY = CROWD_CAPACITY * 4;           // cities support more (Originis is exempt entirely)
+    static int crowdFor(int start) { return Math.max(CROWD_MIN_CAPACITY, (int) Math.round(Settings.crowdFactor * start / (double) (range * range))); }
+    /** The size of the world was chosen (or loaded): the limits of a tile follow it. */
+    static void rescaleCrowd() { CROWD_CAPACITY = crowdFor(startingPopulation); CROWD_CAPACITY_CITY = CROWD_CAPACITY * 4; }
     static final int CROWD_GRACE_YEARS = 10;      // the founding crowd at Originis is given time to disperse first
     static final double CROWD_CLEAR_RATIO = 0.8;  // the hotspot ends once the tile is back under 80% of capacity
     static final double CROWD_ATTACK_RATE = 0.02; // beast ambushes per tick = 2% of the excess cultivators
     static final int CROWD_MAX_ATTACKS = 40;      // cap on ambushes per tile per tick
     static final int CROWD_SURGE = 15;            // level surge while a tile is a crowd hotspot
-    static final int EPOCH_POPULATION = 200000;   // living cultivators that trigger the epoch purge
+    // The epoch's three limits are settings (Settings.epochPopulation: the population target, whatever the speed of the computer; Settings.epochTickSeconds: the slower the computer the sooner it is reached;
+    // Settings.epochCullPercent / epochCullNumber: how many fall); only the size of a world where a slow tick counts is fixed here
+    static volatile int EPOCH_MIN_LIVING = Integer.getInteger("tdf.epochMin", 10000); // a slow tick in a small world is not a crowded world (tests may lower it)
+    static final String PURGE_CAUSE = "the Heavenly purge"; // the death cause of the epoch's victims (Character.purgedByHeaven)
+    // The last 26 ticks' own computing time (waiting for input or the window excluded); the median is the typical tick, so one slow yearly tick or a hiccup does not count
+    static final long[] tickNs = new long[26];
+    static int tickCount = 0;
+    static long tickT0 = 0, tickBlocked0 = 0;
+    static boolean tickPurging = false;
+    static long medianTickMs() {
+        int n = Math.min(tickCount, tickNs.length);
+        if (n < 20) return 0;
+        long[] c = java.util.Arrays.copyOf(tickNs, n);
+        java.util.Arrays.sort(c);
+        return c[n / 2] / 1_000_000L;
+    }
+    /** The realms (Major Lvl 0..10) the last purge took people from; only the survivors of those realms are blessed. */
+    static final boolean[] epochTierCulled = new boolean[11];
+    static { java.util.Arrays.fill(epochTierCulled, true); } // (a purge that was loaded halfway has no record: every realm up to the limit)
+    static final double EPOCH_BLESSING = 0.5;     // the blessing is worth this many Potential Pills (Character.givePotential)
+    /** After an epoch the survivors of the realms it culled (up to Settings.epochMaxRealm) gain the potential of half a Potential Pill: a whole point for the youngest, a trickle for the highest. */
+    static void epochBlessing() {
+        int n = 0, points = 0;
+        for (Character c : characters) {
+            if (c == null || c.dead || !c.born || c.trait == Character.Traits.Beast || c.trait == Character.Traits.Monster) continue;
+            int realm = Math.max(0, Math.min(10, c.majorLvl));
+            if (realm > Settings.epochMaxRealm || !epochTierCulled[realm] || c.potential >= 100) continue;
+            points += c.givePotential(EPOCH_BLESSING); n++;
+        }
+        System.out.println("[EPOCH] The Heavens bless those who remain in the realms they thinned (Major Lvl 0-" + Settings.epochMaxRealm + "): the potential of half a Potential Pill (" + n + " cultivators, " + points + " points in all).");
+        Chronicle.add("world", "The epoch ends. The survivors of the lower realms are blessed: their potential grows.");
+    }
     static final int EPOCH_BATCH = 3000;          // purge deaths processed per tick
     static ArrayList<Character> epochVictims = new ArrayList<>();
 
@@ -711,6 +875,7 @@ public class GameDriver {
     static SaveData snapshot() {
         SaveData d = new SaveData();
         d.population      = population;
+        d.startPop        = startingPopulation;
         d.tiles           = tiles;
         d.characters      = characters;
         d.createdAreas    = createdAreas;
@@ -768,6 +933,7 @@ public class GameDriver {
         heroPseudoImmortal = d.heroPseudoImmortal;
         trackedCharacters  = d.trackedCharacters;
         Area.uindex      = d.areaUindex;
+        Map.setStartingPopulation(d.startPop > 0 ? d.startPop : Map.DEFAULT_START); // the size the world began with (its crowd limits, its monsters); older saves began at 100,000
         time             = d.time;
         currentSeason    = d.currentSeason;
         UID              = d.uid;
@@ -815,6 +981,8 @@ public class GameDriver {
         System.setOut(new TeeStream(System.out));
         World.gameStart(); // the game thread owns the world; it lets go whenever it waits (see World)
         Settings.load();
+        rescaleCrowd(); // (the factor may have been changed in the settings file)
+        MemWatch.init(); // the heap gives back what it does not use
         Ambient.apply();
         SaveManager.installCrashHandler();
 
@@ -839,6 +1007,8 @@ public class GameDriver {
             System.out.println("Resuming. Player characters in world: "
                     + characters.stream().filter(c -> c != null && c.player >= 1 && !c.dead).count());
         } else {
+            StartMenu.askPopulation(); // how many people the world begins with (before the first tile is made: its monsters follow the size)
+            Map.population = Map.startingPopulation;
             new Map(); // initialize the world
         }
         if (loaded) { while (true) { /* jump straight to main loop below */ break; } }
@@ -864,9 +1034,9 @@ public class GameDriver {
             Starts.Choice start = StartMenu.choose(pi, playerCount);
             Starts.apply(bete, start);
             System.out.println("Generated: " + bete.name + " " + bete.lastName + "  Trait:" + bete.getTrait() + "  Potential:" + bete.potentialLabel());
-            if (start.kind == Starts.Kind.STANDARD_CUSTOM) editCharacterInteractive(bete);
+            if (start.kind == Starts.Kind.STANDARD_CUSTOM) editCharacterInteractive(bete, true);
             else {
-                if (StartMenu.askYesNo("Your character", bete.name + " " + bete.lastName + " (" + bete.getTrait() + ", potential " + bete.potentialLabel() + "). Modify the character?", false)) editCharacterInteractive(bete);
+                if (StartMenu.askYesNo("Your character", bete.name + " " + bete.lastName + " (" + bete.getTrait() + ", potential " + bete.potentialLabel() + "). Modify the character?", false)) editCharacterInteractive(bete, true);
             }
             if (start.kind == Starts.Kind.STANDARD_CUSTOM) bete.potentialHidden = false;
             Starts.apply2(bete);
@@ -950,6 +1120,7 @@ public class GameDriver {
                 System.exit(0);
             }
             Perf.begin();
+            tickT0 = System.nanoTime(); tickBlocked0 = World.blockedNs; tickPurging = !epochVictims.isEmpty();
             boolean heavenNow = false;
             for (int hi = 0, hn = Map.createdAreas.size(); hi < hn && !heavenNow; hi++) { Area ha = Map.createdAreas.get(hi); if (ha != null && ha.hasHeaven()) heavenNow = true; }
             Map.heavenExists = heavenNow;
@@ -1098,7 +1269,7 @@ public class GameDriver {
                         for (Character cc : characters) {
                             if (cc == null || cc.dead || !cc.born) continue;
                             if (Math.abs(cc.location.x - trialArea.x) + Math.abs(cc.location.y - trialArea.y) <= 15) {
-                                if (!cc.knownLocations.contains(trialArea)) cc.knownLocations.add(trialArea);
+                                cc.learnPlace(trialArea);
                             }
                         }
                         System.out.println("A Celestial Trial has opened at " + trialArea.name + " [" + trialArea.x + "," + trialArea.y + "]! It will close in 10 ticks.");
@@ -1127,7 +1298,7 @@ public class GameDriver {
                                 Area plagueArea = _popAreas.get(rand.nextInt(_popAreas.size()));
                                 int killed = 0;
                                 for (Character _c : new ArrayList<>(plagueArea.characters)) {
-                                    if (_c != null && !_c.dead && _c.trait != Character.Traits.Beast && _c.trait != Character.Traits.Monster && rand.nextInt(3) == 0) {
+                                    if (_c != null && !_c.dead && _c.trait != Character.Traits.Beast && _c.trait != Character.Traits.Monster && !_c.childSafe() && rand.nextInt(3) == 0) {
                                         _c.dead();
                                         killed++;
                                     }
@@ -1151,7 +1322,7 @@ public class GameDriver {
                         }
                     }
                 }
-                // Epoch purge: when the living population reaches the threshold, 10% of each major level (levels with < 10 cultivators are spared) are marked to die
+                // Epoch purge: when the ticks have grown slow (the world is too crowded for this computer), 20% of each major level (levels with < 10 cultivators are spared) are marked to die
                 if (epochVictims.isEmpty()) {
                     int living = 0;
                     ArrayList<ArrayList<Character>> byLevel = new ArrayList<>();
@@ -1159,15 +1330,26 @@ public class GameDriver {
                     for (Character _c : characters) {
                         if (_c == null || _c.dead || !_c.born || _c.trait == Character.Traits.Beast || _c.trait == Character.Traits.Monster) continue;
                         living++;
-                        if (_c.player < 1) byLevel.get(Math.max(0, Math.min(10, _c.majorLvl))).add(_c);
+                        if (_c.player < 1 && !Rankings.epochSafe(_c)) byLevel.get(Math.max(0, Math.min(10, _c.majorLvl))).add(_c); // (children, the ranked and the Palace's road are spared)
                     }
-                    if (living >= EPOCH_POPULATION) {
-                        for (ArrayList<Character> tier : byLevel) {
-                            if (tier.size() < 10) continue;
+                    long typicalMs = medianTickMs();
+                    final boolean tooMany = living >= Settings.epochLimit();
+                    final long[] memNote = new long[2];
+                    final boolean memFull = !tooMany && living >= EPOCH_MIN_LIVING && MemWatch.full(memNote); // the heap is nearly full of living things (checked once a year)
+                    if (tooMany || memFull || (living >= EPOCH_MIN_LIVING && typicalMs > Math.round(Settings.epochTickSeconds * 1000))) {
+                        int purgeable = 0;
+                        for (int _t = 0; _t < byLevel.size(); _t++) if (_t <= Settings.epochMaxRealm && byLevel.get(_t).size() >= 10) purgeable += byLevel.get(_t).size();
+                        final double share = Settings.epochCullNumber > 0 ? Math.min(1.0, Settings.epochCullNumber / (double) Math.max(1, purgeable)) : Settings.epochCullPercent / 100.0; // a number is shared out over the realms by their size
+                        for (int _t = 0; _t < byLevel.size(); _t++) {
+                            ArrayList<Character> tier = byLevel.get(_t);
+                            epochTierCulled[_t] = _t <= Settings.epochMaxRealm && tier.size() >= 10; // (a realm of fewer than 10, or above the limit, is left alone and gets no blessing)
+                            if (!epochTierCulled[_t]) continue;
                             java.util.Collections.shuffle(tier, rand);
-                            epochVictims.addAll(tier.subList(0, tier.size() / 10));
+                            epochVictims.addAll(tier.subList(0, (int) Math.min(tier.size(), Math.round(tier.size() * share))));
                         }
-                        System.out.println("[EPOCH] The Heavens grow weary of the crowded world. " + epochVictims.size() + " cultivators are marked for the great purge!");
+                        tickCount = 0; // the next epoch is judged on ticks of the thinned world
+                        System.out.println("[EPOCH] The Heavens grow weary of the crowded world (" + (tooMany ? living + " cultivators live" : memFull ? "the memory is nearly full: " + memNote[0] + " of " + memNote[1] + " MB alive" : "a turn now takes " + typicalMs + " ms") + "). " + epochVictims.size() + " cultivators are marked for the great purge!");
+                        Chronicle.add("world", "An epoch begins: the Heavens grow weary of the crowded world and " + epochVictims.size() + " cultivators are marked to fall.");
                     }
                 }
                 // Purge broken (deconstructed) items from every city pool and shop shelf
@@ -1185,6 +1367,8 @@ public class GameDriver {
                         }
                     }
                 }
+                // Shops that have run dry get a few plain wares again (a new player must have something to buy)
+                for (Area _sa : createdAreas) for (Shop _sh : _sa.shops) if (_sh.owner != null && !_sh.owner.dead && _sh.inventory.size() < 5) _sh.seedStock();
                 // Sect territory bonus: members spread across 3+ distinct tiles near sect location
                 for (Organization _s : sectList) {
                     if (_s.location == null || _s.members == null) { _s.territoryBonus = 0; continue; }
@@ -1197,9 +1381,8 @@ public class GameDriver {
                     _s.territoryBonus = controlled.size() >= 3 ? 1 : 0;
                 }
                 // Update reputation titles for all living characters once per year
-                for (Character _cc : characters) {
-                    if (_cc != null && !_cc.dead && _cc.born) _cc.updateRepTitle();
-                }
+                Naming.assignTitles(characters); // a kind of title is held by its ten best only
+                Slim.yearly(); // the dead still held by living kin let go of their lists; the beasts people keep are counted
                 Settlements.yearly(); // cities and sects scale with the number of cultivators
                 Seasonal.diplomacy(); // truces, gatherings and quarrels between sects
                 Lore.yearly();        // the Palace: next Convocation, ranks, omens, the crossing
@@ -1225,7 +1408,7 @@ public class GameDriver {
                 if (area.celestialTrialTimer > 0) { // Celestial Trial despawn
                     area.celestialTrialTimer--;
                     if (area.celestialTrialTimer == 0) {
-                        area.dungeonType = null;
+                        area.dungeonType = null; area.restoreName();
                         System.out.println("The Celestial Trial at " + area.name + " has closed.");
                     }
                 }
@@ -1251,9 +1434,9 @@ public class GameDriver {
                 int batch = Math.min(EPOCH_BATCH, epochVictims.size());
                 for (int _e = 0; _e < batch; _e++) {
                     Character v = epochVictims.remove(epochVictims.size() - 1);
-                    if (v != null && !v.dead && v.player < 1) { v.deathCause = "the Heavenly purge"; v.dead(); } // a character a human has since taken over (or follows) is spared too
+                    if (v != null && !v.dead && v.player < 1 && !Rankings.epochSafe(v)) { v.deathCause = PURGE_CAUSE; v.dead(); } // a character a human has since taken over (or follows) is spared too
                 }
-                if (epochVictims.isEmpty()) System.out.println("[EPOCH] The purge has ended. The world falls quiet.");
+                if (epochVictims.isEmpty()) { System.out.println("[EPOCH] The purge has ended. The world falls quiet."); epochBlessing(); }
             }
 
             Perf.mark(Perf.EPOCH);
@@ -1302,37 +1485,30 @@ public class GameDriver {
                 for (Character c : tickSnap) if (c.player == 1 && !c.dead) hs.add(c);
                 Notifications.setHumans(hs);
             }
-            for (Character character : tickSnap) { // tickSnap: only live born chars
-                if (character.player < 1 || character.dead) continue; // died earlier this tick (reincarnation is handled below)
-                currentCharacter = character;
-                if (character.age < 8) {
-                    character.quest();
-                } else if (character.player == 2) {
-                    npcTurn(character); // a tracked NPC runs on the same pipeline as an AUTO player character
-                    System.out.println("[Follow] " + character + character.location);
-                } else {
-                    playerTurn(character);
-                }
-                syncMotherChildren(character);
-            }
-
-            Perf.mark(Perf.P2A);
-            // Phase 2B: serial NPC processing (tickSnap: only live born chars)
-            for (Character npc : tickSnap) {
-                if (frozenNpcs) break; // tests only
-                if (npc.player >= 1 || npc.dead) continue; // killed earlier this tick: must not move (re-adding itself to a tile) or quest
-                if (npc.masterId >= 0 || npc.waitingSoul >= 0) continue; // a tamed beast has no turn: it follows its master (below); a waiting one stays put
-                currentCharacter = npc;
-                npcTurn(npc);
-                syncMotherChildren(npc);
-            }
+            // Phase 2B first: the NPCs act on the tile they stand in and only PLAN one step each (nobody leaves or enters a tile while the turns run: a mover is still there to be met,
+            // fought or robbed). Then the people who play act, knowing where every walker is going; then all the steps are taken together.
+            final ArrayList<Character> moved = new ArrayList<>(); // the NPCs with a planned step (or a ride with their leader)
+            // The very first week of a world: the character speaks first (no NPC can ask it a question before it has even seen the screen); every other week the NPCs go first
+            final boolean peopleFirst = time == 0;
+            if (peopleFirst) peoplePhase(tickSnap);
+            npcPhase(tickSnap, moved);
+            // The births of the NPC phase join the list now, so the people who play (and anything that adds a character by hand) find ids and list positions equal, as they always did
+            mergeBirths();
+            movesPlanned = true;
 
             Perf.mark(Perf.P2B);
-            for (Character beast : tickSnap) if (beast.masterId >= 0 && !beast.dead) Taming.follow(beast); // companions stand where their masters ended the turn
+            if (!peopleFirst) peoplePhase(tickSnap);
+
+            Perf.mark(Perf.P2A);
+            applyMoves(moved, tickSnap);
+            Perf.mark(Perf.STEPS);
+            movesPlanned = false;
+            followAllCompanions(tickSnap); // companions stand where their masters ended the turn
+            Perf.mark(Perf.FOLLOW);
 
             LoreEndings.drainReleases(); // humans who left the world as soldiers choose their next character
             // Handle reincarnation for any player character that died this tick
-            for (Character character : new ArrayList<>(characters)) {
+            for (Character character : time % 52 == 0 ? new ArrayList<>(characters) : Map.takeReincarnations()) { // (the whole list once a year as a net)
                 if (character != null && character.dead && character.needsReincarnation) {
                     handleReincarnation(character);
                 }
@@ -1351,14 +1527,14 @@ public class GameDriver {
                     Character target = monster.location.characters.get(rand.nextInt(monster.location.characters.size()));
                     monster.battleCheck(target);
                 }
+                if (monster.dead) continue; // it lost the fight: a corpse does not walk on (and put itself back in a tile's list)
                 monster.movement();
             }
             Perf.mark(Perf.MON);
             time++;
             yearlyDone = false;
 
-            characters.addAll(tempCharacters);
-            population += tempCharacters.size();
+            mergeBirths();
 
             if (!remCharacters.isEmpty()) {
                 for (Character character : remCharacters) {
@@ -1378,12 +1554,17 @@ public class GameDriver {
             awakenedMonsters.clear();
             tempCharacters.clear();
             remCharacters.clear();
+            Verify.tick(); // (only with -Dtdf.verify=true)
             Perf.mark(Perf.CLEAN); Perf.tickEnd();
+            if (!tickPurging) tickNs[tickCount++ % tickNs.length] = System.nanoTime() - tickT0 - (World.blockedNs - tickBlocked0); // this tick's own computing time
             // End of tick: let the GUI read a consistent world (bounded wait), then pause / sleep with the world lock released
             if (guiEnabled && mapViewer != null) World.handoff(mapViewer::refreshNow, 250);
             Perf.mark(Perf.GUI);
+            while (paused) { // pause support: wait until unpaused, answering the commands that only look (buttons that open pop-ups) while we wait
+                servePausedInfo();
+                blocked(() -> { Thread.sleep(50); return null; });
+            }
             blocked(() -> {
-                while (paused) Thread.sleep(50); // pause support: spin until unpaused, then sleep the configured delay
                 Thread.sleep(tickDelayMs);
                 return null;
             });

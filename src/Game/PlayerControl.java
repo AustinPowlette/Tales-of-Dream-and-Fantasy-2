@@ -20,10 +20,20 @@ public class PlayerControl implements java.io.Serializable {
     static final int ALERT_TTL_WEEKS = 26; // an unanswered one-time spot quest (no location, nothing to walk to) lapses after half a year
     static final String[] KILL_POLICIES = {"always spare", "kill evil only", "kill if wronged", "always kill"};
 
+    /** What the character does by itself in the spot slot of a turn (travelling, waiting) when its routine would pick one of the four plain spot quests; set in the Quest Log or with `spotaction`. */
+    static final String[] SPOT_ACTIONS = {"Meditate", "Hunt", "Profession", "Random"};
+    int spotAction = 0;   // index into SPOT_ACTIONS (Meditate by default)
+
     Mode mode = Mode.MANUAL;
     boolean[] duties = new boolean[DUTY_NAMES.length];
 
     // Decision policies: answer the prompts when the character is not in MANUAL (AUTO/HYBRID) or no human is attached
+    static final String[] SQUAD_POLICIES = {"ask", "auto", "never"};      // who may join your squad: MANUAL asks you each time, auto accepts, never refuses everyone
+    static final String[] FEED_POLICIES = {"leftovers", "always", "never"}; // AUTO / HYBRID: do the companion beasts get fed? leftovers = food beyond 3 portions, always = the best food whenever there is any, never
+    static final String[] FRIEND_POLICIES = {"ask", "accept", "decline"};  // a friendship someone offers: ask, accept it, or decline (nothing is lost by declining)
+    int squadPolicy = 0, friendPolicy = 0;
+    int feedPolicy = 0;      // index into FEED_POLICIES (0 leftovers, 1 always, 2 never): used while AUTO or a script runs; in MANUAL you `feed <n>` yourself
+    java.util.HashSet<Integer> squadDeclined = new java.util.HashSet<>();  // cultivators already turned away (not asked again)
     int killPolicy = 0;      // 0 always spare, 1 kill evil only, 2 kill if wronged, 3 always kill
     boolean fleePolicy = true;      // try to flee when outmatched
     boolean forbiddenPolicy = false; // use the Forbidden Technique when a fight turns deadly
@@ -55,7 +65,8 @@ public class PlayerControl implements java.io.Serializable {
         switch (q.name) {
             case "Random": case "Profession": case "Hunt": case "Meditate": case "Forage": case "Mine": case "Interact":
             case "Sell Technique": case "Find Person": case "Buy Gear": case "Go Sell": case "Return to Sect":
-            case "Seek Territory": case "Hunt Cultivator":
+            case "Seek Territory": case "Hunt Cultivator": case "Perform": case "Visit Family": case "Courtship": case "Trade Run": case "Pilgrimage":
+            case "Meditation Retreat": case "Tame Beast": case "Buy Pills": case "Attend Auction": case "Market Trip": case "Gathering Trip": case "Seek Teacher": case "Sightseeing": case "Courier Run":
                 return MUNDANE;
             case "Hunt Beast":
                 return q.bounty ? BOUNTY : MUNDANE;
@@ -63,14 +74,16 @@ public class PlayerControl implements java.io.Serializable {
             case "Loot Corpse": return LOOT;
             case "Register Tournament": return TOURNAMENT;
             case "Battle Dislike": return SOCIAL;
-            case "Seek Potential": case "Refine Blood": return UPKEEP;
+            case "Seek Potential": case "Refine Blood": case "Study Trip": return UPKEEP;
             case "Get Pregnant": return FAMILY;
             case "Accept Sect Mission": case "Donate to Sect": case "Buy from Sect": case "Buy Sect Array":
             case "Recruit Member": case "Recruit Defector": case "Propose Alliance": case "Demand Tribute":
-            case "Deliver Materials": case "Donate Array": case "Sect Raid":
+            case "Deliver Materials": case "Donate Array": case "Sect Raid": case "Teach Disciple": case "Found Sect":
                 return SECT;
-            case "Buy City Array": case "Entice Merchant":
+            case "Buy City Array": case "Entice Merchant": case "Found City":
                 return CITY;
+            case "Defend":
+                return q.targetArea != null && q.targetArea.sect != null ? SECT : CITY;
             case "Hold Tournament":
                 return (c != null && c.location != null && c.location.cityOwner == c) ? CITY : SECT;
             case "Restock Trip": case "Sell Stock":
@@ -101,13 +114,32 @@ public class PlayerControl implements java.io.Serializable {
         REASONS.put("Ghost City Rebirth", "a ghost's chance at rebirth");
         REASONS.put("Possess Womb", "a pregnant woman weaker than you");
         REASONS.put("Disperse", "your tile is an overcrowded hotspot");
+        REASONS.put("Defend", "your sect or city is under attack");
         REASONS.put("Spectate Tournament", "a tournament is open here");
         REASONS.put("Register Tournament", "a tournament in your realm is open here");
         REASONS.put("Sect Raid", "your sect is at war or an enemy sect is in crisis");
-        REASONS.put("Hunt Beast", "a city bounty on beasts");
+        REASONS.put("Hunt Beast", "a city bounty on monsters");
         REASONS.put("Battle Dislike", "you dislike someone");
         REASONS.put("Seek Potential", "a Potential Pill is on the auction block and your potential is low");
+        REASONS.put("Study Trip", "a library sells a better technique than yours and you can pay for it");
         REASONS.put("Refine Blood", "an alchemist can turn your Blood into Potential Pills for a fee");
+        REASONS.put("Perform", "a city nearby would pay for a concert");
+        REASONS.put("Visit Family", "a relative lives some way off");
+        REASONS.put("Market Trip", "you have no meal and a city market sells one");
+        REASONS.put("Gathering Trip", "richer herbs or ore lie some way off");
+        REASONS.put("Seek Teacher", "someone far stronger might teach you");
+        REASONS.put("Sightseeing", "a notable place lies some way off");
+        REASONS.put("Courier Run", "a city would pay for word from afar");
+        REASONS.put("Teach Disciple", "a disciple or child could learn from you");
+        REASONS.put("Courtship", "someone free and suitable is near");
+        REASONS.put("Trade Run", "you carry herbs and metal you do not need and a city can pay");
+        REASONS.put("Pilgrimage", "a famous place is within reach");
+        REASONS.put("Meditation Retreat", "a spirit vein is near (or a partner invited you to one)");
+        REASONS.put("Tame Beast", "a beast you could tame lives nearby");
+        REASONS.put("Buy Pills", "a city sells the pill for your next realm and you can pay");
+        REASONS.put("Attend Auction", "an auction is coming with a lot you want");
+        REASONS.put("Found City", "a good place for a city is near (a spirit vein is best)");
+        REASONS.put("Found Sect", "a good place for a sect is near (a spirit vein is best)");
         REASONS.put("Get Pregnant", "your spouse is at hand");
         REASONS.put("Loot Corpse", "a fresh corpse lies here");
     }
@@ -116,6 +148,7 @@ public class PlayerControl implements java.io.Serializable {
     void inheritFrom(PlayerControl o) {
         duties = o.duties.clone();
         killPolicy = o.killPolicy;
+        squadPolicy = o.squadPolicy; friendPolicy = o.friendPolicy; feedPolicy = o.feedPolicy;
         fleePolicy = o.fleePolicy;
         forbiddenPolicy = o.forbiddenPolicy;
         duelPolicy = o.duelPolicy;

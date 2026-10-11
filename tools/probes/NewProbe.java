@@ -5,11 +5,13 @@ import java.util.*;
 
 /** The 2026-10-04 batch: diagonal moves, go-to and chase, mature start, sect cap, war life cycle, treachery, squad caps, bounty cap, regions, art, names. */
 public class NewProbe {
+    static { Character.TRIGGER_EVERY = 1; Shop.SEED = false; } // these checks test one trigger / a shop's exact goods: no throttle, no starter stock
     static void check(String name, boolean ok) { PcProbe.passes += ok ? 1 : 0; PcProbe.fails += ok ? 0 : 1; PcProbe.real.println("[T] " + (ok ? "PASS " : "FAIL ") + name); }
 
     public static void main(String[] a) throws Exception {
         PcProbe.real = System.out;
         System.setIn(PcProbe.in);
+        GameDriver.frozenNpcs = true; // frozen before the first tick: the NPCs act before the human prompt of a tick, and one of them could otherwise ask the character a question before the probe is ready
         System.setOut(new PrintStream(PcProbe.cap, true));
         Thread t = new Thread(null, () -> { try { GameDriver.main(new String[0]); } catch (Throwable e) { PcProbe.gameError = e; e.printStackTrace(PcProbe.real); } }, "game", 512L << 20);
         t.setDaemon(true); t.start();

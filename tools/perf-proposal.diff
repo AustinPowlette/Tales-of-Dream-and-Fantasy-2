@@ -1,0 +1,179 @@
+diff -u -r src/Game/Character.java src/Game/Character.java
+--- src/Game/Character.java	2026-10-09 00:23:55.078235000 -0400
++++ src/Game/Character.java	2026-10-09 00:23:55.109984200 -0400
+@@ -1173,11 +1173,14 @@
+     // A human character the player drives by hand (MANUAL, or HYBRID between script steps). Children stay on the NPC routine.
+     /** Learns a place. An NPC keeps at most about KNOWN_CAP places: past KNOWN_CAP + KNOWN_SLACK the least interesting ones (plain wild tiles, the farthest first) are forgotten. */
+     void learnPlace(Area a) {
+-        if (a == null || knownLocations == null || knownLocations.contains(a)) return;
++        if (a == null || knownLocations == null || a == lastLearned) return;
++        if (knownLocations.contains(a)) { lastLearned = a; return; }
++        lastLearned = a;
+         knownLocations.add(a);
+         if (player == 0 && knownLocations.size() > KNOWN_CAP + KNOWN_SLACK) pruneKnownLocations();
+     }
+ 
++    private transient Area lastLearned;
+     private void pruneKnownLocations() {
+         final Area here = location;
+         java.util.HashSet<Area> keep = new java.util.HashSet<>();
+@@ -1344,9 +1347,10 @@
+     static { for (int i = 0; i < GUARDED_QUESTS.length; i++) QBIT.put(GUARDED_QUESTS[i], 1L << i); } // read-only after class load
+     private long qMaskT, qMaskS;
+     private static long Q(String name) { Long b = QBIT.get(name); return b == null ? 0L : b; }
+-    private static long nameMask(java.util.Collection<Quest> qs) { long m = 0; for (Quest q : qs) if (q != null) m |= Q(q.name); return m; }
+-    private void addT(Quest q) { targetQuests.add(q); qMaskT |= Q(q.name); }
+-    private void addS(Quest q) { spotQuests.add(q); qMaskS |= Q(q.name); }
++    private static long Q(Quest q) { if (q.bitName != q.name) { q.bitVal = Q(q.name); q.bitName = q.name; } return q.bitVal; }
++    private static long nameMask(java.util.Collection<Quest> qs) { long m = 0; for (Quest q : qs) if (q != null) m |= Q(q); return m; }
++    private void addT(Quest q) { targetQuests.add(q); qMaskT |= Q(q); }
++    private void addS(Quest q) { spotQuests.add(q); qMaskS |= Q(q); }
+     void addTarget(Quest q) { addT(q); } // for QuestLife
+ 
+     public void quest () {
+@@ -1497,11 +1501,16 @@
+ 
+         // Bully: Evil characters proactively target significantly weaker characters in same location
+         if (trait != Traits.Beast && "Evil".equals(affiliation) && QuestLife.roll(this, "Battle Dislike", 10)
+-                && !location.characters.isEmpty()) {
+-            for (Character c : location.characters) {
++                && !location.characters.isEmpty() && weakSocialCount("Battle Dislike") < WEAK_SOCIAL_CAP) {
++            ArrayList<Character> tileB = location.characters;
++            int nB = tileB.size(), lookB = Math.min(nB, 48), startB = nB > lookB ? rand.nextInt(nB) : 0;
++            for (int kB = 0; kB < lookB; kB++) {
++                int idxB = (startB + kB) % nB;
++                if (idxB >= tileB.size()) break;
++                Character c = tileB.get(idxB);
+                 if (c == null || c.dead || c == this || c.trait == Traits.Beast) continue;
+                 if (lvl - c.lvl >= 15
+-                        && weakSocialCount("Battle Dislike") < WEAK_SOCIAL_CAP && !hasSocialQuestFor(c.id)) {
++                        && !hasSocialQuestFor(c.id)) {
+                     addT(relationshipQuest(-1, c));
+                     break;
+                 }
+@@ -1603,9 +1612,11 @@
+ 
+         // Rob Caravan: Evil characters may target wealthy merchants passing through (5%/turn)
+         if ("Evil".equals(affiliation) && trait != Traits.Beast && trait != Traits.Monster && QuestLife.roll(this, "Rob Caravan", 20)) {
+-            for (Character c : new ArrayList<>(location.characters)) {
+-                if (c == null || c.dead || c == this || c.trait == Character.Traits.Beast) continue;
+-                if (c.trait == Character.Traits.Merchant && (c.backpack.size() > 5 || c.ss > 100000L)
++            ArrayList<Character> tile = location.characters;
++            for (int ti = 0; ti < tile.size(); ti++) {
++                Character c = tile.get(ti);
++                if (c == null || c.trait != Character.Traits.Merchant || c.dead || c == this) continue;
++                if ((c.backpack.size() > 5 || c.ss > 100000L)
+                         && targetQuests.stream().noneMatch(q -> "Rob Caravan".equals(q.name) && q.targetCharacter == c.id)) {
+                     addT(new Quest("Rob Caravan", true, 30, 2, 55, c));
+                     break;
+@@ -5024,8 +5035,10 @@
+     public boolean partyBeastHunt() {
+         ArrayList<Character> party = new ArrayList<>();
+         party.add(this);
+-        for (Character c : new ArrayList<>(location.characters)) {
+-            if (c != null && !c.dead && c != this && c.partyLeaderId == this.id && c.age >= 8) party.add(c);
++        if (followerIds != null) for (int i = 0; i < followerIds.size(); i++) {
++            int fid = followerIds.get(i);
++            Character c = fid >= 0 && fid < Map.characters.size() ? Map.characters.get(fid) : null;
++            if (c != null && !c.dead && c != this && c.location == location && c.partyLeaderId == this.id && c.age >= 8) party.add(c);
+         }
+         if (party.size() == 1) return beastBattleCheck();
+         if (location.monsters <= 0) return false;
+@@ -5047,8 +5060,11 @@
+     }
+ 
+     public void dissolveParty() {
+-        for (Character c : new ArrayList<>(location.characters)) {
+-            if (c != null && !c.dead && c.partyLeaderId == this.id)
++        if (followerIds == null || followerIds.isEmpty()) return; // nobody follows: nothing to dissolve (this used to copy the whole tile on every success)
++        for (int i = 0; i < followerIds.size(); i++) {
++            int fid = followerIds.get(i);
++            Character c = fid >= 0 && fid < Map.characters.size() ? Map.characters.get(fid) : null;
++            if (c != null && !c.dead && c.location == location && c.partyLeaderId == this.id)
+                 c.leaveParty();
+         }
+     }
+diff -u -r src/Game/Item.java src/Game/Item.java
+--- src/Game/Item.java	2026-10-09 00:23:55.235283100 -0400
++++ src/Game/Item.java	2026-10-09 00:23:55.263421400 -0400
+@@ -51,17 +51,17 @@
+         this.itemType = itemType;
+         this.lvl = lvl;
+         this.quantity = quantity;
+-        this.name = name;
++        this.name = name == null ? null : name.intern();
+         stackable = true;
+     }
+     // Constructor for Herbs and Metals
+     public Item(ItemType itemType, int lvl, int quantity) {
+         switch (itemType) {
+             case Herb:
+-                name = Naming.herb(lvl);
++                name = Naming.herb(lvl).intern();
+                 break;
+             case Metal:
+-                name = Naming.metal(lvl);
++                name = Naming.metal(lvl).intern();
+                 break;
+         }
+         this.itemType = itemType;
+@@ -77,7 +77,7 @@
+         this.maker = maker.name + " " + maker.lastName;
+         this.makerID = maker.id;
+         stackable = false;
+-        name = Naming.weapon(lvl, getWeaponType());
++        name = Naming.weapon(lvl, getWeaponType()).intern();
+ 
+     }
+ 
+@@ -89,15 +89,15 @@
+         stackable = false;
+         if (itemType == ItemType.Array) {
+             this.itemType = ItemType.Array;
+-            name = Naming.array(lvl, arrayTypes[rand.nextInt(arrayTypes.length)]);
++            name = Naming.array(lvl, arrayTypes[rand.nextInt(arrayTypes.length)]).intern();
+         }
+         else if (itemType == ItemType.Instrument) {
+             this.itemType = ItemType.Instrument;
+-            name = Naming.instrument(lvl);
++            name = Naming.instrument(lvl).intern();
+         }
+         else if (itemType == ItemType.Clothing) {
+             this.itemType = ItemType.Clothing;
+-            name = Naming.clothing(lvl, clothingNames[rand.nextInt(clothingNames.length)]);
++            name = Naming.clothing(lvl, clothingNames[rand.nextInt(clothingNames.length)]).intern();
+         }
+ 
+     }
+diff -u -r src/Game/Quest.java src/Game/Quest.java
+--- src/Game/Quest.java	2026-10-09 00:23:55.136743500 -0400
++++ src/Game/Quest.java	2026-10-09 00:23:55.161932100 -0400
+@@ -19,6 +19,7 @@
+ boolean userCreated = false; // a player-authored waypoint quest (never muted, never expires)
+ int uid = ++nextUid;         // stable id so the GUI and `qp #uid` / `qd #uid` / `qdo #uid` can name a quest (list numbers shift)
+ static int nextUid = 0;
++transient String bitName; transient long bitVal; // the guard bit of the name (see Character.Q)
+ String label = null;        // a text that replaces the name in lists (the Sect Mission quest shows what the mission asks)
+ int progress = 0;          // turns spent so far on a quest that stays a while (a retreat, a pilgrimage, an auction wait: see QuestLife)
+ boolean bounty = false;      // Hunt Beast posted on a city bounty board (a "bounty" duty for player characters)
+diff -u -r src/Game/RelationshipList.java src/Game/RelationshipList.java
+--- src/Game/RelationshipList.java	2026-10-09 00:23:55.186291400 -0400
++++ src/Game/RelationshipList.java	2026-10-09 00:23:55.210873900 -0400
+@@ -10,8 +10,17 @@
+         relationships = new ArrayList<Relationship>();
+     }
+ 
++    static final int CAP = Integer.getInteger("tdf.relCap", 48); // acquaintances kept per person
+     public void add(Relationship relationship) {
+         relationships.add(relationship);
++        if (relationships.size() > CAP) evictOne();
++    }
++    /** The oldest acquaintance of no weight (|value| <= 1, not refused, never talked to) is forgotten; a bond of 2 or 3 stays. */
++    private void evictOne() {
++        for (int i = 0; i < relationships.size() - 1; i++) {
++            Relationship r = relationships.get(i);
++            if (Math.abs(r.value) <= 1 && !r.refused && r.talks == 0) { relationships.remove(i); return; }
++        }
+     }
+ 
+     public void remove(Relationship relationship) {

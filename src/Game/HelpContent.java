@@ -526,7 +526,7 @@ final class HelpContent {
             {"preview", "`preview <#id>`", "Win chance, how lethal, escape odds and relationship before a fight."},
             {"save saves load delsave", "`save [name]` `saves` `load <name>` `delsave <name>`", "Quick or named save, list saves, load, delete."},
             {"export", "`export history|rankings|people|monsters|shop|bag|places|world|run`", "Write a CSV file to the exports folder."},
-            {"story", "`story`", "Your Story objectives."},
+            {"story", "`story` / `story replay [id]`", "The chapters of your Story start, and the scenes you can read again."},
             {"tutorial", "`tutorial`", "Open the welcome tour (or print the walkthrough in the terminal)."},
             {"guide", "`guide [section]`", "Open this Help (in the terminal it tells you where to read)."},
             {"settings", "`settings` `settings <key> <value>` `settings notify <kind> on|off`", "Show or change options (see Settings)."},

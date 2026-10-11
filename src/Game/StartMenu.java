@@ -16,6 +16,64 @@ public final class StartMenu {
             "A sandbox: pick your exact potential, trait, alignment, gender and name. Nothing is hidden.",
             "One of ten characters with a past and a chain of objectives. Choose a difficulty: Story, Hard or Brutal."};
 
+    static final int REC_MIN = 10000, REC_MAX = 150000, HARD_MIN = 1000, HARD_MAX = 1000000;
+
+    /** A sentence about a size outside the recommended range ("" when it is inside). */
+    static String populationWarning(int n) {
+        if (n < REC_MIN) return " Note: under " + String.format("%,d", REC_MIN) + " people the world is thin (few cities, sects and rivals) and the story may feel empty.";
+        if (n > REC_MAX) return " Warning: over " + String.format("%,d", REC_MAX) + " people the turns slow down and the world needs a lot of memory (several GB after a hundred years).";
+        return "";
+    }
+
+    /** "How many people at the start?" for a NEW world (default 100,000; 10,000 to 150,000 recommended; outside it the choice is warned about and still accepted).
+     *  Not asked in a test copy that edits Map.startingPopulation, or with -Dtdf.startpop=N (which sets it). */
+    static void askPopulation() {
+        Integer fixed = Integer.getInteger("tdf.startpop");
+        if (fixed != null) { Map.setStartingPopulation(Math.max(HARD_MIN, Math.min(HARD_MAX, fixed))); return; }
+        if (Map.startingPopulation != Map.DEFAULT_START) return; // a probe copy with its own size
+        final int def = Math.max(HARD_MIN, Math.min(HARD_MAX, Settings.startPopulation));
+        int n = def;
+        if (GameDriver.guiEnabled && GameDriver.mapViewer != null) {
+            final int[] out = {def};
+            try {
+                GameDriver.edtWait(() -> {
+                    JSpinner sp = new JSpinner(new SpinnerNumberModel(def, HARD_MIN, HARD_MAX, 5000));
+                    sp.setPreferredSize(new Dimension(160, 32));
+                    JLabel warn = new JLabel(" ");
+                    warn.setPreferredSize(new Dimension(360, 56)); // room for the warning from the start: the dialog does not have to grow when it appears
+                    Runnable upd = () -> {
+                        int v = ((Number) sp.getValue()).intValue();
+                        String w = populationWarning(v).trim();
+                        warn.setText("<html><div style='width:340px;color:#b04a3a'>" + (w.isEmpty() ? "&nbsp;" : w) + "</div></html>");
+                    };
+                    sp.addChangeListener(e -> upd.run());
+                    upd.run();
+                    JPanel spin = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0)); spin.add(sp);
+                    JPanel p = new JPanel(new BorderLayout(0, 8));
+                    p.add(new JLabel("<html><div style='width:340px'>How many people live in the world at the start?<br>Recommended: " + String.format("%,d", REC_MIN) + " to " + String.format("%,d", REC_MAX)
+                            + ". A smaller world runs faster on a weaker computer and needs less memory; " + String.format("%,d", Map.DEFAULT_START) + " is the usual world.</div></html>"), BorderLayout.NORTH);
+                    p.add(spin, BorderLayout.CENTER);
+                    p.add(warn, BorderLayout.SOUTH);
+                    JOptionPane.showOptionDialog(GameDriver.mapViewer, p, "Size of the world", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, new String[]{"Start"}, "Start");
+                    try { sp.commitEdit(); } catch (java.text.ParseException ignored) { }
+                    out[0] = ((Number) sp.getValue()).intValue();
+                });
+            } catch (Exception ignored) { }
+            n = out[0];
+        } else {
+            System.out.println("Starting population: how many people live in the world at the start? (" + String.format("%,d", REC_MIN) + " to " + String.format("%,d", REC_MAX) + " recommended; a smaller world suits a weaker computer; default "
+                    + String.format("%,d", def) + ") - type a number, or any other word for the default:");
+            try { n = Integer.parseInt(GameDriver.scan.next().replace(",", "").replace("_", "").trim()); } catch (Exception e) { n = def; }
+        }
+        n = Math.max(HARD_MIN, Math.min(HARD_MAX, n));
+        String w = populationWarning(n);
+        if (!w.isEmpty()) System.out.println("[World size]" + w);
+        System.out.println("The world begins with " + String.format("%,d", n) + " people.");
+        Settings.startPopulation = n;
+        try { Settings.save(); } catch (RuntimeException ignored) { }
+        Map.setStartingPopulation(n);
+    }
+
     /** "How many players?": 'S' single, 'M' multiplayer, 'W' watch. A dialog in GUI mode, a console prompt otherwise. */
     static char askMode() {
         if (GameDriver.guiEnabled && GameDriver.mapViewer != null) {

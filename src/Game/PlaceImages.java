@@ -200,7 +200,7 @@ public class PlaceImages {
     }
 
     /** Forget decoded files, painted pictures and missing-file bookkeeping (call after adding art or re-rolling the seed while the game runs). */
-    static void reload() { synchronized (fileCache) { fileCache.clear(); } synchronized (genCache) { genCache.clear(); } cache.clear(); missing.clear(); missingVariants.clear(); overridesStamp = -1; }
+    static void reload() { synchronized (fileCache) { fileCache.clear(); } synchronized (genCache) { genCache.clear(); } synchronized (thumbCache) { thumbCache.clear(); } synchronized (smallGen) { smallGen.clear(); } cache.clear(); missing.clear(); missingVariants.clear(); overridesStamp = -1; }
 
     // ------------------------------------------------------------------ painted pictures (ArtGen)
     private static final Map<String, BufferedImage> genCache = new LinkedHashMap<String, BufferedImage>(64, 0.75f, true) {
@@ -220,10 +220,11 @@ public class PlaceImages {
         opts.sect = a.sect != null;
         opts.settlement = a.isOriginis() ? 3 : a.city ? (a.population >= 20000 ? 2 : 1) : 0;
         String key = (small ? "s" : String.valueOf(a.index)) + "|" + noun + "|" + biome + "|" + w + "x" + h + "|" + artSeed + "|" + opts.key();
-        synchronized (genCache) { BufferedImage c = genCache.get(key); if (c != null) return c; }
+        final Map<String, BufferedImage> gc = small ? smallGen : genCache; // the small shared pictures have a cache of their own (hundreds are on screen at once)
+        synchronized (gc) { BufferedImage c = gc.get(key); if (c != null) return c; }
         long seed = small ? artSeed ^ (noun.hashCode() * 31L + biome.hashCode()) : artSeed * 1000003L + a.index;
         BufferedImage img = ArtGen.render(noun, biome, seed, w, h, small ? 0.4 : 1.0, opts);
-        synchronized (genCache) { genCache.put(key, img); }
+        synchronized (gc) { gc.put(key, img); }
         return img;
     }
 
@@ -270,6 +271,66 @@ public class PlaceImages {
             return null;
         }
     }
+
+    // ------------------------------------------------------------------ map thumbnails
+    /** `true` while the map is drawn into an export picture (HelpShots): then every picture is built on the spot instead of in the background. */
+    static volatile boolean thumbSync = false;
+    /** The map sets this to repaint itself; called (at most every 150 ms, on the Swing thread) when pictures were built in the background. */
+    static volatile Runnable thumbsReady = null;
+    private static final java.util.concurrent.atomic.AtomicBoolean thumbNotify = new java.util.concurrent.atomic.AtomicBoolean();
+    private static final java.util.Set<String> thumbPending = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final java.util.concurrent.ExecutorService thumbPool = java.util.concurrent.Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "map-pictures"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY + 1); return t; });
+    private static final Map<String, BufferedImage> thumbCache = new LinkedHashMap<String, BufferedImage>(256, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, BufferedImage> e) { return size() > 1600; }
+    };
+    private static final Map<String, BufferedImage> smallGen = new LinkedHashMap<String, BufferedImage>(256, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, BufferedImage> e) { return size() > 900; }
+    };
+
+    /** A small picture of a place for a map cell, or null while it is not ready. The map's pictures are kept for the whole map (the general cache holds only 160, so 961 tiles used to be
+     *  rebuilt on every redraw, on the game's own tick) and are built one by one on a background thread: a redraw never waits for painting; the map is repainted when some are ready.
+     *  The size grows with the cell (zoomed maps get sharper pictures). Null too when the place has no picture. */
+    static BufferedImage thumb(Area a, int cell) {
+        if (!enabled || a == null) return null;
+        final int w = cell < 48 ? 96 : cell < 96 ? 160 : 224, h = w * 9 / 16;
+        try {
+            final String key = a.index + "|" + a.name + "|" + w + "|" + GameDriver.currentSeason + "|" + a.hotspot + a.crowdHotspot + "|" + (a.lvl / 10) + "|" + a.city + (a.sect != null) + a.dungeonType + "|" + ArtMore.weatherAt(a);
+            synchronized (thumbCache) { BufferedImage c = thumbCache.get(key); if (c != null) return c == NONE ? null : c; }
+            if (thumbSync) {
+                BufferedImage out = build(a, w, h, true);
+                synchronized (thumbCache) { thumbCache.put(key, out == null ? NONE : out); }
+                return out;
+            }
+            if (thumbPending.add(key)) {
+                final Area area = a;
+                thumbPool.execute(() -> {
+                    try {
+                        BufferedImage out = build(area, w, h, true);
+                        synchronized (thumbCache) { thumbCache.put(key, out == null ? NONE : out); }
+                    } catch (Throwable t) {
+                        synchronized (thumbCache) { thumbCache.put(key, NONE); }
+                    } finally {
+                        thumbPending.remove(key);
+                        notifyThumbs();
+                    }
+                });
+            }
+            return null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static void notifyThumbs() {
+        if (!thumbNotify.compareAndSet(false, true)) return; // a repaint is already on its way
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            javax.swing.Timer t = new javax.swing.Timer(150, e -> { thumbNotify.set(false); Runnable r = thumbsReady; if (r != null) r.run(); });
+            t.setRepeats(false); t.start();
+        });
+    }
+
+    /** Test hook: true when nothing is waiting to be built in the background. */
+    static boolean thumbsIdle() { return thumbPending.isEmpty(); }
 
     private static BufferedImage build(Area a, int w, int h, boolean withOverlays) {
         BufferedImage base = base(a);

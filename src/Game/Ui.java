@@ -39,7 +39,7 @@ public class Ui {
         tip("Here", "Describe the tile you stand on.");
         tip("People", "List the cultivators in your tile.");
         tip("Help", "The full command list.");
-        tip("Scripts", "Write a hybrid-mode script (T).");
+        tip("Scripts", "The Script Manager: write, save and load a hybrid-mode script (T).");
         tip("Browse", "Select, filter and sort cultivators, shop stock, your backpack and places (B).");
         tip("Quests+", "The quest panel (Q): pin priorities, delete, mute, Do Quest.");
         tip("Duties+", "Duties and decision policies (U).");

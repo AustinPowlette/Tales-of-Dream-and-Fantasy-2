@@ -272,6 +272,7 @@ final class FightReport {
         if (spared) return w == hero ? "You spared " + who(l) + "." : ln + " was spared.";
         if (beastEscape) return l == hero ? "You got away from the beast, injured (cultivation down 30%)." : ln + " got away injured.";
         if (injured) return (l == hero ? "You were left alive but injured (cultivation down 30% until your next level-up)." : ln + " was left alive, injured (cultivation down 30%).");
+        if (spar && !l.isGhostForm) return l == hero ? "You lost the spar and walked away unharmed." : ln + " lost the spar and walked away unharmed.";
         if (l.isGhostForm && !(l == a ? ghostA : ghostB)) return ln + " slipped into ghost form instead of dying.";
         return ln + " survived (a rebirth or ghost form saved " + (l == hero ? "you" : "them") + ").";
     }

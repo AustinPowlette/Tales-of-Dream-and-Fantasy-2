@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Reincarnation: the reward for reaching the end of your rope. Potential decides how far a cultivator can climb: each realm gate (the major level
- *  breakthroughs at 20, 37, 52, 65, 76, 85, 92, 97 and 100 potential) is nearly closed to anyone below its threshold. A cultivator of Major Lvl 3
+ *  breakthroughs at 20, 37, 52, 65, 76, 85, 92, 97, 99 and 100 potential: `Character.GATE_POTENTIAL`) is nearly closed to anyone below its threshold. A cultivator of Major Lvl 3
  *  (Soul Wandering) or more who has reached the last level before a gate they cannot pass is offered the "Reincarnate" spot quest. It is the SAME
  *  character, given a second youth: age 18 again, level 1, cultivation 0, the injuries of failed breakthroughs forgotten (and the lifespan of the
  *  realms with them), potential +5. Name, family, sect, relationships, wealth, items and techniques stay. Companion beasts beyond what a Major Lvl 0
@@ -12,7 +12,7 @@ import java.util.List;
 final class Reincarnation {
     private Reincarnation() { }
 
-    static final int[] GATES = {20, 37, 52, 65, 76, 85, 92, 97, 100};
+    static final int[] GATES = Character.GATE_POTENTIAL;
     static final int GAIN = 5;
     static final int REBORN_AGE = GameDriver.START_AGE; // a second youth: the age everyone started at
     static final int MIN_MAJOR = 3; // Soul Wandering: only a soul that has begun to wander can be reborn
@@ -57,6 +57,7 @@ final class Reincarnation {
         RunStats.endLife(c, "reincarnated at " + oldRealm);
 
         // a second youth
+        c.repTitle = null; // the title of the old life (Strongest, Richest ...) goes with it; the next New Year may give a new one
         c.potential = Math.min(101, c.potential + GAIN);
         c.age = REBORN_AGE;
         c.maxAge = 100; c.totalAgeGained = 100;           // the lifespan of the realms is earned again

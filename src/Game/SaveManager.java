@@ -131,7 +131,7 @@ public class SaveManager {
         dir.mkdirs();
         File tmp = new File(dir, slot + ".dat.tmp"), dat = dat(slot), bak = bak(slot);
         CRC32 crc = new CRC32();
-        try (ObjectOutputStream oos = new ObjectOutputStream(new BufferedOutputStream(new CheckedOutputStream(new FileOutputStream(tmp), crc), 1 << 16))) {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new BufferedOutputStream(gzipFast(new CheckedOutputStream(new FileOutputStream(tmp), crc)), 1 << 16))) { // (compressed: the stream is very repetitive; the checksum is of the file)
             oos.writeObject(d);
         } catch (Throwable e) { tmp.delete(); throw new Exception("could not write " + tmp.getName() + ": " + e, e); }
         if (tmp.length() < 1024) { tmp.delete(); throw new Exception("written file is implausibly small"); }
@@ -152,6 +152,21 @@ public class SaveManager {
             throw new Exception("could not move the new save into place: " + e, e);
         }
         Files.move(mtmp.toPath(), meta(slot).toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /** Gzip at its fastest level: a save is several times smaller for a few seconds more. */
+    private static java.io.OutputStream gzipFast(java.io.OutputStream out) throws java.io.IOException {
+        return new java.util.zip.GZIPOutputStream(out, 1 << 16) { { def.setLevel(java.util.zip.Deflater.BEST_SPEED); } };
+    }
+
+    /** Opens a save file for reading: a compressed one (gzip) or an old uncompressed one (told apart by the first two bytes). */
+    static java.io.InputStream openSave(File f) throws java.io.IOException {
+        java.io.InputStream in = new BufferedInputStream(new FileInputStream(f), 1 << 16);
+        in.mark(2);
+        int b1 = in.read(), b2 = in.read();
+        in.reset();
+        if (b1 == 0x1f && b2 == 0x8b) in = new BufferedInputStream(new java.util.zip.GZIPInputStream(in, 1 << 16), 1 << 16);
+        return in;
     }
 
     /** auto-0 (just written) becomes auto-1; older ones shift up; anything beyond the keep count is deleted. */
@@ -221,7 +236,7 @@ public class SaveManager {
     private static boolean readInto(File f) {
         final boolean[] ok = {false};
         Thread t = new Thread(null, () -> {
-            try (ObjectInputStream ois = new ObjectInputStream(new BufferedInputStream(new FileInputStream(f), 1 << 16))) {
+            try (ObjectInputStream ois = new ObjectInputStream(openSave(f))) {
                 SaveData d = (SaveData) ois.readObject();
                 GameDriver.applySnapshot(d);
                 ok[0] = true;

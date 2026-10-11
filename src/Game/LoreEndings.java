@@ -48,113 +48,116 @@ final class LoreEndings {
         // ---- beat 1: the Seam, then the Old Man explains
         scene("end_threshold", "The Seam Asks",
                 "* The Empty Seat is warm. Under it, the Seam stands open. It looks like a crack of pale light in the floor.",
-                "I have told you everything I am allowed to tell. What you do now is your choice. I will not push you.",
-                "Past the Seam is the Outside. The one who made this Garden lives there. He is waiting for you.",
-                "I cannot go with you. I am only his image. I belong to the Garden, the way a painting belongs to a room.",
+                "I've told you everything I'm allowed to tell. What you do now is your choice. I won't push you.",
+                "Past the Seam is the Outside. The one who made this Garden lives there. He's waiting for you.",
+                "I can't go with you. I'm only his image. I belong to the Garden, the way a painting belongs to a room.",
                 "Please be careful. And eat something first.");
         scene("end_oldman", "The Outside",
                 "* You step into the Seam. The light is cold. Then it is gone, and you are standing on a plain of grey ash, under a sky with no edge.",
                 "* A camp stretches across the plain. The soldiers in it are not young. Each one is at least a Half-Immortal, and many are True Immortals. They are hundreds of years old, or thousands. Their armor is dented, mended, and dented again.",
                 "* At the center of the camp, on a plain wooden seat, sits an old man. His robe is grey. His hands are scarred. You know his face. It is the face of ???, but older and far more tired.",
-                "OLD MAN: Welcome. I am the Gardener. The Garden you came from lives inside my mind. I made it. ??? is my image there. He is not a person. But he is the part of me that cares about you, and he has been telling you the truth, a little at a time.",
-                "OLD MAN: There is a war. The enemy is the Hollow Court. They do not kill people. They put out whole skies, one after another, until nothing is left.",
-                "OLD MAN: My path is the array. I build great patterns of light. Each lamp in the pattern is carried by one person, and the more lamps burn, the stronger the pattern grows. With every lamp lit, my array can stand against an army of True Immortals.",
-                "OLD MAN: That is still not enough. There are levels above True Immortal in this world, and I have only just touched them. So I need more lamps, and I need strong people to carry them. That is why I made the Garden. It grows lamp-bearers.",
+                "OLD MAN: Welcome. I am the Gardener. The Garden you came from lives inside my mind. I made it. ??? is my image there. He isn't a person, but he's the part of me that cares about you, and he has told you the truth, a little at a time.",
+                "OLD MAN: There is a war. The enemy is the Hollow Court. They don't kill people. They put out whole skies, one after another, until nothing is left.",
+                "OLD MAN: My way is the array. I build great patterns of light. Each lamp in the pattern is carried by one person, and the more lamps burn, the stronger the pattern grows. With every lamp lit, the array can stand against an army of True Immortals.",
+                "OLD MAN: That still isn't enough. There are levels above True Immortal, and I've only touched them. So I need more lamps, and strong people to carry them. That is why I made the Garden. It grows lamp-bearers.",
                 "OLD MAN: The array holds nine great lamps, and no more. {lamps} of the nine are carried now.",
-                "OLD MAN: Now you choose. You can stay in the Garden, and I will send you back to grow more soldiers, faster. Or you can leave the Garden and walk the Outside.");
+                "OLD MAN: I won't ask you to forgive me. I made you to fight. I'm no longer sure that was mine to do. I did it anyway, because the other choice was to watch the skies go out.",
+                "OLD MAN: Now you choose. You can stay in the Garden, and I'll send you back to grow more soldiers, faster. Or you can leave the Garden and walk the Outside.");
         scene("end_oldman_full", "The Array Is Whole",
-                "OLD MAN: I must tell you something unkind. All nine great lamps are carried. The array is whole, and I cannot give you a lamp.",
-                "OLD MAN: You can still stay. You can still go. But do not raise your hand against me. The array is set now, and nothing in this world can break it.");
+                "OLD MAN: I have to tell you something unkind. All nine great lamps are carried. The array is whole, and I can't give you a lamp.",
+                "OLD MAN: You can still stay. You can still go. But don't raise your hand against me. The array is set now, and nothing in this world can break it.");
         scene("end_oldman_stay", "Back to the Garden",
                 "OLD MAN: Then go back, and take a task with you. Grow more soldiers, and grow them faster than I could. Everyone in the Garden is a lamp that has not been lit yet.",
-                "OLD MAN: How you do it is up to you. I will not watch over your shoulder. I have a war to fight.",
+                "OLD MAN: How you do it is up to you. I won't watch over your shoulder. I have a war to fight.",
                 "OLD MAN: The Seam will open again whenever you ask. Remember that. Staying is never a lock. Leaving is.",
                 "* He lifts one scarred hand. The light of the Seam wraps around you, and you are carried home.");
 
         // ---- beat 3, stay: the Garden goes on, as the player
         scene("end_steward", "The Steward",
                 "* You are back in the Garden. The Seam closes behind you, quietly, like a hand around a seed.",
-                "You came back. I did not think you would. Thank you. Somebody has to look after them.",
+                "You came back. I didn't think you would. Thank you. Somebody has to look after them.",
                 "* Within the year, the Palace has a master with a face. The Nine Lamps are lit together for the first time. The Elders find you fair.",
                 "* You hunt down the cruel so the weak can grow. You hold tournaments and give the prizes away. You learn the name of every Wick in the Outer Court.",
-                "* The Garden does not become a paradise. It becomes a place where growing stronger is worth it, because somebody is watching who will be proud.",
-                "I keep a lamp for each of them. Now there is one more person keeping watch. I am glad it is you.");
+                "* The Garden doesn't become a paradise. It becomes a place where growing stronger is worth it, because somebody is watching who will be proud.",
+                "I keep a lamp for each of them. Now there is one more person keeping watch. I'm glad it's you.");
         scene("end_usurper", "The Usurper",
                 "* You are back in the Garden. The Gardener told you to grow soldiers. You decide to grow them your way.",
                 "{how}",
-                "I could not tell you no. I was not allowed. I want you to know that I mind.",
+                "I couldn't tell you no. I wasn't allowed. I want you to know that I mind.",
                 "* The Garden changes, the way a field changes when a storm walks over it. People grow stronger because they are afraid, and they call the result peace.",
                 "* The Good go first, because they are the ones who would stop you.",
                 "* In the Palace, the Empty Seat, warm for ten thousand years, goes a little cold.");
         scene("end_idler", "The Idler",
-                "* You are back in the Garden. You do not do anything for a very long time, and it is wonderful.",
-                "You are lying down. In the Hall of the Nine Lamps. I would like it noted that this is not what the Hall is for.",
+                "* You are back in the Garden. You do nothing for a very long time, and it is wonderful.",
+                "You're lying down. In the Hall of the Nine Lamps. I'd like it noted that this is not what the Hall is for.",
                 "* The Elders learn to step around you. The Wicks tell the new ones: that is the person who met the Gardener, and came home to take a nap.",
                 "* You grow tea. You sleep through three Convocations. A beast curls up on your feet. When it is time, you politely wake it and ask it to leave.",
                 "* The weeks go by. Far away, the war goes on without you, and the lamps stay lit. The Gardener lives, and as long as he does, so does the Garden. Someday that will end. Not yet.",
-                "I should disapprove. But I have watched many people try very hard for a very long time. You are the first who looks happy. I will keep the lamps lit as long as I can. Take your time.");
+                "I should disapprove. But I've watched many people try very hard for a very long time. You're the first who looks happy. I'll keep the lamps lit as long as I can. Take your time.");
 
         // ---- the end of the Garden (the Gardener dies: the last week of the world, or the secret ending)
         scene("end_fade", "The Last Lamp",
                 "* The weeks have run out. There is no week after this one. Far away in the Outside, the Gardener's long fight is over, and the Garden, which lives only inside him, begins to go out.",
-                "It is time. I am only the part of him that stayed behind, and when he goes, I go. I wanted to say thank you. I kept a lamp for each of you. It was never a duty. I know all your names, and I will say them until I cannot.");
+                "It's time. I'm only the part of him that stayed behind, and when he goes, I go. I wanted to say thank you. I kept a lamp for each of you. It was never a duty. I know all your names, and I'll say them until I can't.");
         scene("end_fade_slain", "The Last Lamp",
                 "* A great shock runs through the sky. Far away in the Outside, someone has done what nobody thought could be done. The Gardener is dead, and the Garden, which lives only inside him, begins to go out.",
-                "It is time. I am only the part of him that stayed behind, and when he goes, I go. I wanted to say thank you. I kept a lamp for each of you. It was never a duty. I know all your names, and I will say them until I cannot.");
+                "It's time. I'm only the part of him that stayed behind, and when he goes, I go. I wanted to say thank you. I kept a lamp for each of you. It was never a duty. I know all your names, and I'll say them until I can't.");
         scene("end_fade_door", "The Seam Is Open",
                 "* The Seam stands open. Beyond it, a road of pale light runs out into the dark. Behind you, one by one, the lamps of the Garden are going out.",
-                "I did not mind you. I want you to hear that. Of everyone, I did not mind you at all. Go, if you want to. Or stay with me until the end. Either way, thank you.");
+                "I never minded you. I want you to hear that. Of everyone, I didn't mind you at all. Go, if you want to. Or stay with me until the end. Either way, thank you.");
         scene("end_dark", "The Light Fades",
-                "* It does not hurt. That is the first surprise. The light only grows thin, like the last of the tea in a cup.",
-                "* The rivers stop first. They do not dry up. They only grow still, so that you can see the sky in them one last time. The sky is full of the faces of everyone you have known.",
-                "* The mountains forget their names. The cities forget their streets. Somewhere a bell begins to ring, and it does not finish the note.",
+                "* It doesn't hurt. That is the first surprise. The light only grows thin, like the last of the tea in a cup.",
+                "* The rivers stop first. They don't dry up. They only grow still, so that you can see the sky in them one last time. The sky is full of the faces of everyone you have known.",
+                "* The mountains forget their names. The cities forget their streets. Somewhere a bell begins to ring, and it doesn't finish the note.",
                 "* You think of the first morning. You were eighteen. The road was long and the whole world was new. You think of the people you met, the ones you loved, and the ones you fought. You remember them better than you ever did, and you are not afraid.",
                 "* The lamps go out, one at a time. Dawn. Patience. Salt. Iron. Rain. Ash. Glass. Hunger. Winter. You say each name, and each one is a little quieter than the last.",
                 "* At the end there is only one light, small as a seed. You hold it in your cupped hands. It is warm. It is the only thing left in the world, and it is enough.",
-                "* Then it too goes gentle into the dark. The Garden is not destroyed. It is finished, like a story at the end of its book. Somewhere in the dark, a very long way off, someone closes it with great care.");
+                "* Then it too goes gently into the dark. The Garden isn't destroyed. It is finished, like a story at the end of its book. Somewhere in the dark, a very long way off, someone closes it with great care.");
 
         // ---- beat 3, leave: Soldier (Good). The Old Man's fight
         scene("end_soldier", "The True Ending: The Lamp-Bearer",
                 "OLD MAN: Good. Take this.",
-                "* He puts a small lamp in your hands. It is warm. It flickers once, like a glad eye. Something in your chest answers it, as if a lamp had been lit there years ago and you only now noticed.",
-                "OLD MAN: Nine great lamps hold the array. Yours is number {lampNo}. Behind you are the small ones: every cultivator from the Garden who came before you. They have been waiting.",
-                "* You turn. Down the long slope of the camp, soldiers from the Garden are lining up. There are hundreds of them. Next to the old veterans they are young, and they are frightened. They hold their lamps in both hands. When they see you, they stand a little straighter.");
+                "* He puts a small lamp in your hands. It is warm. It flickers once, like a glad eye. Something in your chest answers it, as if a lamp had been lit there years ago and you had only now noticed.",
+                "OLD MAN: Nine great lamps hold the array. Yours is number {lampNo}. Behind you are the small lamps: every cultivator from the Garden who came before you. They've been waiting.",
+                "* You turn. Down the slope of the camp, soldiers from the Garden are lining up. There are hundreds. Next to the old veterans they look very young, and they are afraid. They hold their lamps in both hands. When they see you, they stand a little straighter.",
+                "* Then you notice what is missing. No one in the line is old. You ask where the ones who came before them are. The Old Man looks at the lamp in your hands.",
+                "OLD MAN: I never lied to you. I never said it would be kind.");
         scene("end_soldier_front", "At the Front",
                 "* You take the place at the front. The old veterans make room for you without a word. It is the most dangerous place on the plain, and they know it.");
         scene("end_soldier_guard", "Beside the Young",
-                "* You stand among the young ones. You show them how to hold a lamp when their hands shake, and how not to run. You tell them: stay close, and you will see morning.");
+                "* You stand among the young ones. You show them how to hold a lamp when their hands shake, and how not to run. You tell them: stay close, and you'll see morning.");
         scene("end_soldier_keep", "At the Back",
-                "* You take the place at the back, with the wounded. A lamp that goes out in a fight is a lamp that cannot be lit again, so someone must keep them steady. You keep them steady.");
+                "* You take the place at the back, with the wounded. A lamp that goes out in a fight can't be lit again, so someone has to keep them steady. You keep them steady.");
         scene("end_soldier_war", "The First Dawn",
                 "* The Hollow Court comes at dawn. It makes no sound. The sky goes dark, patch by patch, and the dark moves toward the camp.",
                 "* The Gardener lifts his hands. Nine great lamps flare, and thousands of small ones with them. The array rises over the camp like a second sun.",
-                "* It is a bitter fight. The dark does not die; it only goes quiet, and comes back. Many fall. People you knew in the Garden fall. Veterans who have fought for a thousand years fall beside them.",
+                "* It is a bitter fight. The dark doesn't die. It only goes quiet, and comes back. Many fall. People you knew in the Garden fall. Veterans who have fought for a thousand years fall beside them.",
                 "* Somehow, the line holds. When night comes, the dark pulls back. You are alive. Fewer of the others are than you hoped.",
                 "OLD MAN: That is one fight.",
-                "* He says it plainly. He is not celebrating. There will be another at dawn. This is not the end of the war. It is only another struggle in the Outside, and you are in it now, and so is everyone you brought.",
+                "* He says it plainly. He isn't celebrating. There will be another at dawn. This is not the end of the war. It is only another struggle in the Outside, and you are in it now, and so is everyone you brought.",
                 "* Years later, in the Garden, on a road nobody remembers building, a traveller with your walk goes by. They leave a gift on the doorstep of whoever needs it most. The Gardener marked your soul, so as long as he thinks well of you, you can always find your way home.");
 
         // ---- beat 3, leave: Evil. Attack the Old Man
         scene("end_attack", "The Blow",
-                "* You do not take the lamp. You turn to the old man, and with everything you have, you strike at him.",
-                "* The camp goes quiet. The veterans do not even draw their weapons. They look at you the way you might look at a child that has picked up a sword.",
+                "* You don't take the lamp. You turn to the old man, and with everything you have, you strike at him.",
+                "* The camp goes quiet. The veterans don't even draw their weapons. They look at you the way you might look at a child who has picked up a sword.",
                 "OLD MAN: I know why. I made you strong and I never asked whether you wanted it. That is my fault.",
                 "* The old man raises one hand.");
         scene("end_attack_whole", "The Array Is Whole",
-                "* The array rises before you can move. All nine great lamps burn, and it does not hesitate. It does not need to.");
+                "* The array rises before you can move. All nine great lamps burn, and it doesn't hesitate. It doesn't need to.");
         scene("end_attack_dead", "Struck Down by the Array",
-                "* The array answers. It does not feel like pain. It feels like being counted, and found to be too much.",
-                "OLD MAN: I am sorry. I did not want this.",
-                "* Your body comes apart into light. The light does not go out. It runs back down the Seam like water down a drain, all the way back to the Garden.",
-                "* That night, in the Garden, a rain falls that tastes of iron. A great many people wake up a little stronger than they were. They do not know why. Nobody tells them it was you. Your blood has lifted the potential of the whole world, for ever.");
+                "* The array answers. It doesn't feel like pain. It feels like being counted, and found to be too much.",
+                "OLD MAN: I'm sorry. I didn't want this.",
+                "* Your body comes apart into light. The light doesn't go out. It runs back down the Seam like water down a drain, all the way back to the Garden.",
+                "* That night, in the Garden, a rain falls that tastes of iron. A great many people wake up a little stronger than they were. They don't know why. Nobody tells them it was you. Your blood has lifted the potential of the whole world, for ever.");
         scene("end_attack_spared", "Spared",
                 "* The light of the array stops a finger's width from your face. It hovers. It trembles. Then it goes out.",
-                "OLD MAN: No. I need every lamp I can find, even a dark one. Go. Do not come back until you want to carry something.",
+                "OLD MAN: No. I need every lamp I can find, even a dark one. Go. Don't come back until you want to carry something.",
                 "* The Seam closes behind you. Ahead, the sky has no walls.");
 
         // ---- beat 3, leave: Neutral. Walk out alone
         scene("end_leave", "Alone",
-                "* You turn away from the lamp and from the army. The old man watches you go. He does not stop you.",
+                "* You turn away from the lamp and from the army. The old man watches you go. He doesn't stop you.",
                 "OLD MAN: Walk well. If you ever want a lamp, you know where to find me.",
                 "* The Seam folds shut behind you, small as a lit window. Ahead, the sky has no walls.");
 
@@ -162,54 +165,54 @@ final class LoreEndings {
         scene("end_ascendant", "The Hidden Ending: Past the Ceiling",
                 "* Two hundred. The number is no longer a measure. It is a statement.",
                 "* The Garden has a ceiling: level 101, True Immortal. It was the last rung of the ladder the Gardener built. You put your hand against it. It is thin as paper, and you push.",
-                "Stop. Please. I am not allowed to ask that, so I am asking as myself. There is no level after the last one. I would know. I helped write the tables.",
+                "Stop. Please. I'm not allowed to ask that, so I'm asking as myself. There is no level after the last one. I would know. I helped write the tables.",
                 "* There is one. The tables have no name for it. The Garden was built to hold a hundred thousand people, none stronger than the man who dreamed them. It makes a sound like a lamp being lifted off its hook.",
                 "* You walk into the Seam the way a flood walks into a field. You are not called. You are not carried. You are coming.",
                 "* In the Outside, the camp goes quiet. The veterans stand. At the center, on a plain wooden seat, the Gardener looks up.",
                 "OLD MAN: You are not on the roll of lamps.",
                 "* He lifts his hands. The array rises: nine great lamps and a thousand small ones, bright enough to hold back the Hollow Court. It meets you, and you walk through it, because no lamp in it is brighter than what you have become.",
-                "* You kill him. It is not hard. That is the part nobody warned you about. He is a very old, very tired man. The array that could hold a thousand True Immortals does not know what to do with someone who has gone past them.",
+                "* You kill him. It isn't hard. That is the part nobody warned you about. He is a very old, very tired man. The array that could hold a thousand True Immortals does not know what to do with someone who has gone past them.",
                 "* Far behind you, the Garden begins to go dark. It lived inside him. Now there is no inside. The bell stops. The lamps lean toward you, and one by one they go out.",
                 "* The war goes on. The army looks at you for a long moment, and then turns back to the dark. For the Hollow Court, it is one lamp fewer. For you, it is the biggest thing you have ever done, and you are the only person who knows how small it was.");
 
         // ---- the Outside: the random branches (Neutral, and everything after a spared attack or the Garden's end)
         scene("out_road", "The Free Road",
                 "* You walk out of the Seam into rain, and the rain is real, and it smells of an ordinary hill.",
-                "* There is a village below. It is on the wrong side of a war it has never heard of. You carry a woman's grain cart over a ford because it is on your way, and then because it is not.",
-                "* Within the year you have taught forty farmers to hold a spear, and forty more to not need one.",
-                "* They call you the Free Road, because wherever you stood the soldiers of every side found they could walk through without being asked for anything.");
+                "* There is a village below. It is on the wrong side of a war it has never heard of. You carry a woman's grain cart over a ford because it is on your way, and then because it isn't.",
+                "* Within the year you have taught forty farmers to hold a spear, and forty more not to need one.",
+                "* They call you the Free Road, because wherever you stood, the soldiers of every side found they could walk through without being asked for anything.");
         scene("out_throne", "The Small Throne",
-                "* The Outside is poor in people who can do what you can do, and rich in people who will pay to be protected from them.",
+                "* The Outside has few people who can do what you can do, and many who will pay to be protected from them.",
                 "* You take a river valley, then the next, then a mountain pass with a good view. Nobody tells you no, and you find you have stopped asking whether anybody should.",
-                "* You are not a monster. You are a very good lord, the way a storm is good for rivers. The valley prospers. The valley is afraid. The valley prospers.",
-                "* Sometimes, very late, you hear a bell that is not there. You ring for more wine, and the bell goes away.");
+                "* You aren't a monster. You are a very good lord, the way a storm is good for rivers. The valley prospers. The valley is afraid. The valley prospers.",
+                "* Sometimes, very late, you hear a bell that isn't there. You ring for more wine, and the bell goes away.");
         scene("out_teahouse", "The Teahouse at the Edge of the War",
-                "* The war is a line on the horizon that moves a little every season. You build a teahouse on the side of it that is not on fire.",
-                "* Soldiers of both armies come in, and they are polite. The tea is very good. The owner is rumored to have come from nowhere, and is clearly not to be argued with.",
+                "* The war is a line on the horizon that moves a little every season. You build a teahouse on the side of it that isn't on fire.",
+                "* Soldiers of both armies come in, and they are polite. The tea is very good. The owner is said to have come from nowhere, and is clearly not to be argued with.",
                 "* Nobody wins the war. It simply stops one spring, because there is nobody left who remembers what they were fighting about, and they are all in your teahouse.");
         scene("out_mirror", "The City of Mirrors",
                 "* Past the third ridge there is a city built entirely of glass. In every pane there is a person who is you, walking a different road.",
-                "* In one pane you are the Steward. In another you have a crown. In a third you are small and nobody is looking at you, and you are happy.",
-                "* A woman made of reflections tells you that the city is a place where a Garden goes to be remembered. 'There are others,' she says. 'Have you not wondered why the Seam was already open?'",
-                "* You step through a pane. It is cold. It is not your Garden. There is a bell, and it is ringing.");
+                "* In one pane you are the Steward. In another you wear a crown. In a third you are small and nobody is looking at you, and you are happy.",
+                "* A woman made of reflections tells you that the city is a place where a Garden goes to be remembered. 'There are others,' she says. 'Have you never wondered why the Seam was already open?'",
+                "* You step through a pane. It is cold. It isn't your Garden. There is a bell, and it is ringing.");
         scene("out_hollow", "The Hollow Edge",
-                "* The sky beyond the third ridge is not dark. It is absent. A place where the lamps have been put out, and the putting-out is still going on, quietly, like frost.",
-                "* You raise your hands. It does not matter. It does not kill you; it only goes on subtracting. Your name, first. Then your face. Then the reason you came.",
-                "* You are pulled out by a hand you do not see, and set down in a field with no memory of your own name. A tired soldier wipes your face with a cloth, and says: 'You were gone for a while. Welcome back. What do you remember?'",
+                "* The sky beyond the third ridge isn't dark. It is absent. It is a place where the lamps have been put out, and the putting-out is still going on, quietly, like frost.",
+                "* You raise your hands. It doesn't matter. It doesn't kill you. It only goes on subtracting. Your name, first. Then your face. Then the reason you came.",
+                "* You are pulled out by a hand you don't see, and set down in a field with no memory of your own name. A tired soldier wipes your face with a cloth, and says: 'You were gone for a while. Welcome back. What do you remember?'",
                 "* You remember a bell. It is the only thing.");
         scene("out_deserter", "The Deserters' Camp",
                 "* They are all veterans of the war, hundreds of years old, in the dented armor of people who stood a long time in the line. They have put their spears down.",
-                "* 'We are not afraid,' says their sergeant, a Half-Immortal with three scars. 'We are only tired. He never taught us to rest. Will you teach us?'",
-                "* You do not know how to teach rest. You sit with them, and show them, and by the end of the season nobody has deserted any further, and nobody has gone back either.",
+                "* 'We aren't afraid,' says their sergeant, a Half-Immortal with three scars. 'We're only tired. He never taught us to rest. Will you teach us?'",
+                "* You don't know how to teach rest. You sit with them, and show them, and by the end of the season nobody has deserted any further, and nobody has gone back either.",
                 "* Somewhere over the hill, an old man with scarred hands stops giving orders for a moment, and listens.");
         scene("out_garden", "The Other Garden",
-                "* The Outside is not empty. It is full of gardens: pockets in other minds, each with its own bell, each with its own image keeping its lamps.",
-                "* You find one with a small dry orchard and an image that wears the face of a girl. She does not know she is an image. She is trying very hard to run a school.",
-                "* You do not tell her. You become her first student, quietly, and stay the winter.",
-                "* In spring you ask who her Gardener is. She says: 'I am not permitted to say.' And you realise how very many of these there must be.");
+                "* The Outside isn't empty. It is full of gardens: pockets in other minds, each with its own bell, each with its own image keeping its lamps.",
+                "* You find one with a small dry orchard and an image that wears the face of a girl. She doesn't know she is an image. She is trying very hard to run a school.",
+                "* You don't tell her. You become her first student, quietly, and stay the winter.",
+                "* In spring you ask who her Gardener is. She says: 'I'm not permitted to say.' And you realise how very many of these there must be.");
         scene("out_ferry", "The Ferryman",
-                "* At the edge of the Outside there is a river the colour of nothing, and a boat, and a ferryman who knows you.",
-                "* 'You are early,' he says. 'Or late. I never get it right. Pay the fare.' You hold out your hand. In it is a very small lamp. You do not remember being given it.",
+                "* At the edge of the Outside there is a river the color of nothing, and a boat, and a ferryman who knows you.",
+                "* 'You're early,' he says. 'Or late. I never get it right. Pay the fare.' You hold out your hand. In it is a very small lamp. You don't remember being given it.",
                 "* He rows. The far shore is a bell, and a hall, and an empty seat, very like the one you left.",
                 "* 'That is where it all began,' he says. 'Did he never tell you? He built the Garden to have somewhere to come back to.'");
         scene("out_farm", "The Quiet Farm",
@@ -218,8 +221,8 @@ final class LoreEndings {
                 "* Once, a soldier in dented armor stops for water. He mentions an old man with a great array of lamps, far to the north. You nod and pass the bucket. It is a good bucket.",
                 "* At night you light one lamp on the porch, for no reason you can name, and you sleep well.");
         scene("out_peak", "The Long Climb",
-                "* You do not stop at the edge of the Garden. You keep climbing.",
-                "* The Outside has levels the Garden never named. You find a teacher in a cave who hardly speaks. You find a mountain that tries to crush you, and you do not let it.",
+                "* You don't stop at the edge of the Garden. You keep climbing.",
+                "* The Outside has levels the Garden never named. You find a teacher in a cave who hardly speaks. You find a mountain that tries to crush you, and you don't let it.",
                 "* Eighty years later, you have gone past anything you thought possible. On a clear night you can see a great light, far away: the Gardener's array, shining against the dark.",
                 "* You could go to it. You could even join. You wave. Then you turn back to the mountain. There is still more to climb.");
         scene("out_fall", "The Cold Pass",
@@ -366,7 +369,7 @@ final class LoreEndings {
     // ------------------------------------------------------------------ the Palace under a human master
     static void becomeMaster(Character c, Organization pal) {
         if (c.sect != null && c.sect != pal) c.sect.resign(c);
-        if (c.sect != pal) { pal.members.add(c); c.sect = pal; }
+        if (c.sect != pal) { pal.members.add(c); c.sect = pal; c.joinedASect(); }
         pal.virtual = false; pal.master = c; pal.founder = c; pal.crisisTimer = 0;
         pal.memberRanks.put(c.id, Organization.SectRank.MASTER);
     }
@@ -394,7 +397,12 @@ final class LoreEndings {
         if (endsRun) RunStats.finishQuiet(c, title);
         reached.add(id);
         Notifications.post("breakthrough", "Ending: " + title + " (score " + p.score + ").", -1, c.id);
-        present(c, p, title, lines, credits(c, p, title, p.score, creditsTail));
+        List<String> shownLines = new ArrayList<>(lines);
+        shownLines.addAll(StoryCodas.lines(c, id));   // the last scene of a Story start, in that start's own words
+        List<String> tail = new ArrayList<>(creditsTail);
+        String own = StoryCodas.credit(c);
+        if (own != null) tail.add(own);
+        present(c, p, title, shownLines, credits(c, p, title, p.score, tail));
         return true;
     }
 
@@ -526,7 +534,7 @@ final class LoreEndings {
         c.reincarnating = true;
         c.dead();
         c.reincarnating = false;
-        c.needsReincarnation = true;
+        c.needsReincarnation = true; Map.needReincarnation(c);
     }
 
     static int pickOutside(Random r) { return r.nextInt(OUT_IDS.length); }
@@ -665,9 +673,10 @@ final class LoreEndings {
             if (h == null || h.dead || h.player != 1 || h == c) continue;
             Starts.givePills(h, Item.PillType.Cultivation, Math.max(1, Math.min(10, h.majorLvl + 1)), 1);
             if (r.nextInt(6) == 0) Starts.givePills(h, Item.PillType.Potential, 1, 1);
+            String craftGift = r.nextInt(4) == 0 ? professionGift(c, h, r) : null; // and now and then something from their old trade
             String hint = hintFor(h, r);
             Notifications.post("lore", "A Wandering Immortal (" + c.name + " " + c.lastName + ") leaves a gift and a word: \"" + hint + "\"", c.id, h.id);
-            if (h.skipping <= 0) PlayerCommands.say("[Lore] " + c.name + " " + c.lastName + ", a Wandering Immortal, was here. A pill on the ground; a word in your ear: \"" + hint + "\"");
+            if (h.skipping <= 0) PlayerCommands.say("[Lore] " + c.name + " " + c.lastName + ", a Wandering Immortal, was here. A pill on the ground" + (craftGift != null ? " and " + craftGift : "") + "; a word in your ear: \"" + hint + "\"");
         }
         java.util.ArrayList<Character> here = c.location.characters;
         int n = here.size();
@@ -676,9 +685,31 @@ final class LoreEndings {
             try { t = here.get(r.nextInt(n)); } catch (RuntimeException e) { break; }
             if (t == null || t == c || t.dead || t.player != 0 || t.trait == Character.Traits.Beast || t.trait == Character.Traits.Monster || t.age < 8) continue;
             Starts.givePills(t, Item.PillType.Cultivation, Math.max(1, Math.min(10, t.majorLvl + 1)), 1);
+            if (r.nextInt(8) == 0) professionGift(c, t, r);
             break;
         }
         c.movement(); // gifts first, then on to the next place
+    }
+
+    /** What a Wandering Immortal leaves by the trade they had in the Garden, fitted to the receiver's realm: a smith a weapon, a tailor clothes, a scribe an array, an alchemist pills, a chef food, a brewer wine, a poisoner a vial, a musician an instrument,
+     *  an inventor a technique, a merchant spirit stones, a gatherer herbs, a miner metal. Returns a short phrase for the message, or null (no craft). */
+    static String professionGift(Character wi, Character to, Random r) {
+        int lvl = Math.min(100, (to.majorLvl + 1) * 10), small = Math.max(1, Math.min(10, to.majorLvl + 1));
+        switch (wi.trait) {
+            case Blacksmith: { Item w = new Item(wi, Item.WeaponType.values()[r.nextInt(Item.WeaponType.values().length)], lvl); to.backpack.add(w); to.equip(); return "a weapon (" + w.name + ")"; }
+            case Tailor: { Item cl = new Item(wi, lvl, Item.ItemType.Clothing); to.backpack.add(cl); to.equip(); return "clothes (" + cl.name + ")"; }
+            case Scribe: { Item ar = new Item(wi, lvl, Item.ItemType.Array); if (to.arrayBag == null) to.arrayBag = new ArrayList<>(); to.arrayBag.add(ar); return "an array (" + ar.name + ")"; }
+            case Alchemist: Starts.givePills(to, Item.PillType.Cultivation, small, 2); if (r.nextInt(3) == 0) Starts.givePills(to, Item.PillType.Potential, 1, 1); return "a bundle of pills";
+            case Chef: { Item f = new Item(Item.ItemType.Food, small, 3, Naming.dish(small, wi)); Character.addToBag(Life.goods(to), f); return "a warm meal"; }
+            case Drunken: { Item w = new Item(Item.ItemType.Wine, small, 2, Naming.wine(small, wi)); Character.addToBag(Life.goods(to), w); return "a jug of wine"; }
+            case Poisoner: { Item p = new Item(Item.ItemType.Poison, small, 2, Naming.poison(small, wi)); Character.addToBag(Life.goods(to), p); return "a small vial"; }
+            case Musician: { Item in = new Item(wi, small, Item.ItemType.Instrument); to.backpack.add(in); return "an instrument"; }
+            case Innovative: { Technique t = new Technique(r.nextBoolean() ? Technique.techniqueType.Martial : Technique.techniqueType.Movement, wi, Math.min(100, Math.max(5, (to.majorLvl + 1) * 8 + r.nextInt(10)))); to.techniqueList.add(t); to.equip(); return "a technique (" + t.name + ")"; }
+            case Merchant: { long ss = 1000L * (to.majorLvl + 1) * (to.majorLvl + 1); to.ss += ss; to.convertCurrency(); return ss + " spirit stones"; }
+            case Gatherer: Character.addToBag(to.materialBag, new Item(Item.ItemType.Herb, small, 600)); return "a sack of herbs";
+            case Miner: Character.addToBag(to.materialBag, new Item(Item.ItemType.Metal, small, 600)); return "a lump of metal";
+            default: return null;
+        }
     }
 
     static String hintFor(Character h, Random r) {
@@ -850,9 +881,11 @@ final class LoreEndings {
         int al = c.affiliationNum == null ? 0 : c.affiliationNum;
         int roll = r.nextInt(100);
         String kind;   // soldier, stay, attack, outside
+        int allies = SeekerArcs.defectorAllies(s, c); // seekers who swore with this one to strike at the Gardener
         if (al > 0) kind = roll < 45 ? "soldier" : roll < 75 ? "stay" : "outside";
         else if (al < 0) kind = roll < 40 ? "attack" : roll < 65 ? "stay" : roll < 85 ? "outside" : "soldier";
         else kind = roll < 25 ? "soldier" : roll < 55 ? "stay" : "outside";
+        if (allies >= 2) kind = "attack";
         if (kind.equals("soldier") && lampsFull(s)) kind = roll % 2 == 0 ? "stay" : "outside";
         String title;
         s.seekers.remove(c.id);
@@ -882,8 +915,8 @@ final class LoreEndings {
             c.deathCause = "left the Garden"; c.reincarnating = true; c.dead();
         } else {
             title = "struck at the Gardener";
-            boolean dies = lampsFull(s) || r.nextInt(100) < 50;
-            Chronicle.add("legend", who + " crossed the Seam and struck at the Gardener. " + (dies ? "The array killed them." : "The array spared them, and they went out."), c.id);
+            boolean dies = lampsFull(s) || r.nextInt(100) < (allies >= 2 ? 20 : 50); // they went through together: the array has more to count
+            Chronicle.add("legend", who + " crossed the Seam and struck at the Gardener" + (allies >= 2 ? " with " + allies + " others who had sworn to" : "") + ". " + (dies ? "The array killed them." : "The array spared them, and they went out."), c.id);
             c.deathCause = dies ? "struck down by the Gardener's array" : "left the Garden";
             if (dies) bloodSacrifice(who); else c.reincarnating = true;
             c.dead();

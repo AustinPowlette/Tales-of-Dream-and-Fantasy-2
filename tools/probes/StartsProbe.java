@@ -10,6 +10,7 @@ public class StartsProbe {
     public static void main(String[] a) throws Exception {
         PcProbe.real = System.out;
         System.setIn(PcProbe.in);
+        GameDriver.frozenNpcs = true; // frozen before the first tick: the NPCs act before the human prompt of a tick, and one of them could otherwise ask the character a question before the probe is ready
         System.setOut(new PrintStream(PcProbe.cap, true));
         Thread t = new Thread(null, () -> { try { GameDriver.main(new String[0]); } catch (Throwable e) { PcProbe.gameError = e; e.printStackTrace(PcProbe.real); } }, "game", 512L << 20);
         t.setDaemon(true); t.start();
@@ -19,6 +20,13 @@ public class StartsProbe {
     }
 
     static Character fresh() { Character c = new Character(Map.tiles[Map.range / 2][Map.range / 2]); c.age = 18; Map.characters.add(c); Map.population++; return c; }
+    /** Turns a fresh story life into one saved before the chapters existed: no chapters, the flat list of objectives and its people in Originis. */
+    static void legacy(Character c) {
+        Starts.State st = c.story; st.v2 = false; st.open = false;
+        Starts.Story s = Starts.STORIES.get(st.story);
+        for (Starts.Npc n : s.npcs) { Character npc = Starts.spawnNpc(n, c); if (npc != null) st.npcs.put(n.key, npc.id); }
+    }
+
     static Starts.Choice story(String id, int diff) { Starts.Choice ch = new Starts.Choice(); ch.kind = Starts.Kind.STORY; ch.story = id; ch.difficulty = diff; return ch; }
 
     static void run() throws Exception {
@@ -47,6 +55,8 @@ public class StartsProbe {
         // ---------- stories ----------
         Character h0 = fresh(); Starts.apply(h0, story("heir", 0));
         check("S3 Heir/Story: potential 100, Alchemist, Neutral, 500 ss, gear, pure story state", h0.potential == 100 && h0.trait == Character.Traits.Alchemist && h0.ss == 500 && h0.equippedWeapon != null && h0.story != null && h0.story.hooked && !h0.potentialHidden);
+        check("S3 a story with chapters starts with none of its cast (they appear when a chapter needs them)", h0.story.v2 && h0.story.npcs.isEmpty());
+        legacy(h0); // the engine checks below are for a life saved before the chapters existed (a flat list of objectives)
         Integer wid = h0.story.npcs.get("wraith"); Character wr = wid == null ? null : Character.charById(wid);
         check("S3 the enemy NPC exists, is strong and hates you", wr != null && wr.lvl >= 14 && h0.relationshipList.contains(wr.id) != null && h0.relationshipList.contains(wr.id).value <= -2);
         Character h1 = fresh(); Starts.apply(h1, story("heir", 1));
@@ -73,7 +83,7 @@ public class StartsProbe {
         h0.story.step = 3; Starts.tick(h0);
         check("S6 defeating the enemy completes the story", h0.story.done);
         // story NPCs stay put
-        Character ghostly = fresh(); Starts.apply(ghostly, story("orphan", 0));
+        Character ghostly = fresh(); Starts.apply(ghostly, story("orphan", 0)); legacy(ghostly);
         Character elder = Character.charById(ghostly.story.npcs.get("elder"));
         elder.location.removeChar(elder); Area other = null;
         for (Area ar : Map.createdAreas) if (ar != elder.location && !ar.isOriginis()) { other = ar; break; }
@@ -124,13 +134,13 @@ public class StartsProbe {
         GameDriver.frozenNpcs = false;
         PcProbe.waitTurns(120);
         GameDriver.frozenNpcs = true;
-        int cityNow = 0, sectNow = 0; for (Area ar : Map.createdAreas) { if (ar.city) cityNow++; if (ar.sect != null) sectNow++; }
+        int cityNow = 0, sectNow = 0; for (Area ar : Map.createdAreas) { if (ar.city) cityNow++; if (ar.sect != null && !ar.sect.palace) sectNow++; } // (the Palace is not counted by Settlements)
         int placed = 0;
         for (int i = 0; i < Map.characters.size() && placed < 12; i++) { Character c = Map.characters.get(i); if (c != null && !c.dead && c.born && c.player == 0 && c.location != null && !c.location.city && c.location.sect == null && !"Ocean".equals(c.location.biomem) && c.trait != Character.Traits.Beast) { c.majorLvl = 3; c.age = 30; placed++; } }
         int[] founded = Settlements.yearly();
-        int cityAfter = 0, sectAfter = 0; for (Area ar : Map.createdAreas) { if (ar.city) cityAfter++; if (ar.sect != null) sectAfter++; }
+        int cityAfter = 0, sectAfter = 0; for (Area ar : Map.createdAreas) { if (ar.city) cityAfter++; if (ar.sect != null && !ar.sect.palace) sectAfter++; }
         PcProbe.real.println("[T] info: cities " + cityNow + " -> " + cityAfter + ", sects " + sectNow + " -> " + sectAfter + " (founded " + founded[0] + " / " + founded[1] + ") with " + placed + " candidates");
-        check("S14 the world founds the settlements its population supports", placed >= 6 && cityAfter >= cityNow && cityAfter >= Map.population / Settlements.CITY_PER && sectAfter > sectNow && cityAfter <= Math.max(1, Map.population / Settlements.CITY_PER) + 1);
+        check("S14 the world founds the settlements its population supports (at least min(25, 1 per 150), then 1 city per 2,000 and 1 sect per 2,500)", placed >= 6 && (cityNow >= Settlements.cityTarget ? founded[0] == 0 : cityAfter > cityNow) && (sectNow >= Settlements.sectTarget ? founded[1] == 0 : sectAfter > sectNow) && cityAfter <= Math.max(cityNow, Settlements.cityTarget) + 1 && sectAfter <= Math.max(sectNow, Settlements.sectTarget) + 1);
         Area founded1 = null; for (Area ar : Map.createdAreas) if (ar.city && ar.geoName != null) founded1 = ar;
         check("S14 a founded city has its own name and keeps its geographic name for pictures", founded1 != null && !founded1.name.equals(founded1.geoName) && !PlaceImages.parse(PlaceImages.geo(founded1)).noun.isEmpty());
 

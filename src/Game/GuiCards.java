@@ -31,7 +31,7 @@ final class GuiCards {
         Area a = c.location;
         StringBuilder sb = new StringBuilder("<h1>" + esc(a.name) + "</h1>");
         String region = Regions.line(a);
-        sb.append("<span class='dim'>").append(PlayerControl.coord(a)).append(" · level ").append(a.lvl).append(" · ").append(esc(String.valueOf(a.biomem)))
+        sb.append("<span class='dim'>").append(PlayerControl.coord(a)).append(a.city ? " · tile level " : " · level ").append(a.lvl).append(" · ").append(esc(String.valueOf(a.biomem)))
           .append(" · ").append(new String[]{"spring", "summer", "autumn", "winter"}[GameDriver.currentSeason]).append(", ").append(ArtMore.WEATHER_NAMES[ArtMore.weatherAt(a)])
           .append(region.isEmpty() ? "" : " · " + esc(region)).append("</span>");
         if (a.crowdHotspot) sb.append("<p><font color='").append(col(Theme.DANGER)).append("'><b>Overcrowded:</b> beasts are ambushing cultivators here. Move on.</font></p>");
@@ -147,8 +147,8 @@ final class GuiCards {
         };
         Runnable refresh = () -> { if (busy[0]) return; busy[0] = true; try { refreshBody.run(); } finally { busy[0] = false; } };
         refreshers.add(refresh);
-        filter.addActionListener(e -> World.read(200, refresh));
-        table.getSelectionModel().addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) World.read(200, refresh); });
+        filter.addActionListener(e -> World.readSoon(200, refresh));
+        table.getSelectionModel().addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) World.readSoon(200, refresh); });
         table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
             @Override public Component getTableCellRendererComponent(JTable t, Object v, boolean isSel, boolean foc, int r, int c) {
                 Component comp = super.getTableCellRendererComponent(t, v, isSel, foc, r, c);
@@ -191,7 +191,7 @@ final class GuiCards {
         actions.add(mv.makeBtn("Follow", "Show them in the NPC tracker and on the map.", () -> { Character c = sel.get(); if (c != null) mv.queueInput("follow #" + c.id); }));
         JPanel north = GuiWindows.flow(FlowLayout.LEFT);
         north.add(GuiWindows.label("name:")); north.add(filter);
-        north.add(mv.makeBtn("Refresh", "Reload the list now.", () -> World.read(300, refresh)));
+        north.add(mv.makeBtn("Refresh", "Reload the list now.", () -> World.readSoon(300, refresh)));
         north.add(status);
         JPanel east = new JPanel(new BorderLayout());
         east.setBackground(GuiWindows.BG);
@@ -221,6 +221,7 @@ final class GuiCards {
         sb.append(row("Bond", r == null ? "<span class='dim'>none yet</span>" : "<font color='" + col(r.value >= 1 ? Theme.OK : r.value <= -1 ? Theme.DANGER : Theme.DIM) + "'>" + GuiSheets.relLabel(r.value) + " (" + r.value + ")</font>"));
         if (c == me.spouse) sb.append(row("Family", "your spouse"));
         if (c.repTitle != null) sb.append(row("Known as", "'" + esc(c.repTitle) + "'"));
+        if (Rankings.places(c).length() > 0) sb.append(row("Ranked", esc(Rankings.places(c))));
         if (c.trait == Character.Traits.Monster) sb.append(row("Danger", "<font color='" + col(Theme.DANGER) + "'>a monster: it kills</font>"));
         sb.append("</table>");
         sb.append("<p class='dim'>#").append(c.id).append(" · weapon ").append(esc(c.equippedWeapon != null ? c.equippedWeapon.toString() : "none")).append("</p>");
@@ -260,7 +261,7 @@ final class GuiCards {
             if (kind.equals("people") || kind.equals("monsters") || kind.equals("world")) {
                 for (String[] a : new String[][]{{"Talk", "talk #%d", "Chat with them (same tile only). Uses the turn."}, {"Spar", "spar #%d", "A friendly fight (same tile only)."}, {"Attack", "attack #%d", "A real fight (same tile only)."},
                         {"Invite to party", "invite #%d", "Ask them to join your party (same tile only)."}, {"Preview fight", "preview #%d", "Win chance, lethality and escape odds."}, {"Seek: befriend", "seek %d friend", "Pin a quest to walk to them and befriend them, wherever they are."},
-                        {"Seek: fight", "seek %d fight", "Pin a quest to walk to them and fight them."}, {"Chase", "chase #%d", "Walk after them."}, {"Follow", "follow #%d", "Show them in the NPC tracker and on the map."}})
+                        {"Seek: talk", "seek %d talk", "Pin a quest to walk to them and talk, wherever they are."}, {"Seek: court", "seek %d court", "Pin a quest to walk to them and court them (an unmarried adult of the other gender, not kin)."}, {"Seek: fight", "seek %d fight", "Pin a quest to walk to them and fight them."}, {"Chase", "chase #%d", "Walk after them."}, {"Follow", "follow #%d", "Show them in the NPC tracker and on the map."}})
                     actions.add(mv.makeBtn(a[0], a[2], () -> { Object o = sel.get(); if (o instanceof Character) mv.queueInput(String.format(a[1], ((Character) o).id)); }));
             } else if (kind.equals("shop")) {
                 JButton buy = mv.makeBtn("Buy selected", "Buy the selected item at the shown price.", () -> { Object o = sel.get(); if (o instanceof PlayerLists.ShopItem) { PlayerLists.ShopItem si = (PlayerLists.ShopItem) o; mv.queueInput("buy " + si.shopNo + "." + si.itemNo + " " + si.item.name); } });
@@ -389,6 +390,8 @@ final class GuiCards {
                     b.add(mv.makeBtn("Talk", "Chat with them.", () -> mv.queueInput("talk #" + id)));
                 } else {
                     b.add(mv.makeBtn("Chase", "Walk after them (the quest log's Go does the same for quest targets).", () -> mv.queueInput("chase #" + id)));
+                    b.add(mv.makeBtn("Seek: talk", "Pin a quest that walks to them and talks.", () -> mv.queueInput("seek " + id + " talk")));
+                    b.add(mv.makeBtn("Seek: court", "Pin a quest that walks to them and courts them.", () -> mv.queueInput("seek " + id + " court")));
                     b.add(mv.makeBtn("Seek: fight", "Pin a quest that walks to them and fights.", () -> mv.queueInput("seek " + id + " fight")));
                     b.add(mv.makeBtn("Seek: spar", "Pin a quest that walks to them and spars.", () -> mv.queueInput("seek " + id + " spar")));
                 }

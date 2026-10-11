@@ -38,6 +38,7 @@ public class ListQuery {
             String low = t.toLowerCase();
             if (low.equals("desc") || low.equals("descending")) { q.desc = true; q.descGiven = true; continue; }
             if (low.equals("asc") || low.equals("ascending")) { q.desc = false; q.descGiven = true; continue; }
+            if (low.equals("limit") && i + 1 < tokens.length && tokens[i + 1].trim().matches("\\d+")) { q.limit = clamp(TermFormat.parseInt(tokens[++i].trim(), MAX_LIMIT)); continue; } // 'people limit 3' = 'people 3'
             if (t.matches("\\d+")) { q.limit = clamp(TermFormat.parseInt(t, MAX_LIMIT)); continue; } // 'list people 99999999999' used to throw
             if (low.startsWith("sort=") || low.startsWith("sort:") || low.startsWith("by=")) {
                 int eq = t.indexOf('=') >= 0 ? t.indexOf('=') : t.indexOf(':');

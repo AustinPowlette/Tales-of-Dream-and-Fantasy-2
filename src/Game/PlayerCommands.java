@@ -20,15 +20,15 @@ public class PlayerCommands {
           + "Pick:    anywhere a <person> is wanted use a list number OR #<id> (same tile): talk #123 | spar <n> | attack <n> | invite <n> | leave | disband   (leave the person out of talk/spar/attack/invite/recruit and one suitable person here is picked at random)\n"
           + "Seek:    seek <id> friend|fight|spar [priority]  — pins a quest to reach a cultivator anywhere in the world\n"
           + "Shops:   list shop [type=weapon lvl>=30 price<=5k afford=1 sort=price] | buy <#> | buy <shop>.<item> <name> | sell <bag#>\n"
-          + "Work:    forage | mine | craft | meditate | hunt | sell | buygear | consume | equip | install | learn <n> | gift <person#> <item#>\n"
+          + "Work:    forage | mine | profession | craft [kind] | meditate | hunt | sell | buygear | consume | equip | install | learn <n> | gift <person#> <item#>\n"
           + "Roles:   found city|sect | join | resign | recruit <n> | promote <n> | war | peace | alliance\n"
           + "Shop:    price <shop#> buy|sell|city <rate>\n"
           + "Do:      do <quest name> [n]   (Donate to Sect, Buy City Array, Hold Tournament, Restock Trip, Have Child, ...)\n"
-          + "Script:  script add <step> | script list | script del <n> | script clear   (steps: goto wait forage mine craft meditate hunt sell quest repeat if end mode)\n"
+          + "Script:  script add <step or any command> | list | del/edit/insert/move <n> | clear | run | save/load <name> | saved   (steps: goto wait forage mine craft meditate hunt sell quest repeat if end mode; any other word is a command)\n"
           + "Look:    map [radius] | route <x> <y> | time | journal [n] | history [text|#id] [kind=...] | note <text> | notes | dash | help <topic>\n"
           + "Gear:    bag | equip [n] | compare <n> | techniques | library | learn <n>\n"
           + "Market:  market | buy market <#> [qty] | sell goods|food|wine|poison [qty]\n"
-          + "Life:    tame | companions | release <n> | feed <n> | goods | make food|wine|poison|instrument | eat [n] | drink [n] | poison <person> | coat | play | reincarnate | lineage | unequip weapon|armor\n"
+          + "Life:    tame | companions | release <n> | feed <n> | goods | make food|wine|poison | eat [n] | drink [n] | poison <person> | coat | play | perform | reincarnate | lineage | unequip weapon|armor\n"
           + "Look+:   digest [weeks] | map level|beasts|people|sect | watch [weeks] [for <categories>] [until year <n>]\n"
           + "Run:     runstats | halloffame | retire | export run\n"
           + "Wait:    watch [weeks]  — pass time until a notice, alert or attack\n"
@@ -40,9 +40,10 @@ public class PlayerCommands {
             "Register Tournament", "Spectate Tournament", "Accept Sect Mission", "Loot Corpse", "Sell Technique", "Meditate", "Reincarnate"));
     static final java.util.Set<String> DO_AREA = new java.util.HashSet<>(Arrays.asList(
             "Buy Gear", "Restock Trip", "Sell Stock", "Seek Potential", "Join Sect", "Deliver Materials", "Donate Array",
-            "Heaven Treasure", "Explore Dungeon", "Hunt Beast", "Sect Raid", "Find Lost Beast", "Festival Trade"));
+            "Heaven Treasure", "Explore Dungeon", "Hunt Beast", "Sect Raid", "Find Lost Beast", "Festival Trade", "Perform",
+            "Trade Run", "Pilgrimage", "Meditation Retreat", "Tame Beast", "Buy Pills", "Attend Auction", "Found City", "Found Sect", "Market Trip", "Gathering Trip", "Sightseeing", "Courier Run"));
     static final java.util.Set<String> DO_PERSON = new java.util.HashSet<>(Arrays.asList(
-            "Propose Alliance", "Demand Tribute", "Recruit Member", "Recruit Defector", "Get Pregnant", "Gift Technique"));
+            "Propose Alliance", "Demand Tribute", "Recruit Member", "Recruit Defector", "Get Pregnant", "Gift Technique", "Visit Family", "Teach Disciple", "Courtship", "Seek Teacher"));
 
     static final int MAX_WAIT = 5200; // longest 'wait' / 'walk' in turns (100 years): a typo like 'wait 99999999' is cut to this with a notice
 
@@ -66,7 +67,10 @@ public class PlayerCommands {
         ArrayList<Character> view = c.pc().peopleView;
         int n;
         try { n = Integer.parseInt(arg); } catch (Exception e) { say("Give the person's number from 'people'."); return null; }
-        if (view == null || n < 1 || n > view.size()) { say("No person #" + n + ". Use 'people' first."); return null; }
+        if (view == null || n < 1 || n > view.size()) {
+            if (n > 0 && Character.charById(n) != null) return person(c, "#" + n); // a number that is no row of the list but is somebody's id (invite 34401): take it as the id
+            say("No person #" + n + (view == null || view.isEmpty() ? ". Use 'people' first (or #<id> for an id)." : " in the list of " + view.size() + ". Use 'people' to see it again (or #<id> for an id).")); return null;
+        }
         Character p = view.get(n - 1);
         if (p == null || p.dead || p.location != c.location) { say("They are no longer here. Use 'people' again."); return null; }
         return p;
@@ -76,6 +80,7 @@ public class PlayerCommands {
      *  (only people the verb makes sense for — e.g. never a child for spar/attack, never a friend for attack). */
     static Character pick(Character c, String[] t, int argIdx, String verb) {
         if (t.length > argIdx) return person(c, t[argIdx]);
+        if (verb.equals("attack")) { say("Usage: attack <person#>   (numbers from 'people'; an attack is never aimed at a stranger picked for you)"); return null; }
         ArrayList<Character> pool = new ArrayList<>();
         for (Character p : new ArrayList<>(c.location.characters)) {
             if (p == null || p.dead || p == c || p.trait == Character.Traits.Beast || !p.born) continue;
@@ -97,10 +102,28 @@ public class PlayerCommands {
 
     static int num(String s, int fallback) { return TermFormat.parseInt(s, fallback); } // never throws; a number too big for an int is clamped
 
+    static boolean isBool(String s) { return s.equalsIgnoreCase("on") || s.equalsIgnoreCase("off") || s.equalsIgnoreCase("true") || s.equalsIgnoreCase("false") || s.equalsIgnoreCase("yes") || s.equalsIgnoreCase("no") || s.equals("1") || s.equals("0"); }
     static boolean onOff(String s) { return s.equalsIgnoreCase("on") || s.equalsIgnoreCase("true") || s.equals("1") || s.equalsIgnoreCase("yes"); }
 
     /** Runs one command line for character c. Returns true if a turn passes. (TermInput adds repeat/history, aliases and an error net, then calls dispatch.) */
     static boolean handle(Character c, String line) { return TermInput.run(c, line); }
+
+    /** Commands that only show information (no turn, no change). A paused game answers these at once, so the buttons that open pop-ups still work while paused. */
+    static final java.util.Set<String> INFO_VERBS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "time", "date", "preview", "route", "library", "auction", "market", "goods", "shops", "shop", "bag", "stats", "i", "l", "places", "r", "relationships", "relations", "here", "people", "players",
+            "monsters", "list", "ls", "city", "sect", "party", "help", "?", "map", "companions", "beasts", "techniques", "tech", "compare", "journal", "history", "chronicle", "fights", "fightlog",
+            "digest", "notes", "dash", "dashboard", "find", "q", "quests", "inbox", "family", "story", "runstats", "fame", "halloffame", "lineage", "mission", "missions", "squad", "craft"));
+
+    static boolean isInfoCommand(String line) {
+        if (line == null) return false;
+        String l = line.trim().toLowerCase();
+        if (l.startsWith("!")) l = l.substring(1);
+        int sp = l.indexOf(' ');
+        String verb = sp < 0 ? l : l.substring(0, sp);
+        if (verb.equals("craft")) return sp >= 0 && l.substring(sp + 1).trim().equals("menu"); // only the menu looks
+        if (verb.equals("mission") || verb.equals("missions")) return sp < 0;   // listing the board looks; taking one does not
+        return INFO_VERBS.contains(verb);
+    }
 
     /** The command switch itself. */
     static boolean dispatch(Character c, String line) {
@@ -121,11 +144,13 @@ public class PlayerCommands {
                 c.movement(cmd.equals("nw") ? 'Q' : cmd.equals("ne") ? 'E' : cmd.equals("sw") ? 'Z' : 'C'); // diagonal: one turn, like the pathfinder
                 return true;
             case "x": case "stay":
+                say("You stay where you are for a week.");
                 c.movement('x');
                 return true;
             case "wait": {
-                if (t.length > 1 && !t[1].matches("\\d+")) { say("Usage: wait [weeks]   e.g. wait 10   ('watch' waits until something happens)"); return false; }
+                if (t.length > 1 && (!t[1].matches("\\d+") || t[1].matches("0+"))) { say("Usage: wait [weeks]   e.g. wait 10   ('watch' waits until something happens)"); return false; }
                 int n = t.length > 1 ? Math.max(1, TermFormat.cap(num(t[1], 1), 1, MAX_WAIT, "wait")) : 1;
+                say("You wait " + n + (n == 1 ? " week" : " weeks") + (n > 1 ? " (an alert or an attack ends it early)." : "."));
                 c.movement = 'x';
                 c.skipping = n - 1;
                 c.movement('x');
@@ -224,6 +249,7 @@ public class PlayerCommands {
                 if (q == null) return false;
                 if ((q.pinned || q.userCreated) && !confirm(c, confirmed, "Delete your " + (q.userCreated ? "own" : "pinned") + " quest '" + q.displayName() + "'?", line)) return false;
                 pc.delete(c, q);
+                if ("Sect Mission".equals(q.name)) c.abandonMission();
                 say("Deleted " + q.displayName() + ". (Use 'mute " + q.name + "' to stop it coming back.)");
                 return false;
             }
@@ -237,14 +263,29 @@ public class PlayerCommands {
             }
             case "mute": {
                 if (t.length < 2) { say("Usage: mute <quest name>  (e.g. mute Find Person)"); return false; }
-                String name = String.join(" ", Arrays.copyOfRange(t, 1, t.length));
-                if (!confirm(c, confirmed, "Mute '" + name + "'? Every queued one is removed and none will be posted again (unmute reverses it).", line)) return false;
+                String name = Quest.canon(String.join(" ", Arrays.copyOfRange(t, 1, t.length)));
+                final String shown = Quest.shown(name);
+                if (!confirm(c, confirmed, "Mute '" + shown + "'? Every queued one is removed and none will be posted again (unmute reverses it).", line)) return false;
                 int n = pc.mute(c, name);
-                say("Muted '" + name + "': removed " + n + " queued and it will not be posted again.");
+                say("Muted '" + shown + "': removed " + n + " queued and it will not be posted again.");
+                return false;
+            }
+            case "ranking": case "rankings": case "board": case "boards": {
+                GameDriver.showGuiInfo("Rankings", Rankings.text(t.length > 1 ? t[1] : null, c));
+                return false;
+            }
+            case "spotaction": case "idle": {
+                if (t.length > 1) {
+                    int found = -1;
+                    for (int i = 0; i < PlayerControl.SPOT_ACTIONS.length; i++) if (PlayerControl.SPOT_ACTIONS[i].toLowerCase().startsWith(t[1].toLowerCase())) found = i;
+                    if (found < 0) { say("Usage: spotaction meditate|hunt|profession|random"); return false; }
+                    pc.spotAction = found;
+                }
+                say("While your character travels or waits and its routine would do a plain spot quest, it does this: " + PlayerControl.SPOT_ACTIONS[pc.spotAction] + ". ('spotaction meditate|hunt|profession|random' changes it; Hunt needs beasts in the tile, else it meditates.)");
                 return false;
             }
             case "unmute": {
-                String name = String.join(" ", Arrays.copyOfRange(t, 1, t.length));
+                String name = Quest.canon(String.join(" ", Arrays.copyOfRange(t, 1, t.length)));
                 say(pc.muted.remove(name) ? "'" + name + "' can be posted again." : "'" + name + "' was not muted. Muted: " + pc.muted);
                 return false;
             }
@@ -366,7 +407,7 @@ public class PlayerCommands {
                 StringBuilder sb = new StringBuilder("=== Food, wine and poison ===\n");
                 int i = 1;
                 for (Item it : Life.goods(c)) sb.append(String.format("%2d. [%s] %s  (Lv.%d)  x%d%n", i++, it.itemType, it.name, it.lvl, it.quantity));
-                if (Life.goods(c).isEmpty()) sb.append("  (nothing) — 'make food|wine|poison' from herbs (50 per unit); 'make instrument' for music.\n");
+                if (Life.goods(c).isEmpty()) sb.append(c.trait == Character.Traits.Chef || c.trait == Character.Traits.Drunken || c.trait == Character.Traits.Poisoner ? "  (nothing) — 'make food|wine|poison' from herbs (50 per unit).\n" : "  (nothing) — your trait does not make these; buy some at the 'market' in a city, or try 'craft' as an amateur.\n");
                 Life.Fx f = c.fx;
                 if (f != null) sb.append("Conditions: ")
                         .append(f.foodWeeks > 0 ? "nourished " + f.foodWeeks + "w  " : "").append(f.drunkWeeks > 0 ? "drunk " + f.drunkWeeks + "w  " : "")
@@ -379,10 +420,11 @@ public class PlayerCommands {
                 String what = t.length > 1 ? t[1].toLowerCase() : "";
                 Item.ItemType ty = what.startsWith("food") || what.equals("cook") ? Item.ItemType.Food : what.startsWith("wine") || what.equals("brew") ? Item.ItemType.Wine
                         : what.startsWith("poison") || what.equals("mix") ? Item.ItemType.Poison : what.startsWith("instr") ? Item.ItemType.Instrument : null;
-                if (ty == null) { say("Usage: make food|wine|poison|instrument   (uses 50 herbs per unit; the matching trait does it best)"); return false; }
+                if (ty == null) { say("Usage: make food|wine|poison   (uses 50 herbs per unit; the matching trait does it best)"); return false; }
+                if (ty == Item.ItemType.Instrument) { say("Instruments are not made. A Musician's instrument matures as they 'play' or 'perform'; a better one may be for sale in a city."); return false; }
                 int r = Life.craft(c, ty);
-                if (r == -3) say("Only a " + Life.artist(ty) + " can do that (your trait is " + c.getTrait() + ").");
-                else if (r < 0) say("You need at least 50 herbs (forage first) of a level you can work with.");
+                if (r == -3) say("Only a " + Life.artist(ty) + (ty == Item.ItemType.Wine ? " (the wine-maker)" : "") + " can make " + (ty == Item.ItemType.Food ? "food" : ty == Item.ItemType.Wine ? "wine" : "poison") + " (your trait is " + c.getTrait() + "). 'craft' lists what anyone can make as an amateur.");
+                else if (r < 0) { int top = Math.max(10, c.professionLvl) / 10 + 2; say("You need at least 50 herbs of one kind, no higher than Lv." + top + " (your profession level " + c.professionLvl + " lets you work herbs up to Lv." + top + "; forage first)." + (c.materialBag.stream().anyMatch(h -> h.itemType == Item.ItemType.Herb && h.lvl > top) ? " The finer herbs you carry sell well, but they are beyond your craft yet." : "")); }
                 return r > 0;
             }
             case "cook": return handle(c, "make food");
@@ -398,27 +440,32 @@ public class PlayerCommands {
             case "poison": {
                 Item vial = Life.firstOf(c, Item.ItemType.Poison);
                 if (vial == null) { say("You carry no poison ('make poison')."); return false; }
-                Character p = pick(c, t, 1, "attack");
+                Character p = pick(c, t, 1, "poison");
                 if (p == null) return false;
                 if (!confirm(c, confirmed, "Slip poison to " + p.name + " " + p.lastName + "? If it is noticed they will not forgive you.", line)) return false;
                 vial.quantity--; if (vial.quantity <= 0) Life.goods(c).remove(vial);
                 boolean took = Life.poison(c, p, vial.lvl);
-                say(took ? p.name + " " + p.lastName + " has been poisoned." : "The poison had no effect on " + p.name + ".");
+                if (!took) say("The poison had no effect on " + p.name + "."); // (Life.poison tells a poisoning itself)
                 if (took && GameDriver.rand.nextInt(3) == 0) { p.changeRelationship(c, -3); say("They suspect you."); }
                 return true;
             }
             case "coat": {
                 Item vial = Life.firstOf(c, Item.ItemType.Poison);
                 if (vial == null) { say("You carry no poison ('make poison')."); return false; }
+                if (c.equippedWeapon == null) { say("You wield no weapon to coat (buy or make one and 'equip' it)."); return false; }
                 vial.quantity--; if (vial.quantity <= 0) Life.goods(c).remove(vial);
                 Life.Fx f = Life.fx(c); f.coat = 3; f.coatLvl = vial.lvl;
                 say("Your weapon is coated (level " + vial.lvl + "): the next 3 fights start with a dose.");
                 return true;
             }
+            case "perform": {
+                if (c.trait != Character.Traits.Musician) { say("Only a Musician gives concerts (your trait is " + c.getTrait() + ")."); return false; }
+                if (!c.location.city) { say("A concert needs a city to pay for it ('goto' one, or use the Perform quest)."); return false; }
+                return Life.concert(c) > 0;
+            }
             case "play": {
                 int r = Life.play(c);
                 if (r == -3) say("Only a Musician can play (your trait is " + c.getTrait() + ").");
-                else if (r < 0) say("You need an instrument ('make instrument').");
                 return r > 0;
             }
             case "reincarnate": {
@@ -490,9 +537,19 @@ public class PlayerCommands {
                 return false;
 
             // ------------------------------------------------ social
+            case "mission": case "missions": return missionCommand(c, t);
+            case "avoid": case "unavoid": {
+                boolean on = cmd.equals("avoid") && !(t.length > 2 && t[2].equalsIgnoreCase("off"));
+                Character p = pick(c, t, 1, "talk");
+                if (p == null) return false;
+                c.avoid(p, on);
+                say(on ? p.name + " " + p.lastName + " will not become your friend (nothing is lost by this). 'unavoid <n>' lifts it." : "You are open to " + p.name + " " + p.lastName + " again.");
+                return false;
+            }
             case "talk": {
                 Character p = pick(c, t, 1, "talk");
                 if (p == null) return false;
+                if (p.age >= 8 && p.trait != Character.Traits.Beast && p.trait != Character.Traits.Monster && Dialogue.converse(c, p)) { c.changeRelationship(p, 0); return true; } // a conversation (or their words in the log)
                 c.interact(p);
                 return true;
             }
@@ -550,13 +607,27 @@ public class PlayerCommands {
                 if (c.location.metalMaterials <= 0) { say("There is no metal here."); return false; }
                 c.mine();
                 return true;
-            case "craft":
-                if (c.trait == Character.Traits.Ghost || c.trait == Character.Traits.Beast) { say("Your nature has no craft."); return false; }
-                c.professionPicker();
-                return true;
+            case "craft": case "profession": case "prof": {
+                if (c.trait == Character.Traits.Ghost || c.trait == Character.Traits.Beast || c.trait == Character.Traits.Monster) { say("Your nature has no craft."); return false; }
+                String kind = t.length > 1 ? t[1].toLowerCase() : "";
+                if (kind.isEmpty()) {
+                    if (c.hasTrade()) { // your own trade
+                        if (c.trait == Character.Traits.Leader) { String[] plan = Profession.leaderPlan(c); if (plan[0] != null && !confirm(c, confirmed, plan[1], line)) return false; }
+                        return Profession.run(c);
+                    }
+                    say(AmateurCraft.menu(c)); // no trade: the amateur menu (no turn spent)
+                    return false;
+                }
+                if (kind.equals("menu") || kind.equals("?")) { say(AmateurCraft.menu(c)); return false; }
+                return AmateurCraft.craftCommand(c, kind);
+            }
             case "meditate":
-                c.cultivate();
+                c.meditate();
                 return true;
+            case "explore": { // the ruins, lair or trial of this tile (the same as 'do Explore Dungeon')
+                if (c.location.dungeonType == null) { say("There is nothing to explore here: no ruins, lair or trial in this tile."); return false; }
+                return doCommand(c, new String[]{"do", "Explore", "Dungeon"});
+            }
             case "hunt": {
                 if (c.location.monsters <= 0) { say("No beasts are here."); return false; }
                 if (!c.partyBeastHunt()) say("The beasts here are too strong (or too weak to bother with) for you right now.");
@@ -567,22 +638,38 @@ public class PlayerCommands {
                 if (t.length > 1 && (t[1].equalsIgnoreCase("goods") || t[1].equalsIgnoreCase("food") || t[1].equalsIgnoreCase("wine") || t[1].equalsIgnoreCase("poison"))) {
                     Item.ItemType only = t[1].equalsIgnoreCase("food") ? Item.ItemType.Food : t[1].equalsIgnoreCase("wine") ? Item.ItemType.Wine : t[1].equalsIgnoreCase("poison") ? Item.ItemType.Poison : null;
                     long got = Life.sellGoods(c, false, only, t.length > 2 ? Math.max(1, num(t[2], 1)) : -1);
-                    say(got > 0 ? "Sold for " + got + " ss." : "You have nothing of that kind to sell here.");
+                    if (got <= 0) say("You have nothing of that kind to sell here."); // (a sale prints its own line)
                     return got > 0;
                 }
                 if (t.length > 1) return sellItemCommand(c, t);
                 { int had = c.backpack.size() + c.pillBag.size(); long wealthBefore = PlayerLists.wealth(c);
                   c.sell(c.location);
-                  if (c.backpack.size() + c.pillBag.size() == had && PlayerLists.wealth(c) == wealthBefore) { say("Nothing to sell: your equipped gear and one spare of each kind are kept. 'bag' shows your backpack, 'sell <#>' sells one item."); return false; } // no sale = no turn used
+                  if (c.backpack.size() + c.pillBag.size() == had && PlayerLists.wealth(c) == wealthBefore) { say((c.materialBag.isEmpty() ? "" : "Herbs and metals are not sold raw: they are what you craft from ('craft', 'make poison', 'make food'...); what you make sells. ") + "Nothing to sell: your equipped gear and one spare of each kind are kept. 'bag' shows your backpack, 'sell <#>' sells one item."); return false; } // no sale = no turn used
                   return true; }
             case "set":
                 if (t.length > 2 && t[1].equalsIgnoreCase("limit")) return handle(c, "limit " + t[2]);
                 say("Usage: set limit <n>");
                 return false;
-            case "buygear":
-                if (!c.location.city || c.location.shops.isEmpty()) { say("No shops here."); return false; }
+            case "buygear": {
+                if (!c.canShopHere()) { say("No shops here."); return false; }
+                java.util.IdentityHashMap<Item, Boolean> had = new java.util.IdentityHashMap<>();
+                for (Item i : c.backpack) had.put(i, true);
+                if (c.equippedWeapon != null) had.put(c.equippedWeapon, true);
+                if (c.equippedClothing != null) had.put(c.equippedClothing, true);
+                long wealth0 = PlayerLists.wealth(c);
                 c.buyGear();
+                StringBuilder got = new StringBuilder();
+                java.util.ArrayList<Item> now = new java.util.ArrayList<>(c.backpack);
+                if (c.equippedWeapon != null) now.add(c.equippedWeapon);
+                if (c.equippedClothing != null) now.add(c.equippedClothing);
+                for (Item i : now) if (!had.containsKey(i)) got.append(got.length() > 0 ? " and " : "").append(i.name).append(" (Lv.").append(i.lvl).append(")");
+                if (got.length() == 0) {
+                    say("Nothing bought: no weapon or armour here is better than yours, within " + 9 + " levels of yours and within your means. ('shops' lists what the shops hold, 'price' sets what you will pay.)");
+                    return false;
+                }
+                say("You bought " + got + " for " + Math.max(0, wealth0 - PlayerLists.wealth(c)) + " ss." + (c.equippedWeapon == null || c.equippedClothing == null ? "" : " ('equip' wears the best of your gear.)"));
                 return true;
+            }
             case "consume": {
                 int pillsBefore = 0, potBefore = c.potential;
                 for (Item pill : c.pillBag) pillsBefore += Math.max(0, pill.quantity);
@@ -692,6 +779,10 @@ public class PlayerCommands {
                 Organization there = c.location.sect;
                 if (c.sect == null || !c.sect.isMaster(c)) { say("Only a sect master can propose an alliance."); return false; }
                 if (there == null || there == c.sect || c.sect.isAlly(there) || c.sect.isAtWar()) { say("Stand in another (non-allied) sect's home tile, and not at war, to propose an alliance."); return false; }
+                String no = there.allianceRefusal(c.sect);
+                if (no == null && there.master != null && !there.master.dead && there.master.player > 0 && there.master != c
+                        && !DecisionBroker.askYesNo(there.master, c + " of " + c.sect + " proposes an alliance with " + there + ". Accept?", true, c, "alliance")) no = there.master.name + " declined.";
+                if (no != null) { say(there.name + " refuses the alliance: " + no); return true; }
                 c.sect.proposeAlliance(there);
                 say(c.sect.name + " and " + there.name + " are now allied.");
                 return true;
@@ -751,7 +842,8 @@ public class PlayerCommands {
                 n.player = 1;
                 PlayerControl np = n.pc();
                 if (pc != null) np.inheritFrom(pc);
-                c.player = 2;
+                c.player = 0;
+                if (!Game.Map.trackedCharacters.contains(c.id)) Game.Map.trackedCharacters.add(c.id); // still in the tracker; 'follow'/'unfollow' decide
                 say("You are now " + n.name + " " + n.lastName + " (was " + c.name + ").");
                 return true;
             }
@@ -780,6 +872,7 @@ public class PlayerCommands {
             case "export":
                 return exportCommand(c, t);
             case "story":
+                if (t.length > 1 && t[1].equalsIgnoreCase("replay") && c.story != null && c.story.v2) { say(Chapters.replay(c, c.story, t.length > 2 ? t[2] : "")); return false; }
                 say(Starts.describe(c));
                 return false;
             case "tutorial":
@@ -826,6 +919,7 @@ public class PlayerCommands {
                 GameDriver.editCharacterInteractive(c);
                 return false;
             case "z":
+                if (c.trait != Character.Traits.Cheater) { say("Only a Cheater can use cheats. ('e' / Edit Self can change your trait.)"); return false; }
                 if (GameDriver.guiEnabled && GameDriver.mapViewer != null) javax.swing.SwingUtilities.invokeLater(() -> GuiSheets.cheatWindow(GameDriver.mapViewer)); else GameDriver.handleCheatMenu(c);
                 return false;
             case "f":
@@ -841,12 +935,80 @@ public class PlayerCommands {
         }
     }
 
-    /** `music [on|off|new|song|fonts|presets|engine builtin|soundfont|font <file>|mix <instrument> <0-150>|volume <n>]` */
+    private static String moodNames(Score sc) {
+        String[] names = {"the open country", "cities", "danger", "night and winter", "war", "sects", "the capital"};
+        StringBuilder sb = new StringBuilder();
+        for (int m = 0; m < names.length; m++) if (sc.moodWeight(m) > 0) { if (sb.length() > 0) sb.append(", "); sb.append(names[m]); }
+        return sb.toString();
+    }
+
+    /** `music [on|off|next|list|play <song>|fonts|presets|engine builtin|soundfont|font <file>|mix <instrument> <0-150>|volume <n>]` */
     private static boolean musicCommand(String[] t) {
         String sub = t.length > 1 ? t[1].toLowerCase() : "";
         switch (sub) {
             case "on": case "off": Settings.music = sub.equals("on"); Settings.save(); Ambient.apply(); say("Music " + sub + "."); break;
-            case "new": Ambient.newPiece(); say("A new piece begins."); break;
+            case "new": case "next": case "skip": Ambient.newPiece(); say("The next song begins."); break;
+            case "list": {
+                StringBuilder sb = new StringBuilder("The songs (music play <number or part of the name>, music play auto to let the places choose):");
+                int n = 1;
+                for (Score sc : SongBook.all()) { sb.append("\n  ").append(n++).append(". \"").append(sc.title).append("\"  ").append(String.format("%d:%02d", (int) sc.seconds() / 60, (int) sc.seconds() % 60)).append("  for ").append(moodNames(sc)).append(sc.kept ? "  [kept]" : ""); }
+                say(sb.toString() + (Ambient.pinned() == null ? "" : "\nPlaying only: \"" + Ambient.pinned().title + "\""));
+                break;
+            }
+            case "gen": case "compose": {
+                int mood = -1; String tplKey = null; long seed = -1;
+                String[] moodWords = {"open", "city", "danger", "night", "war", "sect", "capital"};
+                for (int i = 2; i < t.length; i++) {
+                    String w = t[i].toLowerCase();
+                    if (w.matches("[0-9]+")) { seed = Long.parseLong(w); continue; }
+                    for (int m = 0; m < moodWords.length; m++) if (moodWords[m].startsWith(w)) mood = m;
+                    if (SongGen.template(w) != null) tplKey = w;
+                }
+                java.util.Random rr = new java.util.Random();
+                SongGen.Tpl tpl = tplKey != null ? SongGen.template(tplKey) : SongGen.templateFor(mood >= 0 ? mood : Math.max(0, Math.min(6, Ambient.currentMood())), rr);
+                if (seed < 0) seed = rr.nextInt(1000000);
+                SongGen.Made made = SongGen.generate(seed, tpl);
+                if (made.score == null) { say("No song came out of that seed (" + made.attempts + " attempts). Try another number."); break; }
+                if (!Settings.music) { Settings.music = true; Settings.save(); Ambient.apply(); }
+                Ambient.pin(made.score);
+                say("[experimental] Composed \"" + made.score.title + "\" (" + tpl.key + " arrangement, seed " + seed + ", " + String.format("%d:%02d", (int) made.score.seconds() / 60, (int) made.score.seconds() % 60) + "). It plays now. 'music keep' keeps it, 'music gen' composes another, 'music play auto' goes back to the places' songs.");
+                break;
+            }
+            case "keep": {
+                Score now = Ambient.nowScore != null ? Ambient.nowScore : Ambient.pinned();
+                if (now == null) { say("Nothing is playing. 'music gen' composes a song, then 'music keep' keeps it."); break; }
+                if (now.kept) { say("\"" + now.title + "\" is already kept (songs/" + now.file + ")."); break; }
+                if (now.source.isEmpty()) { say("\"" + now.title + "\" is one of the written songs: nothing to keep."); break; }
+                Score k = SongBook.keep(now);
+                say(k == null ? "Could not keep it: " + SongBook.lastError : "Kept \"" + k.title + "\" in songs/" + k.file + ". It joins the songs the places choose from.");
+                if (k != null && Ambient.pinned() == now) Ambient.pin(k);
+                break;
+            }
+            case "drop": {
+                if (t.length < 3) { say("Usage: music drop <number or part of the name>   (only kept songs can be dropped; music list shows them)"); break; }
+                Score sc = SongBook.find(String.join(" ", java.util.Arrays.copyOfRange(t, 2, t.length)));
+                if (sc == null) { say("No such song. Try: music list"); break; }
+                if (!sc.kept) { say("\"" + sc.title + "\" is a written song of the game; only kept songs can be dropped."); break; }
+                if (Ambient.pinned() == sc) Ambient.pin(null);
+                say(SongBook.drop(sc) ? "Dropped \"" + sc.title + "\" (its file is deleted)." : "Could not delete the file.");
+                break;
+            }
+            case "share": {
+                if (t.length > 2) { Settings.musicGenerated = Math.max(0, Math.min(100, num(t[2], Settings.musicGenerated))); Settings.save(); }
+                say("[experimental] Newly composed songs take " + Settings.musicGenerated + "% of the song slots (0: only the written and kept songs). 'music share <0-100>' changes it.");
+                break;
+            }
+            case "play": {
+                if (t.length < 3) { say("Usage: music play <number or part of the name>   (music list shows them; music play auto: the places choose)"); break; }
+                String key = String.join(" ", java.util.Arrays.copyOfRange(t, 2, t.length));
+                if (key.equalsIgnoreCase("auto")) { Ambient.pin(null); say("The places choose the songs again."); break; }
+                Score sc = SongBook.find(key);
+                if (sc == null) { say("No such song. Try: music list"); break; }
+                if (!Settings.music) { Settings.music = true; Settings.save(); Ambient.apply(); }
+                Ambient.pin(sc);
+                say("Playing \"" + sc.title + "\" (music play auto to go back).");
+                break;
+            }
             case "volume": if (t.length > 2) { Settings.musicVolume = Math.max(0, Math.min(100, num(t[2], Settings.musicVolume))); Settings.save(); Ambient.apply(); } say("Volume " + Settings.musicVolume + "."); break;
             case "fonts": {
                 java.util.List<String> fs = Ambient.fonts();
@@ -886,7 +1048,7 @@ public class PlayerCommands {
                 break;
             }
             case "song": case "":
-                say("Music is " + (Settings.music ? "on" : "off") + " (" + Ambient.status + ", engine " + (Ambient.engine) + ", volume " + Settings.musicVolume + ").\nNow playing: " + (Ambient.nowPlaying.isEmpty() ? "-" : "\"" + Ambient.nowPlaying + "\"") + "\nCommands: music on|off|new|song|volume <n>|fonts|font <file>|presets|engine builtin|soundfont|mix <instrument> <0-150>");
+                say("Music is " + (Settings.music ? "on" : "off") + " (" + Ambient.status + ", engine " + (Ambient.engine) + ", volume " + Settings.musicVolume + ").\nNow playing: " + (Ambient.nowPlaying.isEmpty() ? "-" : "\"" + Ambient.nowPlaying + "\"") + "\nCommands: music on|off|next|list|play <song>|gen [open|city|danger|night|war|sect|capital] [seed]|keep|drop <song>|share <0-100>|volume <n>|fonts|font <file>|presets|engine builtin|soundfont|mix <instrument> <0-150>");
                 break;
             default: say("Unknown music command. Type 'music' for the list.");
         }
@@ -895,6 +1057,7 @@ public class PlayerCommands {
 
     /** `cheat <self|#id> ss|level|potential|kills|weapon <n>` or `cheat <target> heal|reset|track` (the GUI cheat panel sends these). */
     private static boolean cheatCommand(Character c, String[] t) {
+        if (c.trait != Character.Traits.Cheater) { say("Only a Cheater can use cheats. ('e' / Edit Self can change your trait.)"); return false; }
         if (t.length < 3) { say("Usage: cheat <self|#id> ss|level|potential|kills|weapon <n>   |   cheat <self|#id> heal|reset|track"); return false; }
         Character target = t[1].equalsIgnoreCase("self") ? c : anyone(t[1]);
         if (target == null || target.dead) { say("Target not found."); return false; }
@@ -903,7 +1066,10 @@ public class PlayerCommands {
         try {
             switch (what) {
                 case "ss": target.ss += v; say(target.name + " now has " + target.ss + " ss."); break;
-                case "level": { int ml = (int) Math.max(0, Math.min(10, v)); target.majorLvl = ml; target.minorLvl = 1; target.lvl = ml * 10 + 1; target.tempLvl = target.lvl; say(target.name + " is now major level " + ml + "."); break; }
+                case "level": { int ml = (int) Math.max(0, Math.min(10, v)); target.majorLvl = ml; target.minorLvl = 1; target.lvl = ml * 10 + 1; target.tempLvl = target.lvl;
+                    target.cultivationBase = 0; target.cultivationBaseMax = Math.pow(target.lvl, 3) * (((70. + 1. / 3.) + ((11. / 6.) * target.lvl)) / 25.); // (the bar and the weekly gain follow the new level)
+                    target.cultivation = (Math.pow(target.potential, 2) * Math.sqrt(target.lvl) * 10.) / (52. * Math.sqrt(Math.max(1, target.potential)) * Math.pow(2, target.inhibitor));
+                    say(target.name + " is now major level " + ml + "."); break; }
                 case "potential": target.potential = (int) Math.max(1, Math.min(100, v)); say(target.name + " now has potential " + target.potential + "."); break;
                 case "kills": target.kills = (int) v; say(target.name + " has " + target.kills + " kills."); break;
                 case "weapon": { int wl = (int) Math.max(1, Math.min(10, v)); Item wp = new Item(target, Item.WeaponType.values()[GameDriver.rand.nextInt(Item.WeaponType.values().length)], wl); target.backpack.add(wp); target.equip(); say("Gave " + wp + " to " + target.name + "."); break; }
@@ -995,7 +1161,8 @@ public class PlayerCommands {
 
     /** `sell <backpack #>`: sells one item to the best shop paying at least the city pool rate, else to the city pool at half price. */
     private static boolean sellItemCommand(Character c, String[] t) {
-        int n = num(t[1], -1);
+        if (!t[1].matches("#?\\d+")) { say("'sell' takes a backpack number ('bag'), or goods|food|wine|poison. Herbs and metal are not sold with 'sell': take them to a city with the Trade Run quest ('do Trade Run')."); return false; }
+        int n = num(t[1].replace("#", ""), -1);
         if (n < 1 || n > c.backpack.size()) { say("No backpack item #" + n + ". See 'list bag'."); return false; }
         Item item = c.backpack.get(n - 1);
         if (item == c.equippedWeapon || item == c.equippedClothing) { say("That item is equipped."); return false; }
@@ -1017,14 +1184,15 @@ public class PlayerCommands {
 
     /** `seek <id> friend|fight|spar [priority]`: pins a quest to go to that cultivator (anywhere in the world) and befriend / fight / spar them. */
     private static boolean seekCommand(Character c, String[] t) {
-        if (t.length < 3) { say("Usage: seek <id|#id> friend|fight|spar [priority]   (ids appear in 'list people')"); return false; }
+        if (t.length < 3) { say("Usage: seek <id|#id> talk|court|friend|fight|spar [priority]   (ids appear in 'list people')"); return false; }
         int id = num(t[1].startsWith("#") ? t[1].substring(1) : t[1], -1);
         Character target = Character.charById(id);
         if (target == null || target.dead) { say("No living cultivator has id " + t[1] + "."); return false; }
         if (target == c) { say("That's you."); return false; }
         String kind = t[2].toLowerCase();
-        String name = kind.startsWith("fr") || kind.startsWith("be") ? "Befriend" : kind.startsWith("fi") || kind.startsWith("du") || kind.startsWith("ba") ? "Duel" : kind.startsWith("sp") ? "Spar" : null;
-        if (name == null) { say("Choose friend, fight or spar."); return false; }
+        String name = kind.startsWith("ta") ? "Talk To" : kind.startsWith("co") ? "Courtship" : kind.startsWith("fr") || kind.startsWith("be") ? "Befriend" : kind.startsWith("fi") || kind.startsWith("du") || kind.startsWith("ba") ? "Duel" : kind.startsWith("sp") ? "Spar" : null;
+        if (name == null) { say("Choose talk, court, friend, fight or spar."); return false; }
+        if (name.equals("Courtship") && (c.spouse != null || !QuestLife.suitor(c, target))) { say(target.name + " cannot be courted by you: " + (c.spouse != null ? "you are married" : "courtship needs an unmarried adult of the other gender, not kin") + "."); return false; }
         int pri = t.length > 3 ? Math.max(0, Math.min(1000, num(t[3], 60))) : 60;
         Quest q = new Quest(name, true, pri, 0, pri, target);
         q.userCreated = true;
@@ -1038,7 +1206,9 @@ public class PlayerCommands {
      *  while the character is not being asked for input (a running script, AUTO) were written on purpose ahead of time, so they count as confirmed. */
     static boolean confirm(Character c, boolean confirmed, String prompt, String line) {
         if (confirmed || !Settings.confirmRisky || !DecisionBroker.promptable(c)) return true;
-        return DecisionBroker.askYesNo(c, prompt, false);
+        if (DecisionBroker.askYesNo(c, prompt, false)) return true;
+        say("Cancelled: " + (line == null ? "that" : line.trim()) + ". (Start the command with ! to skip the question.)");
+        return false;
     }
 
     /** Any living cultivator by `#id` or plain id number (null if none). */
@@ -1075,24 +1245,57 @@ public class PlayerCommands {
 
     private static boolean settingsCommand(String[] t) {
         if (t.length < 3) {
-            say("=== Settings ===\n autosave " + Settings.autosaveYears + " (years, 0 = off)   autosavekeep " + Settings.autosaveKeep + "   confirm " + (Settings.confirmRisky ? "on" : "off")
+            say("=== Settings ===\n dialogue " + (Settings.dialogueFlavor ? "on" : "off") + " (what people say to you)   dialoguepopups " + (Settings.dialoguePopups ? "on" : "off") + " (GUI window with a portrait and replies)   dialogueauto " + (Settings.dialogueAuto ? "on" : "off") + " (talks for an AUTO character too)\n autosave " + Settings.autosaveYears + " (years, 0 = off)   autosavekeep " + Settings.autosaveKeep + "   confirm " + (Settings.confirmRisky ? "on" : "off")
                 + "\n hud " + (Settings.hud ? "on" : "off") + " (terminal status block before each prompt)   hints " + (Settings.hints ? "on" : "off") + " (tips)   maturestart " + (Settings.matureStart ? "on" : "off") + "   challenges " + Settings.maxRandomChallenges + "   highcontrast " + (Settings.highContrast ? "on" : "off")
                 + "\n autoequip " + (Settings.autoEquipManual ? "on" : "off") + " (swap gear for you in manual mode)   music " + (Settings.music ? "on" : "off") + "   volume " + Settings.musicVolume + "   tooltips " + (Settings.tooltips ? "on" : "off") + "   toasts " + (Settings.toasts ? "on" : "off") + "   sound " + (Settings.sound ? "on" : "off")
                 + "\n pictures " + (Settings.pictures ? "on" : "off") + "   colorblind " + (Settings.colorblindMap ? "on" : "off") + "   font " + Settings.fontScale
                 + "   windows " + (Settings.rememberWindows ? "remembered" : "default") + "\n art " + (Settings.paintedArt ? "on" : "off") + "   artfresh " + (Settings.artFresh ? "on" : "off") + "   (settings reroll now = repaint every picture)"
                 + "\n recap " + (Settings.recapWeeks == 0 ? "off" : Settings.recapWeeks + " weeks") + "   muted notices " + Settings.mutedNotifications
-                + "\nchange: settings <key> <value>   (notify <category> on|off; categories: " + String.join(" ", Notifications.CATEGORIES) + ")");
+                + "\n parallel " + (Settings.parallelNpcs ? "on" : "off") + " (EXPERIMENTAL: the NPCs of different tiles take their turns together on several cores; faster ticks in a big world)"
+                + "\n " + MemWatch.line() + "   epochmem " + Settings.epochMemoryPercent + " (% of that memory alive that brings the epoch; 0 = off)"
+                + "\n new world: startpop " + String.format("%,d", Settings.startPopulation) + " (people at the start; 10,000 to 150,000 is recommended)\n epoch: epochpop " + String.format("%,d", Settings.epochLimit()) + (Settings.epochCustom ? "" : " (automatic: twice the start; epochpop <n> to choose)") + " (most cultivators)   epochseconds " + Settings.epochTickSeconds + " (slowest typical turn)   epochcull " + (Settings.epochCullNumber > 0 ? String.format("%,d", Settings.epochCullNumber) + " (a number, in all)" : Settings.epochCullPercent + "% (of each realm)") + "   (epochcull 20% or epochcull 5000)"
+                + "\n epochrealm " + Settings.epochMaxRealm + " (the epoch culls and blesses only Major Lvl 0 to this)   crowd " + Settings.crowdFactor + " (a tile is overcrowded above this many times its fair share: " + GameDriver.CROWD_CAPACITY + " people on a wild tile, " + GameDriver.CROWD_CAPACITY_CITY + " in a city)"
+                + "\n spoilrefund " + Settings.spoilRefundPercent + " (% of the price that spoiled or scrapped goods pay back to their owner)"
+                + "\nchange: settings <key> <value>   (settings notify <category> on|off; categories: " + String.join(" ", Notifications.CATEGORIES) + ")");
             return false;
         }
         String k = t[1].toLowerCase(), v = t[2].toLowerCase();
-        if ((k.equals("autosave") || k.equals("autosavekeep") || k.equals("challenges") || k.equals("volume")) && !v.matches("-?\\d+")) { say("'settings " + k + "' takes a number, e.g. settings " + k + " 5"); return false; }
-        if ((k.equals("confirm") || k.equals("hints") || k.equals("hud") || k.equals("autoequip") || k.equals("tooltips") || k.equals("toasts")) && !v.matches("on|off|true|false|yes|no|1|0")) { say("'settings " + k + "' takes on or off, e.g. settings " + k + " off"); return false; }
+        if ((k.equals("epochpop") || k.equals("epochpopulation")) && (v.equals("auto") || v.equals("0"))) { Settings.epochCustom = false; say("The epoch comes when " + String.format("%,d", Settings.epochLimit()) + " cultivators live (twice the starting population)."); return false; }
+        if ((k.equals("autosave") || k.equals("autosavekeep") || k.equals("challenges") || k.equals("volume") || k.equals("epochpop") || k.equals("epochpopulation") || k.equals("startpop") || k.equals("epochmem") || k.equals("spoilrefund")) && !v.matches("-?\\d+")) { say("'settings " + k + "' takes a number, e.g. settings " + k + " 5"); return false; }
+        if ((k.equals("dialogue") || k.equals("dialogueflavor") || k.equals("dialoguepopups") || k.equals("dialogueauto") || k.equals("confirm") || k.equals("hints") || k.equals("hud") || k.equals("autoequip") || k.equals("tooltips") || k.equals("toasts") || k.equals("parallel") || k.equals("parallelise") || k.equals("parallelize")) && !v.matches("on|off|true|false|yes|no|1|0")) { say("'settings " + k + "' takes on or off, e.g. settings " + k + " off"); return false; }
         switch (k) {
             case "hud": Settings.hud = onOff(v); break;
+            case "parallel": case "parallelise": case "parallelize": Settings.parallelNpcs = onOff(v); say(Settings.parallelNpcs ? "EXPERIMENTAL: the NPCs of different tiles now take their turns together on " + Map.tickPool.getParallelism() + " cores (people on a tile with a person who plays are still played one by one). 'settings parallel off' goes back." : "NPC turns are played one after the other."); break;
             case "lore": Settings.lore = onOff(v); if (Settings.lore && Lore.state == null) say("This world began without the lore: 'lore enable' founds the Palace at Originis."); break;
             case "lorepause": Settings.lorePause = onOff(v); break;
+            case "dialogue": case "dialogueflavor": Settings.dialogueFlavor = onOff(v); break;
+            case "dialoguepopups": Settings.dialoguePopups = onOff(v); break;
+            case "dialogueauto": Settings.dialogueAuto = onOff(v); break;
             case "spread": Settings.startSpread = Math.max(0, Math.min(31, num(v, Settings.startSpread))); if (Settings.startSpread > 0 && Settings.startSpread % 2 == 0) Settings.startSpread++; say("A NEW world of 20,000+ people starts spread over " + (Settings.startSpread == 0 ? "the 3 x 3 tiles around Originis" : Settings.startSpread + " x " + Settings.startSpread + " tiles around Originis") + "."); break;
-            case "autosave": Settings.autosaveYears = Math.max(0, Math.min(1000, num(v, Settings.autosaveYears))); break;
+            case "spoilrefund": Settings.spoilRefundPercent = Math.max(0, Math.min(100, num(v, Settings.spoilRefundPercent))); say("Goods that spoil or are scrapped pay their owner " + Settings.spoilRefundPercent + "% of their price back in spirit stones."); break;
+            case "epochpop": case "epochpopulation": Settings.epochPopulation = Math.max(1000, Math.min(10000000, num(v, Settings.epochPopulation))); Settings.epochCustom = true; say("The epoch comes when " + String.format("%,d", Settings.epochPopulation) + " cultivators live."); break;
+            case "epochmem": case "epochmemory": Settings.epochMemoryPercent = Math.max(0, Math.min(95, num(v, Settings.epochMemoryPercent))); say(Settings.epochMemoryPercent == 0 ? "The epoch no longer comes because of memory." : "The epoch also comes when more than " + Settings.epochMemoryPercent + "% of the memory the game may use is alive (" + MemWatch.line() + ")."); break;
+            case "startpop": case "startpopulation": {
+                int n = Math.max(1000, Math.min(1000000, num(v, Settings.startPopulation))); Settings.startPopulation = n;
+                say("A NEW world will begin with " + String.format("%,d", n) + " people (this world keeps its " + String.format("%,d", Map.startingPopulation) + ")." + StartMenu.populationWarning(n)); break; }
+            case "epochsec": case "epochseconds": case "epochtick":
+                try { Settings.epochTickSeconds = Math.max(0.1, Math.min(600, Double.parseDouble(v))); } catch (NumberFormatException e) { say("epochseconds: a number of seconds like 2 or 0.5"); return false; }
+                say("The epoch comes when a typical turn takes more than " + Settings.epochTickSeconds + " s (in a world of " + String.format("%,d", GameDriver.EPOCH_MIN_LIVING) + "+ cultivators)."); break;
+            case "epochcull":
+                if (!v.matches("\\d+%?")) { say("epochcull takes a percent like 20% or a number like 5000"); return false; }
+                if (v.endsWith("%")) { Settings.epochCullPercent = Math.max(1, Math.min(95, num(v.substring(0, v.length() - 1), Settings.epochCullPercent))); Settings.epochCullNumber = 0; say("The epoch takes " + Settings.epochCullPercent + "% of each realm."); }
+                else { Settings.epochCullNumber = Math.max(0, Math.min(10000000, num(v, 0))); say(Settings.epochCullNumber == 0 ? "The epoch takes " + Settings.epochCullPercent + "% of each realm." : "The epoch takes " + String.format("%,d", Settings.epochCullNumber) + " cultivators in all (shared out over the realms by size)."); }
+                break;
+            case "epochrealm": case "epochmaxrealm": {
+                if (!v.matches("\\d+")) { say("epochrealm takes a Major Lvl from 0 to 10, e.g. settings epochrealm 3"); return false; }
+                Settings.epochMaxRealm = Math.max(0, Math.min(10, num(v, Settings.epochMaxRealm)));
+                say("The epoch takes people only from Major Lvl 0 to " + Settings.epochMaxRealm + " (realms of fewer than 10 are spared), and blesses the survivors of those realms."); break; }
+            case "crowd": case "crowdfactor": {
+                double f;
+                try { f = Math.max(0.5, Math.min(100, Double.parseDouble(v))); } catch (NumberFormatException e) { say("crowd takes a number such as 3.5: a tile is overcrowded above that many times its fair share of the starting population"); return false; }
+                Settings.crowdFactor = f; GameDriver.rescaleCrowd();
+                say("A tile is overcrowded above " + f + " times its fair share: " + GameDriver.CROWD_CAPACITY + " cultivators on a wild tile, " + GameDriver.CROWD_CAPACITY_CITY + " in a city (Originis has no limit)."); break; }
+            case "autosave": Settings.autosaveYears =Math.max(0, Math.min(1000, num(v, Settings.autosaveYears))); break;
             case "autosavekeep": Settings.autosaveKeep = Math.max(1, Math.min(20, num(v, Settings.autosaveKeep))); break;
             case "confirm": Settings.confirmRisky = onOff(v); break;
             case "hints": Settings.hints = onOff(v); break;
@@ -1140,12 +1343,14 @@ public class PlayerCommands {
             Character t = c.chaseId < Map.characters.size() ? Map.characters.get(c.chaseId) : null;
             if (t == null || t.dead || t.location == null) { stopAuto(c); say("The one you were chasing is gone."); return; }
             if (++c.chaseTurns > 150) { stopAuto(c); say("You gave up the chase after 150 turns: " + t.name + " " + t.lastName + " keeps moving. Try again or wait for them."); return; }
-            c.autoX = t.location.x; c.autoY = t.location.y;
+            int[] aim = c.interceptAim(t); // close behind a walker: go to the tile they step to
+            c.autoX = aim != null ? aim[0] : t.location.x; c.autoY = aim != null ? aim[1] : t.location.y;
         }
         int dx = wrapDelta(c.autoX - c.location.x), dy = wrapDelta(c.autoY - c.location.y);
         if (dx == 0 && dy == 0) {
             boolean chasing = c.chaseId >= 0;
             Character t = chasing ? Map.characters.get(c.chaseId) : null;
+            if (chasing && t != null && !t.dead && t.location != c.location) { c.autoX = t.location.x; c.autoY = t.location.y; return; } // met them at the tile they were heading for, but they stepped on: keep going
             stopAuto(c);
             say(chasing && t != null ? "You caught up with " + t.name + " " + t.lastName + " at " + PlayerControl.coord(c.location) + "." : "You arrived at " + PlayerControl.coord(c.location) + ".");
             return;
@@ -1282,6 +1487,33 @@ public class PlayerCommands {
         return false;
     }
 
+    /** `mission` lists the board, `mission <n>` takes one (at your sect's home), `mission abandon` drops yours. */
+    private static boolean missionCommand(Character c, String[] t) {
+        if (c.sect == null) { say("You belong to no sect."); return false; }
+        String arg = t.length > 1 ? t[1].toLowerCase() : "";
+        if (arg.equals("abandon") || arg.equals("drop")) {
+            if (c.sectMission == null) { say("You have no mission."); return false; }
+            c.abandonMission(); say("Mission abandoned."); return false;
+        }
+        if (arg.matches("\\d+")) {
+            int n = num(arg, 0);
+            if (c.sectMission != null) { say("You already have a mission: " + c.missionLine() + ". 'mission abandon' drops it."); return false; }
+            if (c.location != c.sect.location) { say("Take missions at your sect's home, " + c.sect.location.name + " " + PlayerControl.coord(c.sect.location) + " ('goto' walks there)."); return false; }
+            if (n < 1 || n > c.sect.questBoard.size()) { say("The board has " + c.sect.questBoard.size() + " missions: 'mission' lists them."); return false; }
+            String mm = c.sect.questBoard.get(n - 1);
+            if (mm.startsWith("Deliver|") && !Life.canMake(c, mm)) { say("You cannot make or buy those goods yet."); return false; }
+            c.acceptMission(mm);
+            return false;
+        }
+        StringBuilder sb = new StringBuilder("=== Missions of " + c.sect.name + " ===\n");
+        if (c.sectMission != null) sb.append("Yours: ").append(c.missionLine()).append("  ('mission abandon' drops it; it is in your Quest Log)\n");
+        if (c.sect.questBoard.isEmpty()) sb.append("  (the board is empty)\n");
+        for (int i = 0; i < c.sect.questBoard.size(); i++) sb.append("  ").append(i + 1).append(". ").append(Character.missionText(c.sect.questBoard.get(i))).append("\n");
+        sb.append("Take one at your sect's home: mission <n>.  Hand it in with 'qdo' on the Sect Mission quest (at the home) when you carry what it asks for.\n");
+        GameDriver.showGuiInfo("Sect missions", sb.toString());
+        return false;
+    }
+
     private static boolean policyCommand(PlayerControl pc, String[] t) {
         if (t.length == 1 && GameDriver.guiEnabled && GameDriver.mapViewer != null) javax.swing.SwingUtilities.invokeLater(() -> GuiDuties.open(GameDriver.mapViewer, "Policies"));
         if (t.length == 1) {
@@ -1290,12 +1522,15 @@ public class PlayerCommands {
                 + "  flee      : " + (pc.fleePolicy ? "on (try to flee when outmatched)" : "off") + "\n"
                 + "  forbidden : " + (pc.forbiddenPolicy ? "on (use the Forbidden Technique in a deadly fight)" : "off") + "\n"
                 + "  duel      : " + (pc.duelPolicy ? "accept challenges" : "evade challenges") + "\n"
+                + "  squad     : " + PlayerControl.SQUAD_POLICIES[pc.squadPolicy] + "   (who may join your squad: ask each time, auto accept, never)\n"
+                + "  friends   : " + PlayerControl.FRIEND_POLICIES[pc.friendPolicy] + "   (a friendship offered to you: ask, accept, decline; declining costs nothing; 'avoid <n>' refuses one person)\n"
+                + "  feed      : " + PlayerControl.FEED_POLICIES[pc.feedPolicy] + "   (your companion beasts while you are AUTO or running a script: leftovers = food beyond " + Taming.KEEP_FOR_SELF + " portions, always = the best food whenever you have any, never; a portion each " + Taming.FEED_EVERY + " weeks; in MANUAL use 'feed <n>')\n"
                 + "  timeout   : " + (pc.decisionTimeout > 0 ? pc.decisionTimeout + "s, then the policy answer is used" : "off (prompts wait for you)") + "\n"
                 + "  script    : when a script ends or is interrupted, return to " + (pc.returnToAuto ? "AUTO" : "MANUAL") + "\n"
                 + "  alerts    : a new quest alert " + (pc.interruptOnAlert ? "interrupts" : "does not interrupt") + " a script");
             return false;
         }
-        if (t.length < 3) { say("Usage: policy <kill|flee|forbidden|duel|script|alerts|timeout> <value>"); return false; }
+        if (t.length < 3) { say("Usage: policy <kill|flee|forbidden|duel|squad|friends|feed|script|alerts|timeout> <value>"); return false; }
         switch (t[1].toLowerCase()) {
             case "kill": {
                 int v = num(t[2], -1);
@@ -1303,11 +1538,29 @@ public class PlayerCommands {
                 pc.killPolicy = v;
                 break;
             }
-            case "flee": pc.fleePolicy = onOff(t[2]); break;
-            case "forbidden": pc.forbiddenPolicy = onOff(t[2]); break;
-            case "duel": pc.duelPolicy = t[2].equalsIgnoreCase("accept") || onOff(t[2]); break;
-            case "script": pc.returnToAuto = t[2].equalsIgnoreCase("auto"); break;
-            case "alerts": pc.interruptOnAlert = onOff(t[2]); break;
+            case "squad": {
+                int v = java.util.Arrays.asList(PlayerControl.SQUAD_POLICIES).indexOf(t[2].toLowerCase());
+                if (v < 0) { say("squad policy: ask, auto or never."); return false; }
+                pc.squadPolicy = v; pc.squadDeclined.clear();
+                break;
+            }
+            case "feed": case "feeding": {
+                int v = java.util.Arrays.asList(PlayerControl.FEED_POLICIES).indexOf(t[2].toLowerCase());
+                if (v < 0) { say("feed policy: leftovers, always or never."); return false; }
+                pc.feedPolicy = v;
+                break;
+            }
+            case "friends": case "friend": {
+                int v = java.util.Arrays.asList(PlayerControl.FRIEND_POLICIES).indexOf(t[2].toLowerCase());
+                if (v < 0) { say("friends policy: ask, accept or decline."); return false; }
+                pc.friendPolicy = v;
+                break;
+            }
+            case "flee": if (!isBool(t[2])) { say("flee policy: on or off."); return false; } pc.fleePolicy = onOff(t[2]); break;
+            case "forbidden": if (!isBool(t[2])) { say("forbidden policy: on or off."); return false; } pc.forbiddenPolicy = onOff(t[2]); break;
+            case "duel": if (!isBool(t[2]) && !t[2].equalsIgnoreCase("accept") && !t[2].equalsIgnoreCase("evade") && !t[2].equalsIgnoreCase("decline")) { say("duel policy: accept or evade."); return false; } pc.duelPolicy = t[2].equalsIgnoreCase("accept") || onOff(t[2]); break;
+            case "script": if (!t[2].equalsIgnoreCase("auto") && !t[2].equalsIgnoreCase("manual")) { say("script policy: auto or manual."); return false; } pc.returnToAuto = t[2].equalsIgnoreCase("auto"); break;
+            case "alerts": if (!isBool(t[2])) { say("alerts policy: on or off."); return false; } pc.interruptOnAlert = onOff(t[2]); break;
             case "timeout": {
                 int v = t[2].equalsIgnoreCase("off") ? 0 : num(t[2], -1);
                 if (v < 0 || v > 3600) { say("timeout: seconds 1-3600, or 0/off."); return false; }
@@ -1330,9 +1583,61 @@ public class PlayerCommands {
                 say(err != null ? err : "Added: " + s.steps.get(s.steps.size() - 1) + "  (" + s.steps.size() + " steps)");
                 return false;
             }
-            case "list":
-                say(s.list());
+            case "list": {
+                String[] saved = ScriptStore.names();
+                say(s.list() + (saved.length > 0 ? "Saved scripts: " + String.join(", ", saved) + "  ('script load <name>')\n" : "No saved scripts yet ('script save <name>' keeps this one).\n"));
                 return false;
+            }
+            case "saved": {
+                String[] saved = ScriptStore.names();
+                say(saved.length == 0 ? "No saved scripts yet. 'script save <name>' keeps the current one." : "Saved scripts: " + String.join(", ", saved) + "  ('script load <name>', 'script delete <name>')");
+                return false;
+            }
+            case "save": {
+                String name = t.length > 2 ? String.join(" ", Arrays.copyOfRange(t, 2, t.length)) : "";
+                String err = ScriptStore.save(name, s);
+                say(err != null ? err : "Saved the script (" + s.steps.size() + " steps) as '" + ScriptStore.clean(name) + "'.");
+                return false;
+            }
+            case "load": {
+                if (s.running) { say("Stop the script before loading another."); return false; }
+                String name = t.length > 2 ? String.join(" ", Arrays.copyOfRange(t, 2, t.length)) : "";
+                if (name.isEmpty()) { say("Usage: script load <name>   (saved: " + String.join(", ", ScriptStore.names()) + ")"); return false; }
+                if (!s.steps.isEmpty() && !confirm(c, confirmed, "Replace the current script (" + s.steps.size() + " steps) with '" + name + "'?", "script load")) return false;
+                String err = ScriptStore.load(name, s);
+                say(err != null ? err : "Loaded '" + ScriptStore.clean(name) + "' (" + s.steps.size() + " steps). 'script run' starts it.");
+                return false;
+            }
+            case "delete": case "rm": {
+                String name = t.length > 2 ? String.join(" ", Arrays.copyOfRange(t, 2, t.length)) : "";
+                if (name.isEmpty()) { say("Usage: script delete <name>"); return false; }
+                if (!confirm(c, confirmed, "Delete the saved script '" + name + "'?", "script delete")) return false;
+                say(ScriptStore.delete(name) ? "Deleted the saved script '" + ScriptStore.clean(name) + "'." : "No saved script called '" + ScriptStore.clean(name) + "'.");
+                return false;
+            }
+            case "edit": case "insert": {
+                if (s.running) { say("Stop the script before editing it."); return false; }
+                boolean edit = sub.equals("edit");
+                int n = t.length > 2 ? num(t[2], -1) : -1;
+                if (n < 1 || n > s.steps.size() + (edit ? 0 : 1) || t.length < 4) { say("Usage: script " + sub + " <step#> <step>   e.g. script " + sub + " 2 forage until 500"); return false; }
+                PlayerScript tmp = new PlayerScript();
+                String err = tmp.add(Arrays.copyOfRange(t, 3, t.length));
+                if (err != null) { say(err); return false; }
+                if (edit) s.steps.set(n - 1, tmp.steps.get(0)); else s.steps.add(n - 1, tmp.steps.get(0));
+                s.reset();
+                say((edit ? "Step " + n + " is now: " : "Inserted as step " + n + ": ") + tmp.steps.get(0));
+                return false;
+            }
+            case "move": {
+                if (s.running) { say("Stop the script before editing it."); return false; }
+                int from = t.length > 2 ? num(t[2], -1) : -1, to = t.length > 3 ? num(t[3], -1) : -1;
+                if (from < 1 || from > s.steps.size() || to < 1 || to > s.steps.size()) { say("Usage: script move <step#> <new place#>   (1-" + s.steps.size() + ")"); return false; }
+                PlayerScript.Step st = s.steps.remove(from - 1);
+                s.steps.add(to - 1, st);
+                s.reset();
+                say("Moved '" + st + "' to place " + to + ".");
+                return false;
+            }
             case "del": {
                 int n = t.length > 2 ? num(t[2], -1) : -1;
                 if (s.running) { say("Stop the script before editing it."); return false; }
@@ -1367,7 +1672,7 @@ public class PlayerCommands {
                 if (s.running) s.stop(c, "You stopped the script."); else say("No script is running.");
                 return false;
             default:
-                say("Usage: script add <step> | list | del <n> | clear | run | resume | stop");
+                say("Usage: script add <step or any command> | list | del <n> | edit <n> <step> | insert <n> <step> | move <n> <place> | clear | run | resume | stop | save <name> | load <name> | saved | delete <name>");
                 return false;
         }
     }
@@ -1425,7 +1730,7 @@ public class PlayerCommands {
         if (DO_SPOT.contains(canonical)) {
             q = new Quest(canonical, true, 0, 0, 0);
             int r = c.spotQuests(q);
-            say(r >= 1 ? canonical + " done." : canonical + ": nothing happened (conditions not met here).");
+            say(r >= 1 ? canonical + " done." : canonical + ": nothing happened (" + c.whyNot(q) + ").");
             return r >= 1; // a failed attempt costs no time
         }
         if (DO_AREA.contains(canonical)) {
@@ -1436,7 +1741,7 @@ public class PlayerCommands {
             if (canonical.equals("Gift Technique") && !c.children.contains(p)) { say("You can only teach your own children."); return false; }
             q = new Quest(canonical, true, 0, 0, 0, p);
         }
-        if (c.questViable(q) != 1) { say(canonical + " can't be done right now (requirements not met)."); return false; }
+        if (c.questViable(q) != 1) { say(canonical + " can't be done right now: " + c.whyNot(q) + "."); return false; }
         int r = c.targetQuests(q);
         say(r == 1 ? canonical + " done." : canonical + ": nothing happened.");
         return true;
@@ -1448,11 +1753,11 @@ public class PlayerCommands {
         _sb.append("=== ").append(character).append(" ===\n");
         _sb.append("Mode: ").append(character.pc().mode).append("   Duties: ").append(character.pc().dutySummary()).append("\n");
         _sb.append("Level: ").append(character.lvl).append("  (Major: ").append(character.majorLvl).append(" ").append(TermFormat.realm(character.majorLvl)).append("  Minor: ").append(character.minorLvl).append(")\n");
-        _sb.append("Cultivation: ").append(TermFormat.n((long) character.cultivation)).append(" / ").append(TermFormat.n((long) character.cultivationBaseMax))
-           .append(character.cultivationBaseMax > 0 ? "  (" + TermFormat.pct(character.cultivation / character.cultivationBaseMax) + " of the way to the next level)" : "").append("\n");
-        _sb.append("Potential: ").append(character.potentialLabel()).append("  Age: ").append(character.age).append(" / ").append(character.maxAge).append("\n");
+        _sb.append("Cultivation: ").append(TermFormat.n((long) character.cultivationBase)).append(" / ").append(TermFormat.n((long) character.cultivationBaseMax))
+           .append(character.cultivationBaseMax > 0 ? "  (" + TermFormat.pct(Math.min(1.0, character.cultivationBase / character.cultivationBaseMax)) + " of the way to the next level; about +" + TermFormat.n((long) character.cultivation) + " a week)" : "").append("\n");
+        _sb.append("Potential: ").append(character.potentialShown()).append("  Age: ").append(character.age).append(" / ").append(character.maxAge).append("\n");
         _sb.append("Affiliation: ").append(character.affiliation).append("  Trait: ").append(character.getTrait()).append("\n");
-        _sb.append("Profession Lvl: ").append(character.professionLvl).append("\n");
+        _sb.append("Profession Lvl: ").append(character.professionShown()).append(character.leaderFounded() ? "  (a Leader's founding is done)" : "").append("\n");
         _sb.append(Reincarnation.status(character)).append("\n");
         if (character.beastIds != null && !character.beastIds.isEmpty()) _sb.append("Companions: ").append(Taming.beasts(character).size()).append("/").append(Taming.cap(character)).append("\n");
         if (character.fx != null) _sb.append("Conditions: ").append(character.fx.foodWeeks > 0 ? "nourished  " : "").append(character.fx.drunkWeeks > 0 ? "drunk  " : "").append(character.fx.inspiredWeeks > 0 ? "inspired  " : "").append(character.fx.poisonWeeks > 0 ? "POISONED  " : "").append(character.fx.coat > 0 ? "poisoned blade  " : "").append("\n");
@@ -1461,7 +1766,7 @@ public class PlayerCommands {
         _sb.append("Armor:  ").append(character.equippedClothing != null ? character.equippedClothing : "None").append("\n");
         _sb.append("Martial:  ").append(character.martialTechnique).append("\n");
         _sb.append("Movement: ").append(character.movementTechnique).append("\n");
-        _sb.append("Kills: ").append(TermFormat.n(character.kills)).append("  Crafted: ").append(TermFormat.n(character.itemsCrafted)).append("  Sect Pts: ").append(TermFormat.n(character.sectPoints)).append("\n");
+        _sb.append("Kills: ").append(TermFormat.n(character.kills)).append("  Crafted: ").append(TermFormat.n(character.itemsCrafted)).append(character.trait == Character.Traits.Innovative ? "  Inspiration: " + character.inspiration + "/" + Character.INSPIRATION_NEEDED : "").append("  Sect Pts: ").append(TermFormat.n(character.sectPoints)).append("\n");
         if (character.sect != null) _sb.append("Sect: ").append(character.sect).append(" [").append(character.sect.getRank(character)).append("]  Sect Lvl: ").append(character.sect.sectLvl()).append("  Treasury: ").append(character.sect.treasury.size()).append(" items\n");
         _sb.append("Location: ").append(character.location.name).append(" ").append(PlayerControl.coord(character.location));
         if (character.location != null && character.location.sect != null) {

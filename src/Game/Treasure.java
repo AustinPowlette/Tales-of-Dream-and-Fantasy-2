@@ -39,7 +39,7 @@ final class Treasure {
         place(at, kind, create(kind, top, phantom));
         for (Character cc : Map.characters) {
             if (cc == null || cc.dead || !cc.born || cc.location == null) continue;
-            if (Math.abs(cc.location.x - at.x) + Math.abs(cc.location.y - at.y) <= 20 && !cc.knownLocations.contains(at)) cc.knownLocations.add(at);
+            if (Math.abs(cc.location.x - at.x) + Math.abs(cc.location.y - at.y) <= 20 ) cc.learnPlace(at);
         }
         System.out.println("Heaven's Will descends! A Heaven-Sent " + label(kind) + " has appeared at " + at.name + " [" + at.x + "," + at.y + "]!");
         Chronicle.add("world", "Heaven's Will: a Heaven-Sent " + label(kind) + " descended at " + at.name + ".");
@@ -97,6 +97,15 @@ final class Treasure {
         else at.heavenItem = (Item) treasure;
     }
 
+    /** What the claimer got, said however they got there (a walk, a script, AUTO): the log, a notice and, for a human who plays, a window. */
+    private static void announce(Character c, String text) {
+        System.out.println(text);
+        if (c.player == 1) {
+            Notifications.postQuiet("fortune", text, -1, c.id); // the text is already in the log
+            if (c.isManualPc()) GameDriver.showGuiInfo("Heaven's Treasure", text);
+        }
+    }
+
     /** The claimer takes what lies here. Returns true if there was something to take. */
     static boolean claim(Character c, Area a) {
         if (a.hasHeaven()) stClaimed++;
@@ -105,7 +114,7 @@ final class Treasure {
             c.techniqueList.add(t);
             a.heavenlyTechnique = null;
             c.equip();
-            if (c.player > 0 && c.skipping <= 0) System.out.println(c + " claimed the heavenly technique: " + t.name + "!");
+            if (c.player > 0) announce(c, "You claimed the heavenly technique " + t.name + " (potential " + t.potential + ", " + t.getType() + ")! It is in your technique list; 'techniques' shows it.");
             Chronicle.add("world", c.name + " " + c.lastName + " claimed " + t.name + ".", c.id);
             return true;
         }
@@ -118,7 +127,7 @@ final class Treasure {
             case Poison: c.backpack.add(it); break; // kept in the backpack so it can be consigned to an auction (the goods bag is for eating and drinking stock)
             default: c.backpack.add(it); c.equip(); break;
         }
-        if (c.player > 0 && c.skipping <= 0) System.out.println(c + " claimed the Heaven-Sent treasure: " + it.name + (it.quantity > 1 ? " x" + it.quantity : "") + "! A strong one can be put up at a city auction ('sell' in a city).");
+        if (c.player > 0) announce(c, "You claimed the Heaven-Sent treasure: " + it.name + (it.quantity > 1 ? " x" + it.quantity : "") + "! It is in your " + (it.itemType == Item.ItemType.Pill ? "pill bag" : it.itemType == Item.ItemType.Array ? "array bag" : "backpack") + ". A strong one can be put up at a city auction ('sell' in a city).");
         Chronicle.add("world", c.name + " " + c.lastName + " claimed " + it.name + ".", c.id);
         return true;
     }

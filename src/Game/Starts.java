@@ -126,6 +126,14 @@ public final class Starts {
         boolean hooked = true;
         final java.util.HashMap<String, Integer> npcs = new java.util.HashMap<>();
         int questUid = -1;
+        // the chapters of a story that has them (see Chapters): null / 0 / false in a save made before they existed, which keeps its flat list of objectives
+        boolean v2, open;                                   // chapters are on; the current chapter's task is under way
+        int chapter, openedWeek, lastEnd;                   // the index of the current chapter, the week it opened, the week the last one ended
+        String cur;                                         // the id of the chapter or episode that is open
+        int lastEpisode;                                    // the week the last episode ended
+        java.util.HashMap<String, Integer> flags;           // what was chosen and what happened (see ChapText for how the text reads them)
+        java.util.LinkedHashSet<String> seen;               // the scenes seen (chapter ids, "<id>.out", "epilogue"): `story replay`
+        java.util.HashMap<String, int[]> places;            // the places of the story, once picked: key -> {x, y}
     }
 
     // ------------------------------------------------------------------ menu result
@@ -187,7 +195,9 @@ public final class Starts {
         State st = new State();
         st.story = s.id; st.difficulty = diff;
         st.hooked = diff < 2 || s.brutalHook;
-        if (st.hooked) {
+        c.story = st;
+        if (st.hooked && Chapters.has(s.id)) Chapters.begin(c, st);   // a story with chapters: its people appear when the chapters need them
+        else if (st.hooked) {
             for (Npc n : s.npcs) {
                 Character npc = spawnNpc(n, c);
                 if (npc != null) st.npcs.put(n.key, npc.id);
@@ -222,7 +232,8 @@ public final class Starts {
         int guard = 0;
         while (npc.lvl < n.lvl && guard++ < 200000) npc.cultivate();
         npc.storyNpc = true;
-        Map.characters.add(npc);
+        while (Map.characters.size() < npc.id) Map.characters.add(null); // (the id is the position, as everywhere)
+        Map.characters.add(npc); // (the births of the NPC phase are merged before the people who play act, so nothing is pending)
         Map.population++;
         if (n.rel != 0) { npc.changeRelationship(player, n.rel); }
         return npc;
@@ -260,6 +271,7 @@ public final class Starts {
         if (st == null || st.done) return;
         Story s = STORIES.get(st.story);
         if (s == null) { st.done = true; return; }
+        if (st.v2) { Chapters.tick(c, st); return; }
         hold(st);
         if (st.step >= s.steps.size()) { finish(c, s, st); return; }
         Step step = s.steps.get(st.step);
@@ -291,7 +303,7 @@ public final class Starts {
         Notifications.post("breakthrough", msg, -1, c.id);
     }
 
-    private static boolean complete(Character c, State st, Step s) {
+    static boolean complete(Character c, State st, Step s) {
         switch (s.kind) {
             case "REALM": return c.majorLvl >= s.n;
             case "LEVEL": return c.lvl >= s.n;
@@ -367,6 +379,7 @@ public final class Starts {
         Story s = STORIES.get(st.story);
         if (s == null) return "(unknown story)";
         StringBuilder sb = new StringBuilder("=== " + s.title + " — " + DIFFICULTY_NAMES[st.difficulty] + " ===\n" + s.blurb + "\n\n");
+        if (st.v2) return Chapters.describe(c, st, s);
         if (!st.hooked) { sb.append("A pure challenge: this Brutal start has no hook and no objectives.\n"); return sb.toString(); }
         for (int i = 0; i < s.steps.size(); i++) {
             Step step = s.steps.get(i);

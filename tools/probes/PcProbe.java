@@ -6,6 +6,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 /** Drives the real game loop through a controllable stdin and checks the player-control system (planning.md). */
 public class PcProbe {
+    static { Character.TRIGGER_EVERY = 1; Shop.SEED = false; } // these checks test one trigger / a shop's exact goods: no throttle, no starter stock
     static class FeedIn extends InputStream {
         final LinkedBlockingQueue<byte[]> q = new LinkedBlockingQueue<>();
         volatile boolean blocked = false;
@@ -78,7 +79,7 @@ public class PcProbe {
 
     static int idMismatch() {
         int bad = 0;
-        for (int i = 0; i < Map.characters.size(); i++) { Character c = Map.characters.get(i); if (c != null && c.id != i) bad++; }
+        for (int i = 0; i < Map.characters.size(); i++) { Character c = Map.characters.get(i); if (c != null && c.id != i) { bad++; if (bad <= 6) real.println("[T] info: id mismatch at index " + i + ": id " + c.id + " " + c.name + " (" + c.trait + ", dead " + c.dead + ", born " + c.born + ", player " + c.player + "); list " + Map.characters.size() + ", UID " + GameDriver.UID); } }
         return bad;
     }
 
@@ -395,7 +396,7 @@ public class PcProbe {
         }
 
         // ---------- S13: hotspot threshold and Originis exemption ----------
-        check("S13 capacity scales with starting population and map area", GameDriver.CROWD_CAPACITY == Math.max(GameDriver.CROWD_MIN_CAPACITY, (int) Math.round(Map.startingPopulation * GameDriver.CROWD_PERCENT * 961.0 / (Map.range * Map.range))) && GameDriver.CROWD_CAPACITY_CITY == 4 * GameDriver.CROWD_CAPACITY);
+        check("S13 capacity scales with starting population and map area", GameDriver.CROWD_CAPACITY == Math.max(GameDriver.CROWD_MIN_CAPACITY, (int) Math.round(Settings.crowdFactor * Map.startingPopulation / (Map.range * Map.range))) && GameDriver.CROWD_CAPACITY_CITY == 4 * GameDriver.CROWD_CAPACITY);
         real.println("[T] info: wild capacity=" + GameDriver.CROWD_CAPACITY + " city capacity=" + GameDriver.CROWD_CAPACITY_CITY + " (startingPopulation=" + Map.startingPopulation + ", range=" + Map.range + ")");
         Area origin = Map.tiles[Map.range / 2][Map.range / 2];
         check("S13 Originis is the founding tile", origin.isOriginis());
@@ -453,7 +454,7 @@ public class PcProbe {
             Auctions.hold(city);
             check("S15 a MANUAL human in the city is asked for a bid", DecisionBroker.prompts == pr0 + 1);
             long paid = w0 - (p.ss + p.sc * 1_000_000L);
-            check("S15 winning bid pays at most the maximum and at least the reserve", p.backpack.contains(lot) ? (paid >= reserve && paid <= reserve * 3) : paid == 0);
+            check("S15 winning bid pays at most the maximum and at least the reserve", (p.backpack.contains(lot) || p.equippedClothing == lot) ? (paid >= reserve && paid <= reserve * 3) : paid == 0);
             // passing
             Item lot2 = new Item(p, 10, Item.ItemType.Clothing);
             lot2.heavenSent = true; city.auction().clear(); Auctions.consign(city, lot2, null);
@@ -515,7 +516,7 @@ public class PcProbe {
             near.location.removeChar(near); near.location = city; city.addChar(near); near.lvl = 3;
             m16 = mark();
             cmd("talk #" + near.id);
-            check("S16 talk works by #id for someone in the tile", since(m16).contains("talked to"));
+            check("S16 talk works by #id for someone in the tile (their words, or the plain line with the lines off)", since(m16).contains("talked to") || since(m16).contains(": \""));
             Area away = Map.tiles[16][15] != null ? Map.tiles[16][15] : Map.tiles[14][15];
             far.location.removeChar(far); far.location = away; away.addChar(far); // moved only now: a turn passes after every command and an NPC next door can wander in
             m16 = mark();
@@ -528,7 +529,7 @@ public class PcProbe {
 
             m16 = mark();
             cmd("talk");
-            check("S16 talk with no target picks someone at random", since(m16).contains("No target given") && since(m16).contains("talked to"));
+            check("S16 talk with no target picks someone at random", since(m16).contains("No target given") && (since(m16).contains("talked to") || since(m16).contains(": \"")));
             m16 = mark();
             cmd("spar");
             check("S16 spar with no target picks someone at random", since(m16).contains("No target given") || since(m16).contains("Nobody here"));

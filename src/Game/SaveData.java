@@ -14,6 +14,7 @@ public class SaveData implements Serializable {
 
     // ── Map static state ──────────────────────────────────────────────────────
     int population;
+    int startPop;         // the number of people the world began with (0 in older saves: 100,000)
     Area[][] tiles;
     ArrayList<Character> characters;
     ArrayList<Area> createdAreas;

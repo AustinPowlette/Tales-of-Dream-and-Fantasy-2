@@ -21,6 +21,7 @@ final class World {
     private static final ReentrantLock lock = new ReentrantLock(true);
     private static final AtomicInteger waiters = new AtomicInteger();
     static volatile boolean enabled = true;   // tests / headless runs can switch the machinery off
+    static volatile long blockedNs = 0;       // total nanoseconds the game thread has spent waiting with the lock released (read by the game thread only)
 
     interface Blocking<T> { T run() throws Exception; }
 
@@ -33,9 +34,11 @@ final class World {
     static <T> T whileBlocked(Blocking<T> b) throws Exception {
         int holds = enabled && lock.isHeldByCurrentThread() ? lock.getHoldCount() : 0;
         for (int i = 0; i < holds; i++) lock.unlock();
+        long t0 = System.nanoTime();
         try {
             return b.run();
         } finally {
+            blockedNs += System.nanoTime() - t0;
             for (int i = 0; i < holds; i++) lock.lock();
         }
     }
@@ -45,11 +48,13 @@ final class World {
         if (!enabled || !lock.isHeldByCurrentThread()) { javax.swing.SwingUtilities.invokeLater(refresh); return; }
         int holds = lock.getHoldCount();
         for (int i = 0; i < holds; i++) lock.unlock();
+        long t0 = System.nanoTime();
         try {
             CountDownLatch done = new CountDownLatch(1);
             javax.swing.SwingUtilities.invokeLater(() -> { try { refresh.run(); } finally { done.countDown(); } });
             try { done.await(maxMs, TimeUnit.MILLISECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         } finally {
+            blockedNs += System.nanoTime() - t0;
             for (int i = 0; i < holds; i++) lock.lock();
         }
     }
@@ -69,6 +74,19 @@ final class World {
         }
         if (!got) return false;
         try { r.run(); return true; } finally { lock.unlock(); }
+    }
+
+    /** For windows (Swing thread): read now if the world is free; otherwise try again every 100 ms (up to about 6 s) instead of waiting for the next slow refresh, so a pop-up fills in as soon as the game thread hands the world over. */
+    static void readSoon(long ms, Runnable r) {
+        if (read(ms, r)) return;
+        retrySoon(r, 1);
+    }
+
+    private static void retrySoon(final Runnable r, final int n) {
+        if (n > 60) return;
+        javax.swing.Timer t = new javax.swing.Timer(100, e -> { if (!read(60, r)) retrySoon(r, n + 1); });
+        t.setRepeats(false);
+        t.start();
     }
 
     /** Like read() but retries for up to `totalMs` (for one-off user actions such as opening a dialog, where waiting for the next tick boundary is fine). */

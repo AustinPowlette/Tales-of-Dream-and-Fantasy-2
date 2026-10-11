@@ -30,6 +30,7 @@ public class GuiUxShots {
         real = System.out;
         PcProbe.real = real; PcProbeGui.real = real;
         System.setIn(PcProbe.in);
+        GameDriver.frozenNpcs = true; // frozen before the first tick: the NPCs act before the human prompt of a tick, and one of them could otherwise ask the character a question before the probe is ready
         System.setOut(new PrintStream(PcProbe.cap, true));
         Thread t = new Thread(null, () -> { try { GameDriver.main(new String[0]); } catch (Throwable e) { PcProbe.gameError = e; e.printStackTrace(real); } }, "game", 512L << 20);
         t.setDaemon(true); t.start();

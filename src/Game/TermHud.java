@@ -39,7 +39,7 @@ final class TermHud {
         PlayerControl pc = c.pc();
         StringBuilder sb = new StringBuilder();
         sb.append(c.name).append(' ').append(c.lastName).append(" - ").append(TermFormat.realm(c.majorLvl)).append(" Lv.").append(c.lvl);
-        if (c.cultivationBaseMax > 0) sb.append(" (cult ").append(TermFormat.pct(c.cultivation / c.cultivationBaseMax)).append(')');
+        if (c.cultivationBaseMax > 0) sb.append(" (cult ").append(TermFormat.pct(Math.min(1.0, c.cultivationBase / c.cultivationBaseMax))).append(')');
         sb.append(" | ").append(c.location.name).append(' ').append(PlayerControl.coord(c.location));
         sb.append(" | ").append(when());
         sb.append(" | ").append(pc.mode);
@@ -57,6 +57,8 @@ final class TermHud {
     /** The most pressing announced quest (highest priority in the inbox), described briefly, with what to type. */
     static String next(Character c) {
         PlayerControl pc = c.pc();
+        String reg = Lore.registerHint(c);
+        if (reg != null) return reg;
         Quest best = null;
         for (Quest q : new ArrayList<>(pc.inbox)) {
             if (q == null) continue;

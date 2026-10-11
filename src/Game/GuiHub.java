@@ -90,13 +90,14 @@ final class GuiHub {
             case "saves": return "Save, load and delete named saves.";
             case "notices": return "Everything the game told you, newest first.";
             case "family": return "Family tree, relationship graph and past lives.";
-            case "story": return "Your story's objectives.";
+            case "story": return "Your story: its chapters, the people in it and the scenes you can read again.";
+            case "run": return "This run: every life, the peaks and the totals, and the hall of fame.";
             case "cheats": return "Developer tools. They change the world for good.";
             case "here": return "The tile you stand on and what you can do in it.";
             case "journal": return "Your own story so far.";
             case "keys": return "Every keyboard shortcut. Shortcuts are ignored while you type in a text box.";
             case "browser": return "Select, filter and sort lists of people, goods and places.";
-            case "scripts": return "Hybrid mode: a list of steps your character follows by itself.";
+            case "scripts": return "Hybrid mode: write, save and load the list of steps your character follows by itself.";
             case "character": return "What is public knowledge about this cultivator.";
             default: return "";
         }

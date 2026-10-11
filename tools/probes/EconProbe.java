@@ -6,11 +6,13 @@ import java.util.*;
 /** The 2026-10-03 economy: yearly Heaven-Sent treasures of eight kinds, consignment and the auction schedule (five lots or six weeks), Potential Pills only at auction, the library's one book
  *  for each type and potential (20% fee, the seller loses the technique), shops without a stock limit, and Blood refined into Potential Pills by an alchemist. */
 public class EconProbe {
+    static { Character.TRIGGER_EVERY = 1; Shop.SEED = false; } // these checks test one trigger / a shop's exact goods: no throttle, no starter stock
     static void check(String name, boolean ok) { PcProbe.passes += ok ? 1 : 0; PcProbe.fails += ok ? 0 : 1; PcProbe.real.println("[T] " + (ok ? "PASS " : "FAIL ") + name); }
 
     public static void main(String[] a) throws Exception {
         PcProbe.real = System.out;
         System.setIn(PcProbe.in);
+        GameDriver.frozenNpcs = true; // frozen before the first tick: the NPCs act before the human prompt of a tick, and one of them could otherwise ask the character a question before the probe is ready
         System.setOut(new PrintStream(PcProbe.cap, true));
         Thread t = new Thread(null, () -> { try { GameDriver.main(new String[0]); } catch (Throwable e) { PcProbe.gameError = e; e.printStackTrace(PcProbe.real); } }, "game", 512L << 20);
         t.setDaemon(true); t.start();
@@ -177,6 +179,32 @@ public class EconProbe {
         check("T7d the Blood is used up and the pills are the client's (or already eaten)", client.bloodAmount() == 500);
         Character poor = adult(30, 3); poor.materialBag.add(new Item(Item.ItemType.Blood, 3000)); poor.ss = 0; poor.sc = 0; poor.dc = 0;
         check("T7e a client who cannot pay gets nothing", !poor.refineBloodWith(alch) && poor.bloodAmount() == 3000);
+
+        // ---- T8: an NPC remembers about 150 places, and forgets the plain far ones first
+        LinkedHashSet<Area> pool = new LinkedHashSet<>();
+        for (Area ar : Map.createdAreas) if (ar != null) pool.add(ar);
+        for (int px = 0; px < Map.range; px++) for (int py = 0; py < Map.range; py++) if (Map.tiles[px][py] != null) pool.add(Map.tiles[px][py]);
+        Character mem = adult(30, 3); mem.knownLocations.clear();
+        { // make enough tiles: a block of unvisited ones (the test world is thrown away)
+            Character keepCur = Map.currentCharacter; Map.currentCharacter = mem;
+            for (int px = 0; px < Map.range && pool.size() < Character.KNOWN_CAP + Character.KNOWN_SLACK + 60; px++) for (int py = 0; py < Map.range && pool.size() < Character.KNOWN_CAP + Character.KNOWN_SLACK + 60; py++)
+                if (Map.tiles[px][py] == null) { Map.tiles[px][py] = new Area(Area.ghost(px == 0 ? Map.range - 1 : px - 1, py), 'e'); pool.add(Map.tiles[px][py]); }
+            Map.currentCharacter = keepCur;
+        }
+        if (pool.size() < Character.KNOWN_CAP + Character.KNOWN_SLACK + 20) { PcProbe.real.println("[T] info: only " + pool.size() + " areas exist: the cap test is skipped"); }
+        else {
+            List<Area> all = new ArrayList<>(pool); Area farCity = null;
+            for (Area ar : all) if (ar != home() && Math.max(Math.abs(ar.x - home().x), Math.abs(ar.y - home().y)) > 8 && farCity == null) { farCity = ar; farCity.city = true; }
+            mem.learnPlace(farCity);
+            for (Area ar : all) mem.learnPlace(ar);
+            mem.learnPlace(home());
+            check("T8 an NPC's known places stay near the cap (" + mem.knownLocations.size() + " of " + all.size() + ")", mem.knownLocations.size() <= Character.KNOWN_CAP + Character.KNOWN_SLACK);
+            check("T8b the place the NPC stands in and a far city are never forgotten", mem.knownLocations.contains(home()) && mem.knownLocations.contains(farCity));
+            Character hum = adult(30, 3); hum.player = 2; hum.knownLocations.clear();
+            for (Area ar : all) hum.learnPlace(ar);
+            check("T8c a followed or human character keeps every place (the fog of war never shrinks)", hum.knownLocations.size() == all.size());
+            hum.player = 0;
+        }
     }
 
     static void tp(Character c, Area to) { c.location.removeChar(c); c.location = to; to.addChar(c); }

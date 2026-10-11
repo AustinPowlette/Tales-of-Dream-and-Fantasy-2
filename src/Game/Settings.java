@@ -25,9 +25,26 @@ public class Settings {
     static volatile boolean tooltips = true;
     static volatile boolean hints = true;        // one-time contextual hints (and the rotating 'try:' tip of the terminal status block)
     static volatile boolean hud = true;          // terminal only: a status block (name, realm, place, time, mode, alerts, next quest) before each prompt
-    static volatile int startSpread = 15;        // a new big world (20,000+ people) starts with everybody spread over this many tiles across (odd; 0 = the old 3 x 3 zone around Originis): the first ticks are 10x faster
+    static volatile int startSpread = 21;        // a new big world (20,000+ people) starts with everybody spread over this many tiles across (odd; 0 = the old 3 x 3 zone around Originis): the first ticks are 10x faster. 21 puts about 230 people on a tile (15, the old default, put 450)
+    // the epoch (a purge of the crowded world; see GameDriver): it comes when this many cultivators live, or when a typical turn takes longer than the limit below (a slower computer is purged sooner)
+    static volatile int startPopulation = 100000;   // the number of people a NEW world begins with (asked at the start; recommended 10,000 to 150,000)
+    static volatile int epochPopulation = 200000;   // the most cultivators the world holds before the epoch (used when epochCustom is on)
+    static volatile int epochMemoryPercent = 70;    // the epoch also comes when more than this percent of the memory the game may use is alive (0 = never for that reason)
+    static volatile boolean epochCustom = false;    // off: the epoch comes at twice the starting population (200,000 in the usual world); on: at epochPopulation
+    /** The number of cultivators at which the epoch comes. */
+    static int epochLimit() { return epochCustom ? epochPopulation : Math.max(1000, 2 * Map.startingPopulation); }
+    static volatile double epochTickSeconds = Integer.getInteger("tdf.epochMs", 2000) / 1000.0; // seconds a typical turn may take (in a world of 10,000+) before the epoch
+    static volatile int epochCullPercent = 20;      // percent of each realm's cultivators the epoch takes (realms with fewer than 10 are spared)
+    static volatile int epochCullNumber = 0;        // above 0: the epoch takes this many cultivators in all (shared out over the realms by size) and the percent is not used
+    static volatile int epochMaxRealm = 3;          // the epoch culls (and then blesses) only the realms from 0 up to this Major Lvl; the higher realms are left alone
+    static volatile double crowdFactor = 3.5;       // a tile is overcrowded above this many times its fair share of the STARTING population (people / tiles); a city holds four times as much (see GameDriver.crowdFor)
+    static volatile int spoilRefundPercent = 100;   // goods that spoil or are scrapped pay their owner (shop owner, city lord / treasury, carrier) this percent of their price back in spirit stones
+    static volatile boolean parallelNpcs = Boolean.getBoolean("tdf.parallel"); // EXPERIMENTAL: the turns of the NPCs on different tiles run together on several cores (see GameDriver.parallelNpcPhase); off by default
     static volatile boolean lore = true;         // the story of the Palace of the Oldest Order (see Lore): a new world gets the Palace at Originis; off = nothing of it runs or shows
     static volatile boolean lorePause = true;    // GUI: the game waits while a lore scene is open (until Continue)
+    static volatile boolean dialogueFlavor = true;  // what people say to you shows as a line in the log and the terminal (see Dialogue)
+    static volatile boolean dialoguePopups = true;  // GUI: a window with the speaker's portrait; replies to choose from, and the Talk conversation
+    static volatile boolean dialogueAuto = false;   // an AUTO or script-run character also has the branching talks and conversations (it answers by its own temper), logged; off = only the flavor line
     static volatile boolean firstRunDone = false;
     // safety
     static volatile boolean confirmRisky = true; // ask before irreversible actions
@@ -38,10 +55,11 @@ public class Settings {
     static volatile int maxRandomChallenges = 2;     // challenges per turn that strangers and dislikers may make against a human (rivals, arch-enemies and war fights always count)
     static volatile boolean matureStart = true;     // a new human (not a Story start) begins with the cultivation of their years from 8 to 18 instead of at level 1
     static volatile boolean digestOnLoad = true;    // a "what happened lately" window when a saved game opens
-    static volatile boolean music = false;          // endless generated ambient music (see Ambient)
+    static volatile boolean music = false;          // the game's songs (see Ambient, Conductor, SongBook)
     static volatile int musicVolume = 40;           // 0-100
     static volatile String musicEngine = "auto";    // "auto" (a SoundFont from soundfonts/ when there is one), "soundfont" or "builtin" (the built-in synthesiser)
     static volatile String soundFont = "";          // file name inside soundfonts/ ("" = the first one found)
+    static volatile int musicGenerated = 0;         // 0-100: how often a song newly composed by SongGen (not yet kept) takes a slot; the written and the kept songs fill the rest
     static volatile String musicMix = "";           // per-instrument loudness, e.g. "pluck=80,taiko=0" (see Ambient.INST)
     static volatile boolean autoEquipManual = false; // false: in MANUAL mode the game never swaps your gear for you (empty slots are still filled)
     static volatile boolean highContrast = false; // black/white/yellow palette (restart to apply)
@@ -72,9 +90,24 @@ public class Settings {
         tooltips = b(p, "tooltips", tooltips);
         hints = b(p, "hints", hints);
         hud = b(p, "hud", hud);
-        try { startSpread = Math.max(0, Math.min(31, Integer.parseInt(p.getProperty("startSpread", String.valueOf(startSpread)).trim()))); } catch (Exception e) { startSpread = 15; }
+        try { startSpread = Math.max(0, Math.min(31, Integer.parseInt(p.getProperty("startSpread", String.valueOf(startSpread)).trim()))); } catch (Exception e) { startSpread = 21; }
+        if (!"2".equals(p.getProperty("settingsRev")) && startSpread == 15) startSpread = 21; // settings saved before revision 2 hold the old default (15): move them to the new one
+        epochPopulation = i(p, "epochPopulation", epochPopulation, 1000, 10000000);
+        epochCustom = p.containsKey("epochCustom") ? b(p, "epochCustom", false) : epochPopulation != 200000; // (a file from before the switch: only a value other than the old default was a choice)
+        startPopulation = i(p, "startPopulation", startPopulation, 1000, 1000000);
+        epochMemoryPercent = i(p, "epochMemoryPercent", epochMemoryPercent, 0, 95);
+        epochTickSeconds = d(p, "epochTickSeconds", epochTickSeconds, 0.1, 600);
+        epochCullPercent = i(p, "epochCullPercent", epochCullPercent, 1, 95);
+        epochCullNumber = i(p, "epochCullNumber", epochCullNumber, 0, 10000000);
+        epochMaxRealm = i(p, "epochMaxRealm", epochMaxRealm, 0, 10);
+        crowdFactor = d(p, "crowdFactor", crowdFactor, 0.5, 100);
+        spoilRefundPercent = i(p, "spoilRefundPercent", spoilRefundPercent, 0, 100);
+        parallelNpcs = b(p, "parallelNpcs", parallelNpcs);
         lore = b(p, "lore", lore);
         lorePause = b(p, "lorePause", lorePause);
+        dialogueFlavor = b(p, "dialogueFlavor", dialogueFlavor);
+        dialoguePopups = b(p, "dialoguePopups", dialoguePopups);
+        dialogueAuto = b(p, "dialogueAuto", dialogueAuto);
         firstRunDone = b(p, "firstRunDone", firstRunDone);
         confirmRisky = b(p, "confirmRisky", confirmRisky);
         toasts = b(p, "toasts", toasts);
@@ -91,6 +124,7 @@ public class Settings {
         musicEngine = p.getProperty("musicEngine", musicEngine);
         soundFont = p.getProperty("soundFont", soundFont);
         musicMix = p.getProperty("musicMix", musicMix);
+        musicGenerated = i(p, "musicGenerated", musicGenerated, 0, 100);
         pauseOn = set(p.getProperty("pauseOn", ""));
         recapWeeks = i(p, "recapWeeks", recapWeeks, 0, 520);
         mutedNotifications = set(p.getProperty("mutedNotifications", "level"));
@@ -113,8 +147,23 @@ public class Settings {
         p.setProperty("hints", String.valueOf(hints));
         p.setProperty("hud", String.valueOf(hud));
         p.setProperty("startSpread", String.valueOf(startSpread));
+        p.setProperty("settingsRev", "2");
+        p.setProperty("parallelNpcs", String.valueOf(parallelNpcs));
+        p.setProperty("epochPopulation", String.valueOf(epochPopulation));
+        p.setProperty("epochCustom", String.valueOf(epochCustom));
+        p.setProperty("startPopulation", String.valueOf(startPopulation));
+        p.setProperty("epochMemoryPercent", String.valueOf(epochMemoryPercent));
+        p.setProperty("epochTickSeconds", String.valueOf(epochTickSeconds));
+        p.setProperty("epochCullPercent", String.valueOf(epochCullPercent));
+        p.setProperty("epochCullNumber", String.valueOf(epochCullNumber));
+        p.setProperty("epochMaxRealm", String.valueOf(epochMaxRealm));
+        p.setProperty("crowdFactor", String.valueOf(crowdFactor));
+        p.setProperty("spoilRefundPercent", String.valueOf(spoilRefundPercent));
         p.setProperty("lore", String.valueOf(lore));
         p.setProperty("lorePause", String.valueOf(lorePause));
+        p.setProperty("dialogueFlavor", String.valueOf(dialogueFlavor));
+        p.setProperty("dialoguePopups", String.valueOf(dialoguePopups));
+        p.setProperty("dialogueAuto", String.valueOf(dialogueAuto));
         p.setProperty("firstRunDone", String.valueOf(firstRunDone));
         p.setProperty("confirmRisky", String.valueOf(confirmRisky));
         p.setProperty("toasts", String.valueOf(toasts));
@@ -133,6 +182,7 @@ public class Settings {
         p.setProperty("musicEngine", musicEngine);
         p.setProperty("soundFont", soundFont);
         p.setProperty("musicMix", musicMix);
+        p.setProperty("musicGenerated", String.valueOf(musicGenerated));
         p.setProperty("pauseOn", String.join(",", pauseOn));
         p.setProperty("recapWeeks", String.valueOf(recapWeeks));
         p.setProperty("mutedNotifications", String.join(",", mutedNotifications));

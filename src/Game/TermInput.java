@@ -104,6 +104,7 @@ final class TermInput {
         if (lc.equals("hud")) { hud(t); return false; }
         String rest = line.trim().length() > t[0].length() ? line.trim().substring(t[0].length()) : "";
         String bang = confirmed ? "!" : "";
+        if (lc.equals("notify")) return PlayerCommands.dispatch(c, bang + "settings notify" + rest);
         String d = dir(lc);
         if (d != null) { PlayerCommands.say("(" + lc + " = " + d + ")"); return PlayerCommands.dispatch(c, bang + d); }
         String full = TermHelp.expand(lc);
@@ -112,7 +113,7 @@ final class TermInput {
             return PlayerCommands.dispatch(c, bang + full + rest);
         }
         sawUnknown = true;
-        StringBuilder sb = new StringBuilder("Unknown command '" + cmd + "'.");
+        StringBuilder sb = new StringBuilder("Unknown command '" + (cmd.length() > 40 ? cmd.substring(0, 40) + "..." : cmd) + "'.");
         List<String> hits = lc.length() >= 1 ? TermHelp.prefixHits(lc) : new ArrayList<String>();
         if (hits.size() > 1) sb.append(" Several commands start that way: ").append(TermFormat.join(hits, 8)).append(".");
         else {

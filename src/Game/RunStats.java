@@ -67,7 +67,7 @@ final class RunStats {
 
     /** The body is left behind: how it ended ("reincarnated", "killed by ...", "old age ..."). */
     static void endLife(Character c, String how) {
-        if (c == null) return;
+        if (c == null || c.player < 1) return; // the life of a person who plays (an NPC that reincarnates adds nothing: it used to add a record for every rebirth in the world)
         Life l = open(c);
         update(l, c);
         l.endWeek = GameDriver.time; l.end = how;
@@ -75,6 +75,7 @@ final class RunStats {
 
     /** The character was reborn (the old life was closed by `endLife`): a new life record starts. */
     static void onReincarnation(Character c) {
+        if (c == null || c.player < 1) return;
         run.reincarnations++;
         open(c);
     }
@@ -163,5 +164,24 @@ final class RunStats {
 
     // ------------------------------------------------------------------ save / load
     static void snapshotInto(SaveData d) { d.runStats = run; }
-    static void restoreFrom(SaveData d) { run = d.runStats != null ? d.runStats : new Data(); }
+    static void restoreFrom(SaveData d) {
+        run = d.runStats != null ? d.runStats : new Data();
+        dropOthersLives(d.characters);
+    }
+
+    /** Saves written before 2026-10-10 hold a record for every rebirth of every NPC in the world (34,536 in a world of 560 years, and "reincarnations" counted 17,873): only the lives of people who
+     *  play are kept - those of a body a human plays now, and the ones that ended in a death (an NPC's life is never closed by a death here). */
+    static void dropOthersLives(java.util.List<Character> list) {
+        if (run == null || run.lives == null || run.lives.size() < 50 || list == null) return; // a run of a few lives is the real thing
+        java.util.HashSet<Integer> keep = new java.util.HashSet<>();
+        for (Character c : list) if (c != null && c.player > 0) keep.add(c.id);
+        for (Life l : run.lives) if (l.end != null && !l.end.startsWith("reincarnated") && !"still living".equals(l.end)) keep.add(l.bodyId);
+        int before = run.lives.size();
+        run.lives.removeIf(l -> !keep.contains(l.bodyId));
+        if (run.lives.size() < before) {
+            int reinc = 0;
+            for (Life l : run.lives) if (l.end != null && l.end.startsWith("reincarnated")) reinc++;
+            run.reincarnations = reinc;
+        }
+    }
 }
