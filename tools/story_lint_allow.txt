@@ -1,0 +1,9 @@
+# Lines (or pieces of lines) the lint lets through because the author asked for them as they are.
+# One substring per line. A scene line that contains one is not checked against the hard bans.
+You do not let go of
+Your old man asked too late
+# the Disciple's first season is the author's favourite and is left as written
+looked at you for a long time
+You do not strike. You stumble
+You do not ask what he means
+You stand there for a long time, watching

@@ -1,0 +1,25 @@
+# ---- dev branch: what is NOT tracked (kept on disk only) ----
+# Place images are user-made art (images/places/*.png + optional images/moods.txt)
+saves/
+settings.properties
+exports/
+crash.log
+music-preview/
+dist/
+# the IDE's build output
+out/
+build/
+__pycache__/
+*.pyc
+# an old saved world and a sample script (not needed to build)
+/save.dat
+/scripts/
+# the author's private writing and notes (never published)
+/GameInfo/Catch One.txt
+/GameInfo/Offworld Side Stories.txt
+/GameInfo/Postulate Planning.txt
+/GameInfo/Postulate.txt
+/GameInfo/Side Stories Planning.txt
+/GameInfo/Story Voice Cards.md
+/GameInfo/Story Writing Framework.md
+/GameInfo/Start Story Opinions.txt
