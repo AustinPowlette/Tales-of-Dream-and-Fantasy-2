@@ -14,7 +14,7 @@ import java.util.function.Consumer;
 public class Notifications {
     static final String[] CATEGORIES = {"breakthrough", "level", "death", "war", "family", "alert", "danger", "auction", "hint", "recap", "fortune", "reincarnation", "fight", "sect", "music"};
     static final String[] LABELS = {"Breakthroughs", "Level-ups", "Deaths of people you know", "War & peace", "Births & marriages", "New quest alerts",
-            "Danger (crowds, lifespan)", "Auctions", "Hints", "Recaps", "Good fortune", "Reincarnation", "Fight reports", "Sect intrigue"};
+            "Danger (crowds, lifespan)", "Auctions", "Hints", "Recaps", "Good fortune", "Reincarnation", "Fight reports", "Sect intrigue", "Musicians playing near you"};
 
     static class Note {
         final long at = System.currentTimeMillis();
