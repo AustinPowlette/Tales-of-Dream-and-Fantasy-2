@@ -157,6 +157,25 @@ public class ConcertProbe {
         }
         check("N7g a grade 5 musician never plays a masterpiece; a grade 9 one about one concert in five (" + lowM + " / " + highM + " of " + highN + ")", lowM == 0 && highM > highN / 8 && highM < highN / 3);
         check("N7h `music concert <name>` plays a piece without marking it heard", markCheck(p));
+        // ---- N8: a save keeps the performance of a tile and what a person heard, and an old save (without those fields) means "nobody plays here"
+        mus.location = p.location; Concerts.announce(mus, pipa5, 6);
+        p.heardConcerts |= 0b1010101L;
+        long mask = p.heardConcerts; int musId = mus.id, px = p.location.x, py = p.location.y; String title0 = Concerts.showAt(p.location).piece.title;
+        Area areaBefore = p.location; Character pBefore = p;
+        PcProbe.cmd("save concerts", 120);
+        { long until = System.currentTimeMillis() + 120_000; while (!new java.io.File("saves/concerts.dat").isFile() && System.currentTimeMillis() < until) Thread.sleep(300); Thread.sleep(1500); }
+        check("N8 a save is written", new java.io.File("saves/concerts.dat").isFile());
+        GameDriver.loadRequest = "concerts";
+        PcProbe.cmd("wait 1", 120);
+        { long until = System.currentTimeMillis() + 120_000; while (GameDriver.loadRequest != null && System.currentTimeMillis() < until) Thread.sleep(300); Thread.sleep(2500); }
+        Character p2 = PcProbe.pc();
+        Area here2 = Map.tiles[px][py];
+        check("N8a the world really was reloaded (new objects for the tile and the person)", here2 != areaBefore && p2 != pBefore);
+        check("N8b after loading, the heard mask is back (" + (p2 == null ? "no player" : Long.toBinaryString(p2.heardConcerts)) + ")", p2 != null && (p2.heardConcerts & mask) == mask);
+        check("N8c ...and the performance of the tile (by " + here2.perfBy + ", until " + here2.perfUntil + ") is still there for the same musician and piece", here2.perfBy == musId && here2.perfUntil > 0 && (Concerts.showAt(here2) == null || Concerts.showAt(here2).piece.title.equals(title0) || GameDriver.time > here2.perfUntil));
+        Area untouched = null; for (Area ar : Map.createdAreas) if (ar != null && ar != here2 && ar.perfUntil == 0) { untouched = ar; break; }
+        check("N8d a tile nobody played in shows no performance", untouched != null && Concerts.showAt(untouched) == null);
+        check("N9 every notice category has a label (the Settings window shows them in pairs: " + Notifications.CATEGORIES.length + " / " + Notifications.LABELS.length + ")", Notifications.CATEGORIES.length == Notifications.LABELS.length);
         System.out.println();
         PcProbe.real.println("[T] DONE");
     }
