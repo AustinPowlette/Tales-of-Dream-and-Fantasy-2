@@ -1,0 +1,20 @@
+# main branch: only what is needed to build and run the game with javac or tools\make-exe.bat
+# (the notes in GameInfo/, CLAUDE.md and the test programs live on the dev branch)
+saves/
+settings.properties
+exports/
+crash.log
+music-preview/
+dist/
+out/
+build/
+__pycache__/
+*.pyc
+/save.dat
+/scripts/
+/GameInfo/
+/CLAUDE.md
+/tools/*
+!/tools/make-exe.bat
+!/tools/MakeLogo.java
+!/tools/dist-files/
